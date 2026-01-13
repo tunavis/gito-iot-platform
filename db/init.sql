@@ -61,6 +61,9 @@ CREATE TABLE devices (
     name VARCHAR(255) NOT NULL,
     device_type VARCHAR(100) NOT NULL,
     dev_eui VARCHAR(16), -- For LoRaWAN devices
+    chirpstack_app_id VARCHAR(100), -- ChirpStack application ID
+    device_profile_id VARCHAR(100), -- ChirpStack device profile UUID
+    chirpstack_synced BOOLEAN DEFAULT FALSE, -- Whether device is synced to ChirpStack
     status VARCHAR(50) DEFAULT 'offline',
     last_seen TIMESTAMPTZ,
     battery_level FLOAT,
@@ -75,6 +78,8 @@ CREATE TABLE devices (
 CREATE INDEX idx_devices_tenant_id ON devices(tenant_id);
 CREATE INDEX idx_devices_status ON devices(status);
 CREATE INDEX idx_devices_last_seen ON devices(last_seen DESC);
+CREATE INDEX idx_devices_chirpstack_app_id ON devices(chirpstack_app_id) WHERE chirpstack_app_id IS NOT NULL;
+CREATE INDEX idx_devices_chirpstack_synced ON devices(chirpstack_synced) WHERE NOT chirpstack_synced;
 CREATE UNIQUE INDEX idx_devices_tenant_dev_eui ON devices(tenant_id, dev_eui) 
     WHERE dev_eui IS NOT NULL;
 

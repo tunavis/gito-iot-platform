@@ -2,7 +2,7 @@
 
 from sqlalchemy import (
     Column, String, DateTime, ForeignKey, CheckConstraint,
-    Text, Integer, Float, Index
+    Text, Integer, Float, Index, Boolean
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base
@@ -61,12 +61,15 @@ class Device(BaseModel):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     device_type = Column(String(100), nullable=False)
-    dev_eui = Column(String(16), nullable=True)  # For LoRaWAN
+    dev_eui = Column(String(16), nullable=True)  # For LoRaWAN (alias for lorawan_dev_eui)
     status = Column(String(50), default="offline", nullable=False)
     last_seen = Column(DateTime(timezone=True))
     battery_level = Column(Float)
     signal_strength = Column(Integer)
     attributes = Column(JSONB, default={}, nullable=False)  # Device-specific attributes
+    chirpstack_app_id = Column(String(100), nullable=True)  # ChirpStack app ID
+    device_profile_id = Column(String(100), nullable=True)  # ChirpStack device profile UUID
+    chirpstack_synced = Column(Boolean, default=False, nullable=False)  # Whether device is synced to ChirpStack
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 

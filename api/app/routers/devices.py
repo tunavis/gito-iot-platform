@@ -5,12 +5,16 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 from uuid import UUID
+import logging
 
 from app.database import get_session, RLSSession
 from app.models.base import Device
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.security import decode_token
+from app.services.device_management import DeviceManagementService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/devices", tags=["devices"])
 
@@ -87,7 +91,11 @@ async def create_device(
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
 ):
-    """Create new device for tenant."""
+    """Create new device for tenant.
+    
+    Automatically syncs with ChirpStack if LoRaWAN fields provided.
+    Sync happens asynchronously and doesn't block device creation.
+    """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -100,6 +108,9 @@ async def create_device(
         tenant_id=tenant_id,
         name=device_data.name,
         device_type=device_data.device_type,
+        dev_eui=device_data.lorawan_dev_eui,  # Map from schema to model
+        chirpstack_app_id=device_data.chirpstack_app_id,
+        device_profile_id=device_data.device_profile_id,
         attributes=device_data.attributes if device_data.attributes else {},
         status="offline",
     )
@@ -107,6 +118,23 @@ async def create_device(
     session.add(device)
     await session.commit()
     await session.refresh(device)
+    
+    # Trigger async ChirpStack sync if LoRaWAN fields present
+    if device_data.lorawan_dev_eui or device_data.chirpstack_app_id:
+        device_mgmt = DeviceManagementService(session)
+        # Non-blocking background sync
+        try:
+            await device_mgmt.sync_to_chirpstack(device, is_update=False)
+        except Exception as e:
+            logger.error(
+                "chirpstack_sync_failed_on_create",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "device_id": str(device.id),
+                    "error": str(e),
+                },
+            )
+            # Don't fail device creation if ChirpStack sync fails
     
     return SuccessResponse(data=DeviceResponse.from_orm(device))
 
@@ -151,7 +179,10 @@ async def update_device(
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
 ):
-    """Update device details."""
+    """Update device details.
+    
+    If LoRaWAN fields are updated, automatically syncs with ChirpStack.
+    """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -177,9 +208,37 @@ async def update_device(
         device.name = device_data.name
     if device_data.attributes is not None:
         device.attributes = device_data.attributes
+    # Update LoRaWAN fields
+    if device_data.lorawan_dev_eui is not None:
+        device.dev_eui = device_data.lorawan_dev_eui
+    if device_data.chirpstack_app_id is not None:
+        device.chirpstack_app_id = device_data.chirpstack_app_id
+    if device_data.device_profile_id is not None:
+        device.device_profile_id = device_data.device_profile_id
     
     await session.commit()
     await session.refresh(device)
+    
+    # Trigger async ChirpStack sync if LoRaWAN fields were updated
+    has_lorawan_update = (
+        device_data.lorawan_dev_eui is not None
+        or device_data.chirpstack_app_id is not None
+        or device_data.device_profile_id is not None
+    )
+    if has_lorawan_update:
+        device_mgmt = DeviceManagementService(session)
+        try:
+            await device_mgmt.sync_to_chirpstack(device, is_update=True)
+        except Exception as e:
+            logger.error(
+                "chirpstack_sync_failed_on_update",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "device_id": str(device.id),
+                    "error": str(e),
+                },
+            )
+            # Don't fail device update if ChirpStack sync fails
     
     return SuccessResponse(data=DeviceResponse.from_orm(device))
 
@@ -191,7 +250,10 @@ async def delete_device(
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
 ):
-    """Delete device by ID."""
+    """Delete device by ID.
+    
+    Automatically removes device from ChirpStack if synced.
+    """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -212,6 +274,22 @@ async def delete_device(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
         )
+    
+    # Trigger async ChirpStack delete if synced
+    if device.chirpstack_synced:
+        device_mgmt = DeviceManagementService(session)
+        try:
+            await device_mgmt.delete_from_chirpstack(device)
+        except Exception as e:
+            logger.error(
+                "chirpstack_delete_failed",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "device_id": str(device.id),
+                    "error": str(e),
+                },
+            )
+            # Continue with local deletion even if ChirpStack sync fails
     
     await session.delete(device)
     await session.commit()
