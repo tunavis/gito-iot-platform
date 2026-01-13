@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
+    # Email / SMTP Configuration
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@gito-iot.local"
+    SMTP_USE_TLS: bool = True
+
     # Features
     ENABLE_MQTT_PROCESSOR: bool = True
     ENABLE_OTA_SERVICE: bool = False  # Phase 3

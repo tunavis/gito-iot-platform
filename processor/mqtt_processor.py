@@ -9,6 +9,9 @@ import logging
 import os
 from datetime import datetime
 from uuid import UUID
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from smtplib import SMTP_SSL, SMTP
 
 import aiomqtt
 import redis.asyncio as aioredis
@@ -32,10 +35,117 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@postgre
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://keydb:6379')
 
+# Email / SMTP Configuration
+SMTP_HOST = os.getenv('SMTP_HOST', '')
+SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SMTP_USER = os.getenv('SMTP_USER', '')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', 'noreply@gito-iot.local')
+SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
+
 # Message validation constants
 MAX_PAYLOAD_SIZE = 256 * 1024  # 256KB
 MAX_TELEMETRY_VALUE = 1e10  # Prevent overflow
 MIN_TELEMETRY_VALUE = -1e10
+
+
+class EmailService:
+    """Service for sending email notifications."""
+
+    @staticmethod
+    async def send_alert_email(
+        recipient: str,
+        device_name: str,
+        metric: str,
+        value: float,
+        threshold: float,
+        operator: str,
+        tenant_name: str,
+    ) -> bool:
+        """Send alert notification email."""
+        try:
+            if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
+                logger.warning("SMTP configuration incomplete - skipping email")
+                return False
+
+            subject = f"Alert: {device_name} - {metric} threshold breached"
+            body = EmailService._generate_alert_email_body(
+                device_name, metric, value, threshold, operator, tenant_name
+            )
+
+            # Create message
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = SMTP_FROM_EMAIL
+            msg["To"] = recipient
+
+            # Attach plain text and HTML versions
+            part1 = MIMEText(body, "plain")
+            part2 = MIMEText(EmailService._convert_to_html(body), "html")
+            msg.attach(part1)
+            msg.attach(part2)
+
+            # Send email via SMTP
+            if SMTP_USE_TLS:
+                with SMTP(SMTP_HOST, SMTP_PORT) as server:
+                    server.starttls()
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+
+            logger.info(f"Alert email sent to {recipient} for {device_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send alert email: {e}")
+            return False
+
+    @staticmethod
+    def _generate_alert_email_body(
+        device_name: str,
+        metric: str,
+        value: float,
+        threshold: float,
+        operator: str,
+        tenant_name: str,
+    ) -> str:
+        """Generate alert email body text."""
+        operator_text = {
+            ">": "greater than",
+            "<": "less than",
+            ">=": "greater than or equal to",
+            "<=": "less than or equal to",
+            "==": "equal to",
+            "!=": "not equal to",
+        }.get(operator, operator)
+
+        return f"""Alert Notification
+
+Device: {device_name}
+Tenant: {tenant_name}
+Metric: {metric}
+Current Value: {value}
+Threshold: {threshold} ({operator_text})
+Status: THRESHOLD BREACHED
+
+This alert was triggered because the {metric} value ({value}) is {operator_text} the configured threshold ({threshold}).
+
+Please investigate the device status and take appropriate action.
+
+---
+Gito IoT Platform
+"""
+
+    @staticmethod
+    def _convert_to_html(text: str) -> str:
+        """Convert plain text to HTML format."""
+        html = "<html><body><pre style='font-family: monospace'>"
+        html += text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        html += "</pre></body></html>"
+        return html
 
 
 class TelemetryValidator:
@@ -195,6 +305,103 @@ class DatabaseService:
             )
             return []
 
+    async def get_tenant_admin_emails(
+        self,
+        tenant_id: str
+    ) -> list:
+        """Fetch email addresses of tenant admins."""
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.tenant_id', %s, false)",
+                    (tenant_id,)
+                )
+                
+                cursor = await conn.execute(
+                    """
+                    SELECT DISTINCT email
+                    FROM users
+                    WHERE tenant_id = %s AND status = 'active' AND email IS NOT NULL
+                    """,
+                    (tenant_id,)
+                )
+                rows = await cursor.fetchall()
+                
+                return [row["email"] for row in rows]
+        except Exception as e:
+            logger.error(
+                "Failed to fetch tenant admin emails",
+                extra={
+                    "tenant_id": tenant_id,
+                    "error": str(e)
+                },
+                exc_info=True
+            )
+            return []
+
+    async def get_device_and_tenant_info(
+        self,
+        tenant_id: str,
+        device_id: str
+    ) -> dict:
+        """Fetch device name and tenant name for alert context."""
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.tenant_id', %s, false)",
+                    (tenant_id,)
+                )
+                
+                cursor = await conn.execute(
+                    """
+                    SELECT d.name as device_name, t.name as tenant_name
+                    FROM devices d
+                    JOIN tenants t ON d.tenant_id = t.id
+                    WHERE d.id = %s AND d.tenant_id = %s
+                    """,
+                    (device_id, tenant_id)
+                )
+                row = await cursor.fetchone()
+                
+                if row:
+                    return dict(row)
+                return {"device_name": device_id, "tenant_name": tenant_id}
+        except Exception as e:
+            logger.error(
+                "Failed to fetch device/tenant info",
+                extra={
+                    "tenant_id": tenant_id,
+                    "device_id": device_id,
+                    "error": str(e)
+                }
+            )
+            return {"device_name": device_id, "tenant_name": tenant_id}
+
+    async def mark_notification_sent(
+        self,
+        alert_event_id: str,
+        sent_successfully: bool
+    ) -> bool:
+        """Update alert event with notification status."""
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    """
+                    UPDATE alert_events
+                    SET notification_sent = %s, notification_sent_at = now()
+                    WHERE id = %s
+                    """,
+                    (sent_successfully, alert_event_id)
+                )
+                await conn.commit()
+                return True
+        except Exception as e:
+            logger.error(
+                "Failed to mark notification sent",
+                extra={"alert_event_id": alert_event_id, "error": str(e)}
+            )
+            return False
+
     async def fire_alert(
         self,
         tenant_id: str,
@@ -203,8 +410,8 @@ class DatabaseService:
         metric_name: str,
         metric_value: float,
         message: str
-    ) -> bool:
-        """Record a fired alert."""
+    ) -> str | None:
+        """Record a fired alert. Returns alert_event_id or None on failure."""
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
@@ -212,15 +419,18 @@ class DatabaseService:
                     (tenant_id,)
                 )
                 
-                await conn.execute(
+                # Insert and get the generated ID
+                cursor = await conn.execute(
                     """
                     INSERT INTO alert_events (
                         tenant_id, alert_rule_id, device_id, metric_name,
                         metric_value, message, fired_at, notification_sent
                     ) VALUES (%s, %s, %s, %s, %s, %s, now(), false)
+                    RETURNING id
                     """,
                     (tenant_id, alert_rule_id, device_id, metric_name, metric_value, message)
                 )
+                alert_event_id = await cursor.fetchone()
                 
                 # Update alert_rule's last_fired_at
                 await conn.execute(
@@ -233,7 +443,7 @@ class DatabaseService:
                 )
                 
                 await conn.commit()
-                return True
+                return alert_event_id["id"] if alert_event_id else None
         except Exception as e:
             logger.error(
                 "Failed to fire alert",
@@ -243,7 +453,7 @@ class DatabaseService:
                     "error": str(e)
                 }
             )
-            return False
+            return None
 
 
 class RedisService:
@@ -494,6 +704,10 @@ class MQTTProcessor:
         """Evaluate alert rules for the telemetry."""
         try:
             rules = await self.db_service.get_active_alert_rules(tenant_id, device_id)
+            # Get device and tenant info for email context
+            context = await self.db_service.get_device_and_tenant_info(tenant_id, device_id)
+            device_name = context.get("device_name", device_id)
+            tenant_name = context.get("tenant_name", tenant_id)
 
             for rule in rules:
                 metric_name = rule.get('metric')
@@ -510,7 +724,7 @@ class MQTTProcessor:
                         f"(current: {metric_value})"
                     )
 
-                    await self.db_service.fire_alert(
+                    alert_event_id = await self.db_service.fire_alert(
                         tenant_id,
                         rule.get('id'),
                         device_id,
@@ -530,6 +744,22 @@ class MQTTProcessor:
                             "message": message
                         }
                     )
+
+                    # Send email notifications to tenant admins
+                    if alert_event_id:
+                        user_emails = await self.db_service.get_tenant_admin_emails(tenant_id)
+                        for email in user_emails:
+                            email_sent = await EmailService.send_alert_email(
+                                recipient=email,
+                                device_name=device_name,
+                                metric=metric_name,
+                                value=metric_value,
+                                threshold=rule.get('threshold'),
+                                operator=rule.get('operator'),
+                                tenant_name=tenant_name
+                            )
+                            # Mark notification as sent (or failed)
+                            await self.db_service.mark_notification_sent(alert_event_id, email_sent)
 
                     logger.info(
                         "Alert fired",
