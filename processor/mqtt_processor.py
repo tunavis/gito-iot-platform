@@ -128,7 +128,7 @@ class DatabaseService:
                 # Insert telemetry record
                 await conn.execute(
                     """
-                    INSERT INTO telemetry_hot (tenant_id, device_id, payload, recorded_at)
+                    INSERT INTO telemetry_hot (tenant_id, device_id, payload, timestamp)
                     VALUES (%s, %s, %s, %s)
                     """,
                     (tenant_id, device_id, json.dumps(payload), timestamp)
@@ -153,7 +153,8 @@ class DatabaseService:
                     "tenant_id": tenant_id,
                     "device_id": device_id,
                     "error": str(e)
-                }
+                },
+                exc_info=True
             )
             return False
 
@@ -170,7 +171,7 @@ class DatabaseService:
                     (tenant_id,)
                 )
                 
-                rows = await conn.execute(
+                cursor = await conn.execute(
                     """
                     SELECT id, metric, operator, threshold, cooldown_minutes, last_fired_at
                     FROM alert_rules
@@ -178,7 +179,8 @@ class DatabaseService:
                     ORDER BY created_at
                     """,
                     (device_id, tenant_id)
-                ).fetchall()
+                )
+                rows = await cursor.fetchall()
                 
                 return [dict(row) for row in rows]
         except Exception as e:
@@ -188,7 +190,8 @@ class DatabaseService:
                     "tenant_id": tenant_id,
                     "device_id": device_id,
                     "error": str(e)
-                }
+                },
+                exc_info=True
             )
             return []
 
@@ -398,14 +401,15 @@ class MQTTProcessor:
         Expected topic format: {tenant_id}/devices/{device_id}/telemetry
         """
         try:
-            # Parse topic
-            parts = topic.split('/')
-            if len(parts) != 4 or parts[2] != 'devices' or parts[3] != 'telemetry':
+            # Parse topic (convert to string if Topic object)
+            topic_str = str(topic)
+            parts = topic_str.split('/')
+            if len(parts) != 4 or parts[1] != 'devices' or parts[3] != 'telemetry':
                 logger.warning(f"Invalid topic format: {topic}")
                 return
 
             tenant_id = parts[0]
-            device_id = parts[1]
+            device_id = parts[2]
 
             # Validate UUIDs
             if not self.validator.is_valid_uuid(tenant_id):
