@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface Device {
   id: string;
@@ -164,9 +165,11 @@ export default function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {devices.map((device) => (
-                    <tr key={device.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={device.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
                       <td className="px-6 py-4 text-sm font-medium text-gito-dark">
-                        {device.name}
+                        <Link href={`/dashboard/devices/${device.id}`} className="hover:text-primary-600">
+                          {device.name}
+                        </Link>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{device.device_type}</td>
                       <td className="px-6 py-4">
