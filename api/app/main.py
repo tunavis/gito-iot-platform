@@ -23,10 +23,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ Database initialization warning: {e}")
     
+    # Initialize Cadence workflow client for OTA
+    try:
+        from app.services.ota_workflow import get_ota_workflow_client
+        workflow_client = get_ota_workflow_client()
+        connected = await workflow_client.connect()
+        if connected:
+            print(f"✅ Cadence connected ({settings.CADENCE_FRONTEND_HOST}:{settings.CADENCE_FRONTEND_PORT})")
+        else:
+            print(f"⚠️ Cadence connection failed - OTA workflows unavailable")
+    except Exception as e:
+        print(f"⚠️ Cadence initialization warning: {e}")
+    
     yield
     
     # Shutdown
     await close_db()
+    # Close Cadence connection
+    try:
+        from app.services.ota_workflow import get_ota_workflow_client
+        workflow_client = get_ota_workflow_client()
+        await workflow_client.close()
+    except Exception as e:
+        print(f"⚠️ Cadence shutdown warning: {e}")
     print(f"Shutting down {settings.APP_NAME}")
 
 

@@ -18,6 +18,8 @@ from app.models.firmware import (
     OTACampaignUpdate,
 )
 from app.middleware.auth import get_current_user
+from app.services.ota_execution import OTAExecutionService
+from app.services.ota_workflow import get_ota_workflow_client
 
 logger = logging.getLogger(__name__)
 
@@ -412,7 +414,7 @@ async def update_ota_campaign(
 
 @router.post(
     "/tenants/{tenant_id}/ota/campaigns/{campaign_id}/execute",
-    response_model=OTACampaignResponse,
+    response_model=dict,
 )
 async def execute_ota_campaign(
     tenant_id: UUID,
@@ -423,6 +425,8 @@ async def execute_ota_campaign(
 ):
     """Execute OTA campaign (start firmware rollout).
 
+    Submits Cadence workflows for all devices in campaign.
+
     Args:
         tenant_id: Tenant UUID
         campaign_id: Campaign UUID
@@ -431,7 +435,7 @@ async def execute_ota_campaign(
         db: Database session
 
     Returns:
-        Updated campaign with execution started
+        Campaign execution status with workflow count
 
     Raises:
         HTTPException: If campaign not found or invalid
@@ -443,19 +447,89 @@ async def execute_ota_campaign(
             detail="Not authorized for this tenant",
         )
 
-    logger.info(
-        "OTA campaign execution started",
-        extra={
-            "tenant_id": str(tenant_id),
-            "campaign_id": str(campaign_id),
-            "start_immediately": execute.start_immediately,
-        },
-    )
+    try:
+        # Get OTA workflow client
+        workflow_client = get_ota_workflow_client()
+        execution_service = OTAExecutionService(workflow_client)
 
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Campaign not found",
-    )
+        # Start campaign execution
+        result = await execution_service.start_campaign(
+            session=db,
+            tenant_id=tenant_id,
+            campaign_id=campaign_id,
+        )
+
+        logger.info(
+            "OTA campaign execution started",
+            extra={
+                "tenant_id": str(tenant_id),
+                "campaign_id": str(campaign_id),
+                "workflows_submitted": result.get("workflows_submitted"),
+            },
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(
+            f"Failed to execute campaign: {e}",
+            extra={"campaign_id": str(campaign_id), "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to execute campaign: {str(e)}",
+        )
+
+
+@router.get("/tenants/{tenant_id}/ota/campaigns/{campaign_id}/status", response_model=dict)
+async def get_ota_campaign_status(
+    tenant_id: UUID,
+    campaign_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get OTA campaign execution status and progress.
+
+    Args:
+        tenant_id: Tenant UUID
+        campaign_id: Campaign UUID
+        current_user: Authenticated user
+        db: Database session
+
+    Returns:
+        Campaign status with progress %, device counts
+
+    Raises:
+        HTTPException: If campaign not found
+    """
+    # Verify user is in the tenant
+    if current_user.get("tenant_id") != str(tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized for this tenant",
+        )
+
+    try:
+        workflow_client = get_ota_workflow_client()
+        execution_service = OTAExecutionService(workflow_client)
+
+        status_result = await execution_service.get_campaign_status(
+            session=db,
+            tenant_id=tenant_id,
+            campaign_id=campaign_id,
+        )
+
+        return status_result
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get campaign status: {e}",
+            extra={"campaign_id": str(campaign_id), "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to get campaign status: {str(e)}",
+        )
 
 
 @router.delete("/tenants/{tenant_id}/ota/campaigns/{campaign_id}")

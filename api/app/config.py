@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     CHIRPSTACK_TENANT_ID: str = ""
     CHIRPSTACK_API_KEY: str = ""
 
+    # Cadence Workflow Engine (Phase 3 OTA)
+    CADENCE_FRONTEND_HOST: str = "cadence"
+    CADENCE_FRONTEND_PORT: int = 7933
+    CADENCE_DOMAIN: str = "gito-main"  # Default domain name
+
     # Security
     RATE_LIMIT_PER_MINUTE: int = 60
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
