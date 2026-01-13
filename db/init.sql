@@ -195,6 +195,125 @@ CREATE INDEX idx_audit_created_at ON audit_logs(created_at DESC);
 CREATE INDEX idx_audit_resource ON audit_logs(resource_type, resource_id);
 
 -- ============================================================================
+-- SECTION 6: FIRMWARE & OTA UPDATES (Phase 3)
+-- ============================================================================
+
+CREATE TABLE firmware_versions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    version VARCHAR(50) NOT NULL,
+    url VARCHAR(2048) NOT NULL, -- Pre-signed URL to firmware binary
+    size_bytes INTEGER NOT NULL,
+    hash VARCHAR(64) NOT NULL, -- SHA256 for integrity verification
+    release_type VARCHAR(20) DEFAULT 'beta', -- 'beta', 'production', 'hotfix'
+    changelog TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT unique_version_per_tenant UNIQUE(tenant_id, version)
+);
+
+CREATE INDEX idx_firmware_versions_tenant ON firmware_versions(tenant_id);
+CREATE INDEX idx_firmware_versions_release_type ON firmware_versions(release_type);
+
+CREATE TABLE device_firmware_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    firmware_version_id UUID NOT NULL REFERENCES firmware_versions(id) ON DELETE SET NULL,
+    previous_version_id UUID REFERENCES firmware_versions(id) ON DELETE SET NULL,
+    status VARCHAR(50) NOT NULL, -- 'pending', 'in_progress', 'completed', 'failed', 'rolled_back'
+    progress_percent INTEGER DEFAULT 0,
+    error_message TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_firmware_history_device ON device_firmware_history(device_id);
+CREATE INDEX idx_firmware_history_tenant ON device_firmware_history(tenant_id);
+CREATE INDEX idx_firmware_history_status ON device_firmware_history(status);
+
+CREATE TABLE ota_campaigns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    firmware_version_id UUID NOT NULL REFERENCES firmware_versions(id) ON DELETE RESTRICT,
+    status VARCHAR(50) DEFAULT 'draft', -- 'draft', 'scheduled', 'in_progress', 'completed', 'failed', 'rolled_back'
+    scheduled_at TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    rollout_strategy VARCHAR(50) DEFAULT 'immediate', -- 'immediate', 'staggered', 'scheduled'
+    devices_per_hour INTEGER DEFAULT 100, -- For staggered rollout
+    auto_rollback_threshold FLOAT DEFAULT 0.1, -- Rollback if > 10% failure
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ota_campaigns_tenant ON ota_campaigns(tenant_id);
+CREATE INDEX idx_ota_campaigns_status ON ota_campaigns(status);
+CREATE INDEX idx_ota_campaigns_scheduled_at ON ota_campaigns(scheduled_at);
+
+CREATE TABLE ota_campaign_devices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    campaign_id UUID NOT NULL REFERENCES ota_campaigns(id) ON DELETE CASCADE,
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'in_progress', 'completed', 'failed', 'skipped'
+    progress_percent INTEGER DEFAULT 0,
+    error_message TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    
+    CONSTRAINT unique_campaign_device UNIQUE(campaign_id, device_id)
+);
+
+CREATE INDEX idx_campaign_devices_campaign ON ota_campaign_devices(campaign_id);
+CREATE INDEX idx_campaign_devices_device ON ota_campaign_devices(device_id);
+CREATE INDEX idx_campaign_devices_status ON ota_campaign_devices(status);
+
+CREATE TABLE device_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    membership_rule JSONB, -- Rules for dynamic membership (e.g., {"tags": ["location:lab", "type:sensor"]})
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT unique_group_name_per_tenant UNIQUE(tenant_id, name)
+);
+
+CREATE INDEX idx_device_groups_tenant ON device_groups(tenant_id);
+
+CREATE TABLE group_devices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT unique_group_device UNIQUE(group_id, device_id)
+);
+
+CREATE INDEX idx_group_devices_group ON group_devices(group_id);
+CREATE INDEX idx_group_devices_device ON group_devices(device_id);
+
+CREATE TABLE notification_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_type VARCHAR(50) NOT NULL, -- 'email', 'sms', 'slack', 'webhook', 'pagerduty'
+    enabled BOOLEAN DEFAULT true,
+    config JSONB NOT NULL, -- Channel-specific config (e.g., {"phone": "+1234567890"})
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT unique_user_channel UNIQUE(user_id, channel_type)
+);
+
+CREATE INDEX idx_notification_settings_user ON notification_settings(user_id);
+
+-- ============================================================================
 -- SECTION 7: ROW-LEVEL SECURITY (Multi-Tenant Isolation)
 -- ============================================================================
 
@@ -206,6 +325,11 @@ ALTER TABLE telemetry_hot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE firmware_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_firmware_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ota_campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ota_campaign_devices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_groups ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own tenant's data
 CREATE POLICY users_tenant_isolation ON users
@@ -233,6 +357,30 @@ CREATE POLICY alert_events_tenant_isolation ON alert_events
     USING (tenant_id = current_setting('app.tenant_id')::UUID);
 
 CREATE POLICY audit_tenant_isolation ON audit_logs
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY firmware_versions_tenant_isolation ON firmware_versions
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY device_firmware_history_tenant_isolation ON device_firmware_history
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY ota_campaigns_tenant_isolation ON ota_campaigns
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY ota_campaign_devices_tenant_isolation ON ota_campaign_devices
+    FOR SELECT
+    USING (EXISTS (
+        SELECT 1 FROM ota_campaigns
+        WHERE ota_campaigns.id = ota_campaign_devices.campaign_id
+        AND ota_campaigns.tenant_id = current_setting('app.tenant_id')::UUID
+    ));
+
+CREATE POLICY device_groups_tenant_isolation ON device_groups
     FOR ALL
     USING (tenant_id = current_setting('app.tenant_id')::UUID);
 
@@ -335,6 +483,26 @@ CREATE TRIGGER devices_update_trigger
 
 CREATE TRIGGER alert_rules_update_trigger
     BEFORE UPDATE ON alert_rules
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER firmware_versions_update_trigger
+    BEFORE UPDATE ON firmware_versions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER ota_campaigns_update_trigger
+    BEFORE UPDATE ON ota_campaigns
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER device_groups_update_trigger
+    BEFORE UPDATE ON device_groups
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER notification_settings_update_trigger
+    BEFORE UPDATE ON notification_settings
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
