@@ -99,12 +99,13 @@ def create_app() -> FastAPI:
         )
     
     # Import and include routers
-    from app.routers import auth, devices, websocket, alert_rules, telemetry, firmware, lorawan
+    from app.routers import auth, devices, websocket, alert_rules, telemetry, firmware, lorawan, device_groups
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(devices.router, prefix="/api/v1")
     app.include_router(alert_rules.router, prefix="/api/v1")
     app.include_router(telemetry.router, prefix="/api/v1")
     app.include_router(firmware.router, prefix="/api/v1")
+    app.include_router(device_groups.router)
     app.include_router(websocket.router, prefix="/api/v1")
     app.include_router(lorawan.router)  # No prefix: uses /api/v1/lorawan from router
     
