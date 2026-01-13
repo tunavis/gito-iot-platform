@@ -80,9 +80,10 @@ def create_app() -> FastAPI:
         )
     
     # Import and include routers
-    from app.routers import auth, devices, websocket
+    from app.routers import auth, devices, websocket, alert_rules
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(devices.router, prefix="/api/v1")
+    app.include_router(alert_rules.router, prefix="/api/v1")
     app.include_router(websocket.router, prefix="/api/v1")
     
     return app

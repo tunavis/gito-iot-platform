@@ -105,6 +105,51 @@ class DeviceCredential(BaseModel):
     )
 
 
+class AlertRule(BaseModel):
+    """Threshold-based alert rules - tenant-scoped, device-specific."""
+    __tablename__ = "alert_rules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    metric = Column(String(50), nullable=False)  # temperature, humidity, battery, rssi, pressure
+    operator = Column(String(10), nullable=False)  # gt, gte, lt, lte, eq, neq
+    threshold = Column(Float, nullable=False)
+    cooldown_minutes = Column(Integer, default=5, nullable=False)
+    active = Column(String(1), default="1", nullable=False)  # Boolean as string for SQL compatibility
+    last_fired_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_alert_rules_device", "device_id"),
+        Index("idx_alert_rules_active", "active"),
+        CheckConstraint("metric IN ('temperature', 'humidity', 'battery', 'rssi', 'pressure')", name="valid_alert_metric"),
+        CheckConstraint("operator IN ('gt', 'gte', 'lt', 'lte', 'eq', 'neq')", name="valid_alert_operator"),
+    )
+
+
+class AlertEvent(BaseModel):
+    """Alert firing events - immutable history of threshold breaches."""
+    __tablename__ = "alert_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    alert_rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    metric_name = Column(String(50), nullable=False)
+    metric_value = Column(Float)
+    message = Column(Text)
+    notification_sent = Column(String(1), default="0", nullable=False)
+    notification_sent_at = Column(DateTime(timezone=True))
+    fired_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("idx_alert_events_rule", "alert_rule_id"),
+        Index("idx_alert_events_device", "device_id"),
+    )
+
+
 class AuditLog(BaseModel):
     """User action audit trail - immutable log for compliance."""
     __tablename__ = "audit_logs"
