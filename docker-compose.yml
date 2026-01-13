@@ -61,6 +61,30 @@ services:
       - gito-network
     restart: unless-stopped
 
+  # MQTT Processor (Consumes MQTT, processes telemetry, fires alerts)
+  processor:
+    build:
+      context: ./processor
+      dockerfile: Dockerfile
+    container_name: gito-processor
+    environment:
+      DATABASE_URL: postgresql://gito:${DB_PASSWORD:-dev-password}@postgres:5432/gito
+      REDIS_URL: redis://keydb:6379
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-admin-password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keydb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - gito-network
+    restart: unless-stopped
+
   # FastAPI Backend (REST API + WebSocket)
   api:
     build:

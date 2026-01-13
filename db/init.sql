@@ -126,6 +126,53 @@ CREATE INDEX idx_telemetry_device_time ON telemetry_hot(device_id, timestamp DES
 CREATE INDEX idx_telemetry_timestamp ON telemetry_hot(timestamp DESC);
 
 -- ============================================================================
+-- SECTION 5.5: ALERT RULES (Threshold-Based Alerts)
+-- ============================================================================
+
+CREATE TABLE alert_rules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    metric VARCHAR(50) NOT NULL,
+    operator VARCHAR(10) NOT NULL,
+    threshold FLOAT NOT NULL,
+    cooldown_minutes INTEGER DEFAULT 5,
+    active BOOLEAN DEFAULT true,
+    last_fired_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT valid_metric CHECK (metric IN ('temperature', 'humidity', 'battery', 'rssi', 'pressure')),
+    CONSTRAINT valid_operator CHECK (operator IN ('>', '<', '>=', '<=', '==', '!='))
+);
+
+CREATE INDEX idx_alert_rules_tenant ON alert_rules(tenant_id);
+CREATE INDEX idx_alert_rules_device ON alert_rules(device_id);
+CREATE INDEX idx_alert_rules_active ON alert_rules(active);
+
+-- ============================================================================
+-- SECTION 5.6: ALERT EVENTS (Alert History)
+-- ============================================================================
+
+CREATE TABLE alert_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    alert_rule_id UUID NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    metric_name VARCHAR(50) NOT NULL,
+    metric_value FLOAT,
+    message TEXT,
+    notification_sent BOOLEAN DEFAULT false,
+    notification_sent_at TIMESTAMPTZ,
+    fired_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_alert_events_tenant ON alert_events(tenant_id);
+CREATE INDEX idx_alert_events_rule ON alert_events(alert_rule_id);
+CREATE INDEX idx_alert_events_device ON alert_events(device_id);
+CREATE INDEX idx_alert_events_fired_at ON alert_events(fired_at DESC);
+
+-- ============================================================================
 -- SECTION 6: AUDIT LOGS (User Actions)
 -- ============================================================================
 
@@ -156,6 +203,8 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telemetry_hot ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own tenant's data
@@ -172,6 +221,14 @@ CREATE POLICY creds_tenant_isolation ON device_credentials
     USING (tenant_id = current_setting('app.tenant_id')::UUID);
 
 CREATE POLICY telemetry_tenant_isolation ON telemetry_hot
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY alert_rules_tenant_isolation ON alert_rules
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY alert_events_tenant_isolation ON alert_events
     FOR ALL
     USING (tenant_id = current_setting('app.tenant_id')::UUID);
 
@@ -273,6 +330,11 @@ CREATE TRIGGER users_update_trigger
 
 CREATE TRIGGER devices_update_trigger
     BEFORE UPDATE ON devices
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER alert_rules_update_trigger
+    BEFORE UPDATE ON alert_rules
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
