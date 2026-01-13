@@ -1,0 +1,159 @@
+services:
+  # PostgreSQL + TimescaleDB (Primary database)
+  postgres:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    image: gito-postgres:latest
+    container_name: gito-postgres
+    environment:
+      POSTGRES_DB: gito
+      POSTGRES_USER: gito
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev-password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gito -d gito"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - gito-network
+    restart: unless-stopped
+
+  # KeyDB (In-memory cache + pub/sub for rate limiting, sessions)
+  keydb:
+    image: eqalpha/keydb:latest
+    container_name: gito-keydb
+    ports:
+      - "6379:6379"
+    volumes:
+      - keydb_data:/data
+    healthcheck:
+      test: ["CMD", "keydb-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - gito-network
+    restart: unless-stopped
+
+  # Mosquitto MQTT Broker (Device communication)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: gito-mosquitto
+    ports:
+      - "1883:1883"    # Non-TLS (dev)
+      - "8883:8883"    # TLS (production)
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gito-network
+    restart: unless-stopped
+
+  # FastAPI Backend (REST API + WebSocket)
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: gito-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://gito:${DB_PASSWORD:-dev-password}@postgres:5432/gito
+      REDIS_URL: redis://keydb:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-min-32-chars-xxxxx}
+      JWT_ALGORITHM: HS256
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-admin-password}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keydb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    volumes:
+      - ./api:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - gito-network
+    restart: unless-stopped
+
+  # Next.js Frontend (Gateway + UI)
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: gito-web
+    environment:
+      FASTAPI_URL: http://api:8000
+      NEXT_PUBLIC_API_URL: /api
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-min-32-chars-xxxxx}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./web/src:/app/src
+      - ./web/public:/app/public
+      - ./web/next.config.js:/app/next.config.js
+      - /app/node_modules
+      - /app/.next
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - gito-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gito-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - gito-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  keydb_data:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  gito-network:
+    driver: bridge

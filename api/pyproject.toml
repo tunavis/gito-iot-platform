@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gito-api"
+version = "0.1.0"
+description = "Gito IoT Platform - FastAPI Backend"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Gito", email = "dev@gito-iot.com"},
+]
+readme = "README.md"
+keywords = ["iot", "fastapi", "multi-tenant", "timescaledb"]
+
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn[standard]==0.24.0",
+    "sqlalchemy[asyncio]==2.0.23",
+    "asyncpg==0.29.0",
+    "psycopg[binary]==3.17.1",
+    "alembic==1.13.0",
+    "pydantic==2.5.0",
+    "pydantic-settings==2.1.0",
+    "pyjwt==2.8.1",
+    "passlib[bcrypt]==1.7.4",
+    "python-multipart==0.0.6",
+    "python-dotenv==1.0.0",
+    "redis==5.0.1",
+    "tenacity==8.2.3",
+    "paho-mqtt==1.6.1",
+    "httpx==0.25.2",
+    "pydantic-extra-types==2.2.0",
+    "python-jose[cryptography]==3.3.0",
+    "email-validator==2.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.3",
+    "pytest-asyncio==0.21.1",
+    "pytest-cov==4.1.0",
+    "black==23.12.0",
+    "ruff==0.1.8",
+    "mypy==1.7.1",
+    "sqlalchemy[mypy]==2.0.23",
+    "httpx==0.25.2",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "W", "I", "C", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=html --cov-report=term-missing"
+asyncio_mode = "auto"
+
+[tool.setuptools]
+packages = ["app"]
