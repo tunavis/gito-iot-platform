@@ -155,6 +155,20 @@ CREATE INDEX idx_alert_rules_tenant ON alert_rules(tenant_id);
 CREATE INDEX idx_alert_rules_device ON alert_rules(device_id);
 CREATE INDEX idx_alert_rules_active ON alert_rules(active);
 
+-- Advanced alert rule conditions table (for composite rules)
+CREATE TABLE alert_rule_conditions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    rule_id UUID NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+    field VARCHAR(100) NOT NULL, -- e.g., 'temperature', 'humidity', 'battery'
+    operator VARCHAR(10) NOT NULL, -- '>', '<', '>=', '<=', '==', '!='
+    threshold FLOAT NOT NULL,
+    weight INTEGER DEFAULT 1, -- For weighted scoring (higher = more important)
+    sequence INTEGER NOT NULL, -- Order of evaluation for AND/OR logic
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_rule_conditions_rule ON alert_rule_conditions(rule_id);
+
 -- ============================================================================
 -- SECTION 5.6: ALERT EVENTS (Alert History)
 -- ============================================================================
