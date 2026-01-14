@@ -1,7 +1,7 @@
 """SQLAlchemy models for Gito IoT Platform."""
 
 from app.models.base import BaseModel, Tenant, User, Device, DeviceCredential, AuditLog
-from app.models.device_group import DeviceGroup, GroupDevice
+from app.models.device_group import DeviceGroup, GroupDevice, BulkOperation
 
 __all__ = [
     "BaseModel",
@@ -12,4 +12,5 @@ __all__ = [
     "AuditLog",
     "DeviceGroup",
     "GroupDevice",
+    "BulkOperation",
 ]

@@ -304,6 +304,33 @@ CREATE TABLE group_devices (
 CREATE INDEX idx_group_devices_group ON group_devices(group_id);
 CREATE INDEX idx_group_devices_device ON group_devices(device_id);
 
+CREATE TABLE group_bulk_operations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    group_id UUID NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
+    operation_type VARCHAR(50) NOT NULL, -- 'bulk_ota', 'bulk_command', 'bulk_sync'
+    status VARCHAR(50) DEFAULT 'queued', -- 'queued', 'running', 'completed', 'failed'
+    cadence_workflow_id VARCHAR(255), -- Cadence workflow ID for tracking
+    devices_total INTEGER NOT NULL,
+    devices_completed INTEGER DEFAULT 0,
+    devices_failed INTEGER DEFAULT 0,
+    progress_percent INTEGER DEFAULT 0,
+    metadata JSONB DEFAULT '{}', -- Operation-specific metadata (firmware_id, command, etc.)
+    error_message TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT valid_operation_type CHECK (operation_type IN ('bulk_ota', 'bulk_command', 'bulk_sync')),
+    CONSTRAINT valid_status CHECK (status IN ('queued', 'running', 'completed', 'failed'))
+);
+
+CREATE INDEX idx_bulk_operations_tenant ON group_bulk_operations(tenant_id);
+CREATE INDEX idx_bulk_operations_group ON group_bulk_operations(group_id);
+CREATE INDEX idx_bulk_operations_status ON group_bulk_operations(status);
+CREATE INDEX idx_bulk_operations_created_at ON group_bulk_operations(created_at DESC);
+
 CREATE TABLE notification_settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -335,6 +362,7 @@ ALTER TABLE device_firmware_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ota_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ota_campaign_devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_bulk_operations ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own tenant's data
 CREATE POLICY users_tenant_isolation ON users
@@ -386,6 +414,10 @@ CREATE POLICY ota_campaign_devices_tenant_isolation ON ota_campaign_devices
     ));
 
 CREATE POLICY device_groups_tenant_isolation ON device_groups
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+
+CREATE POLICY bulk_operations_tenant_isolation ON group_bulk_operations
     FOR ALL
     USING (tenant_id = current_setting('app.tenant_id')::UUID);
 
