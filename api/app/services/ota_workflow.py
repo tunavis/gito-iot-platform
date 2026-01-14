@@ -235,6 +235,142 @@ class OTAWorkflowClient:
             )
             return False
 
+    async def start_ota_bulk_workflow(
+        self,
+        tenant_id: UUID,
+        group_id: UUID,
+        operation_id: UUID,
+        firmware_version_id: UUID,
+        device_ids: list,
+    ) -> Optional[str]:
+        """Start BULK_OTA_UPDATE workflow.
+
+        Args:
+            tenant_id: Tenant UUID
+            group_id: Device group UUID
+            operation_id: Bulk operation UUID
+            firmware_version_id: Firmware version UUID
+            device_ids: List of device UUIDs
+
+        Returns:
+            Workflow execution ID, or None if failed
+        """
+        if not self.client:
+            logger.error("cadence_not_connected")
+            return None
+
+        try:
+            workflow_input = {
+                "tenant_id": str(tenant_id),
+                "group_id": str(group_id),
+                "operation_id": str(operation_id),
+                "firmware_version_id": str(firmware_version_id),
+                "device_ids": [str(d) for d in device_ids],
+            }
+
+            execution = await self.client.start_workflow(
+                domain=f"gito-tenant-{tenant_id}",
+                workflow_id=f"bulk-ota-{operation_id}",
+                workflow_type="BULK_OTA_UPDATE",
+                input=json.dumps(workflow_input),
+                execution_start_to_close_timeout_seconds=3600,  # 1 hour
+                task_start_to_close_timeout_seconds=60,
+            )
+
+            logger.info(
+                "bulk_ota_workflow_started",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "group_id": str(group_id),
+                    "operation_id": str(operation_id),
+                    "device_count": len(device_ids),
+                    "execution_id": execution.workflow_execution_id,
+                },
+            )
+
+            return execution.workflow_execution_id
+
+        except Exception as e:
+            logger.error(
+                "bulk_ota_workflow_submission_failed",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "operation_id": str(operation_id),
+                    "error": str(e),
+                },
+            )
+            return None
+
+    async def start_bulk_command_workflow(
+        self,
+        tenant_id: UUID,
+        group_id: UUID,
+        operation_id: UUID,
+        command: str,
+        payload: dict,
+        device_ids: list,
+    ) -> Optional[str]:
+        """Start BULK_COMMAND_SEND workflow.
+
+        Args:
+            tenant_id: Tenant UUID
+            group_id: Device group UUID
+            operation_id: Bulk operation UUID
+            command: Command to send
+            payload: Command payload
+            device_ids: List of device UUIDs
+
+        Returns:
+            Workflow execution ID, or None if failed
+        """
+        if not self.client:
+            logger.error("cadence_not_connected")
+            return None
+
+        try:
+            workflow_input = {
+                "tenant_id": str(tenant_id),
+                "group_id": str(group_id),
+                "operation_id": str(operation_id),
+                "command": command,
+                "payload": payload,
+                "device_ids": [str(d) for d in device_ids],
+            }
+
+            execution = await self.client.start_workflow(
+                domain=f"gito-tenant-{tenant_id}",
+                workflow_id=f"bulk-cmd-{operation_id}",
+                workflow_type="BULK_COMMAND_SEND",
+                input=json.dumps(workflow_input),
+                execution_start_to_close_timeout_seconds=1800,  # 30 min
+                task_start_to_close_timeout_seconds=60,
+            )
+
+            logger.info(
+                "bulk_command_workflow_started",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "group_id": str(group_id),
+                    "operation_id": str(operation_id),
+                    "command": command,
+                    "device_count": len(device_ids),
+                    "execution_id": execution.workflow_execution_id,
+                },
+            )
+
+            return execution.workflow_execution_id
+
+        except Exception as e:
+            logger.error(
+                "bulk_command_workflow_submission_failed",
+                extra={
+                    "tenant_id": str(tenant_id),
+                    "operation_id": str(operation_id),
+                    "error": str(e),
+                },
+            )
+            return None
+
 
 # Global instance
 _ota_workflow_client: Optional[OTAWorkflowClient] = None

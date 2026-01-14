@@ -46,29 +46,37 @@ async def start_bulk_ota(
     try:
         service = BulkOperationsService(db, tenant_id)
         
+        # Create bulk operation record first to get operation_id
+        result = service.start_bulk_ota(group_id, request, workflow_id=None)
+        operation_id = result.operation_id
+        
         # Get workflow client (may fail gracefully if Cadence unavailable)
         try:
             workflow_client = get_ota_workflow_client()
-            device_ids = service.get_group_devices_for_bulk_op(group_id)
-            
-            # Submit Cadence workflow for bulk OTA
-            # Workflow will iterate devices and call individual OTA_UPDATE_DEVICE workflows
-            workflow_id = await workflow_client.start_workflow(
-                workflow_name="BULK_OTA_UPDATE",
-                input={
-                    "tenant_id": str(tenant_id),
-                    "group_id": str(group_id),
-                    "firmware_version_id": str(request.firmware_version_id),
-                    "device_ids": [str(d) for d in device_ids]
-                }
-            )
+            if workflow_client and workflow_client.client:  # Check if connected
+                device_ids = service.get_group_devices_for_bulk_op(group_id)
+                
+                # Submit Cadence workflow for bulk OTA
+                # Workflow will iterate devices and call individual OTA_UPDATE_DEVICE workflows
+                workflow_id = await workflow_client.start_ota_bulk_workflow(
+                    tenant_id=tenant_id,
+                    group_id=group_id,
+                    operation_id=operation_id,
+                    firmware_version_id=request.firmware_version_id,
+                    device_ids=device_ids,
+                )
+                
+                # Update operation with workflow ID
+                if workflow_id:
+                    service.update_operation_status(
+                        operation_id=operation_id,
+                        status="queued",
+                    )
         except Exception as e:
-            # If Cadence unavailable, still create operation but without workflow ID
-            print(f"⚠️ Cadence workflow submission failed: {e}")
-            workflow_id = None
-        
-        # Create bulk operation record
-        result = service.start_bulk_ota(group_id, request, workflow_id=workflow_id)
+            # If Cadence unavailable, operation still created but without workflow
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"bulk_ota_workflow_submission_failed: {e}")
         
         return result
     
@@ -108,28 +116,37 @@ async def start_bulk_command(
     try:
         service = BulkOperationsService(db, tenant_id)
         
+        # Create bulk operation record first to get operation_id
+        result = service.start_bulk_command(group_id, request, workflow_id=None)
+        operation_id = result.operation_id
+        
         # Get workflow client (may fail gracefully if Cadence unavailable)
         try:
             workflow_client = get_ota_workflow_client()
-            device_ids = service.get_group_devices_for_bulk_op(group_id)
-            
-            # Submit Cadence workflow for bulk command
-            workflow_id = await workflow_client.start_workflow(
-                workflow_name="BULK_COMMAND_SEND",
-                input={
-                    "tenant_id": str(tenant_id),
-                    "group_id": str(group_id),
-                    "command": request.command,
-                    "payload": request.payload or {},
-                    "device_ids": [str(d) for d in device_ids]
-                }
-            )
+            if workflow_client and workflow_client.client:  # Check if connected
+                device_ids = service.get_group_devices_for_bulk_op(group_id)
+                
+                # Submit Cadence workflow for bulk command
+                workflow_id = await workflow_client.start_bulk_command_workflow(
+                    tenant_id=tenant_id,
+                    group_id=group_id,
+                    operation_id=operation_id,
+                    command=request.command,
+                    payload=request.payload or {},
+                    device_ids=device_ids,
+                )
+                
+                # Update operation with workflow ID
+                if workflow_id:
+                    service.update_operation_status(
+                        operation_id=operation_id,
+                        status="queued",
+                    )
         except Exception as e:
-            print(f"⚠️ Cadence workflow submission failed: {e}")
-            workflow_id = None
-        
-        # Create bulk operation record
-        result = service.start_bulk_command(group_id, request, workflow_id=workflow_id)
+            # If Cadence unavailable, operation still created but without workflow
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"bulk_command_workflow_submission_failed: {e}")
         
         return result
     
