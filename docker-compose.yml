@@ -139,12 +139,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    volumes:
-      - ./web/src:/app/src
-      - ./web/public:/app/public
-      - ./web/next.config.js:/app/next.config.js
-      - /app/node_modules
-      - /app/.next
+    # volumes:  # Disabled for production build
+    #   - ./web/src:/app/src
+    #   - ./web/public:/app/public
+    #   - ./web/next.config.js:/app/next.config.js
+    #   - /app/node_modules
+    #   - /app/.next
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s
@@ -157,7 +157,7 @@ services:
 
   # Cadence Workflow Engine (OTA orchestration)
   cadence:
-    image: ubercadence/server:v0.21.2
+    image: ubercadence/server:master-auto-setup
     container_name: gito-cadence
     environment:
       DB: postgres
@@ -185,7 +185,7 @@ services:
 
   # Cadence Web UI (Optional - for workflow monitoring)
   cadence-web:
-    image: ubercadence/web:v3.40.1
+    image: ubercadence/web:latest
     container_name: gito-cadence-web
     environment:
       CADENCE_TCHANNEL_PEERS: cadence:7933

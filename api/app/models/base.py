@@ -54,11 +54,17 @@ class User(BaseModel):
 
 
 class Device(BaseModel):
-    """IoT Device - scoped to tenant."""
+    """IoT Device - scoped to tenant with hierarchical organization."""
     __tablename__ = "devices"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Hierarchy: Organization → Site → Device Group → Device
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
+    device_group_id = Column(UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    
     name = Column(String(255), nullable=False)
     device_type = Column(String(100), nullable=False)
     dev_eui = Column(String(16), nullable=True)  # For LoRaWAN (alias for lorawan_dev_eui)
@@ -67,9 +73,9 @@ class Device(BaseModel):
     battery_level = Column(Float)
     signal_strength = Column(Integer)
     attributes = Column(JSONB, default={}, nullable=False)  # Device-specific attributes
-    chirpstack_app_id = Column(String(100), nullable=True)  # ChirpStack app ID
-    device_profile_id = Column(String(100), nullable=True)  # ChirpStack device profile UUID
-    chirpstack_synced = Column(Boolean, default=False, nullable=False)  # Whether device is synced to ChirpStack
+    ttn_app_id = Column(String(100), nullable=True)  # TTN Server app ID (provider-agnostic)
+    device_profile_id = Column(String(100), nullable=True)  # Device profile UUID
+    ttn_synced = Column(Boolean, default=False, nullable=False)  # Whether device is synced to TTN server
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
@@ -77,6 +83,9 @@ class Device(BaseModel):
         Index("idx_devices_status", "status"),
         Index("idx_devices_last_seen", "last_seen"),
         Index("idx_devices_tenant_dev_eui", "tenant_id", "dev_eui", unique=True),
+        Index("idx_devices_organization", "organization_id"),
+        Index("idx_devices_site", "site_id"),
+        Index("idx_devices_group", "device_group_id"),
         CheckConstraint(
             "status IN ('online', 'offline', 'idle', 'error', 'provisioning')",
             name="valid_device_status"
@@ -132,24 +141,63 @@ class AlertRule(BaseModel):
     )
 
 
+class AlertRuleCondition(BaseModel):
+    """Condition in a composite alert rule - supports multi-condition AND/OR logic."""
+    __tablename__ = "alert_rule_conditions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=False, index=True)
+    field = Column(String(100), nullable=False)  # temperature, humidity, battery, rssi, pressure, etc.
+    operator = Column(String(10), nullable=False)  # >, <, >=, <=, ==, !=
+    threshold = Column(Float, nullable=False)
+    weight = Column(Integer, default=1, nullable=False)  # For weighted scoring (1-100)
+    sequence = Column(Integer, default=0, nullable=False)  # Execution order for complex rules
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_alert_conditions_rule", "rule_id"),
+        CheckConstraint("operator IN ('>', '<', '>=', '<=', '==', '!=')", name="valid_condition_operator"),
+        CheckConstraint("weight >= 1 AND weight <= 100", name="valid_condition_weight"),
+    )
+
+
 class AlertEvent(BaseModel):
-    """Alert firing events - immutable history of threshold breaches."""
+    """Alarm events - Cumulocity-style alarms with severity levels and acknowledgment workflow."""
     __tablename__ = "alert_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    alert_rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=False, index=True)
+    alert_rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=True, index=True)
     device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
     metric_name = Column(String(50), nullable=False)
     metric_value = Column(Float)
     message = Column(Text)
-    notification_sent = Column(String(1), default="0", nullable=False)
+    
+    # Alarm system fields
+    severity = Column(String(20), default="MAJOR", nullable=False)  # CRITICAL, MAJOR, MINOR, WARNING
+    status = Column(String(20), default="ACTIVE", nullable=False)  # ACTIVE, ACKNOWLEDGED, CLEARED
+    alarm_type = Column(String(100))  # temperature_threshold, communication_lost, etc.
+    source = Column(String(100))  # Source sensor/component
+    
+    # Acknowledgment tracking
+    acknowledged_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    acknowledged_at = Column(DateTime(timezone=True))
+    cleared_at = Column(DateTime(timezone=True))
+    
+    # Notification tracking
+    notification_sent = Column(Boolean, default=False, nullable=False)
     notification_sent_at = Column(DateTime(timezone=True))
+    
     fired_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True)
 
     __table_args__ = (
         Index("idx_alert_events_rule", "alert_rule_id"),
         Index("idx_alert_events_device", "device_id"),
+        Index("idx_alert_events_severity", "severity"),
+        Index("idx_alert_events_status", "status"),
+        Index("idx_alert_events_alarm_type", "tenant_id", "alarm_type", "status"),
+        CheckConstraint("severity IN ('CRITICAL', 'MAJOR', 'MINOR', 'WARNING')", name="valid_severity"),
+        CheckConstraint("status IN ('ACTIVE', 'ACKNOWLEDGED', 'CLEARED')", name="valid_alarm_status"),
     )
 
 

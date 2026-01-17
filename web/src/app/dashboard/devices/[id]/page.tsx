@@ -2,438 +2,407 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { useDeviceWebSocket } from '@/hooks/useDeviceWebSocket';
+import Sidebar from '@/components/Sidebar';
+import TelemetryChart from '@/components/TelemetryChart';
 
 interface Device {
   id: string;
-  tenant_id: string;
   name: string;
   device_type: string;
-  status: 'online' | 'offline' | 'idle' | 'error';
+  status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
-  signal_strength: number | null;
-  attributes: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TelemetryData {
-  id: string;
-  device_id: string;
-  temperature?: number;
-  humidity?: number;
-  pressure?: number;
-  battery?: number;
-  rssi?: number;
-  payload: Record<string, any>;
-  timestamp: string;
-  created_at: string;
-}
-
-interface AlertRule {
-  id: string;
-  metric: string;
-  operator: string;
-  threshold: number;
-  cooldown_minutes: number;
-  active: boolean;
-  last_fired_at: string | null;
 }
 
 export default function DeviceDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const deviceId = params.id as string;
-
+  const deviceId = params?.id as string;
   const [device, setDevice] = useState<Device | null>(null);
-  const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
-  const [telemetryHistory, setTelemetryHistory] = useState<any[]>([]);
-  const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
-  const [recentAlerts, setRecentAlerts] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [wsError, setWsError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-  // WebSocket hook for real-time updates
-  const { isConnected } = useDeviceWebSocket({
-    deviceId: deviceId || '',
-    token: token || '',
-    onTelemetry: (data) => {
-      setTelemetry({
-        ...data,
-        id: Date.now().toString(),
-      } as TelemetryData);
-
-      // Add to history (keep last 100 records)
-      setTelemetryHistory((prev) => [
-        ...prev,
-        {
-          timestamp: new Date(data.timestamp).toLocaleTimeString(),
-          ...data.payload,
-        },
-      ].slice(-100));
-    },
-    onAlert: (data) => {
-      setRecentAlerts((prev) =>
-        [
-          {
-            id: Date.now(),
-            metric: data.metric,
-            value: data.value,
-            message: data.message,
-            timestamp: new Date(data.timestamp).toLocaleTimeString(),
-          },
-          ...prev,
-        ].slice(0, 10)
-      );
-    },
-    onError: (err) => setWsError(err),
-    onConnectionChange: setWsConnected,
-  });
+  const [telemetryData, setTelemetryData] = useState<{temp: any[], humidity: any[], battery: any[]}>({temp: [], humidity: [], battery: []});
 
   useEffect(() => {
-    const loadDeviceDetails = async () => {
-      try {
-        if (!token) {
-          router.push('/auth/login');
-          return;
-        }
-
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const tenant = payload.tenant_id;
-
-        // Fetch device details
-        const deviceRes = await fetch(`/api/tenants/${tenant}/devices/${deviceId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+    const load = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return router.push('/auth/login');
+      const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+      
+      const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) setDevice((await res.json()).data);
+      
+      // Fetch device telemetry
+      const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const telRes = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}/telemetry?start_time=${startTime}&aggregation=avg&per_page=24`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (telRes.ok) {
+        const telData = (await telRes.json()).data || [];
+        setTelemetryData({
+          temp: telData.map((d: any) => ({time: new Date(d.time_bucket).getHours() + 'h', value: d.temperature || 0})),
+          humidity: telData.map((d: any) => ({time: new Date(d.time_bucket).getHours() + 'h', value: d.humidity || 0})),
+          battery: telData.map((d: any) => ({time: new Date(d.time_bucket).getHours() + 'h', value: d.battery || 0}))
         });
+      }
+      
+      setLoading(false);
+    };
+    if (deviceId) load();
+  }, [deviceId, router]);
 
-        if (!deviceRes.ok) {
-          throw new Error('Failed to load device');
+  // WebSocket for real-time updates
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token || !deviceId) return;
+
+    const ws = new WebSocket(`ws://localhost:8000/api/v1/ws/devices/${deviceId}?token=${token}`);
+    
+    ws.onopen = () => setWsConnected(true);
+    ws.onclose = () => setWsConnected(false);
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'telemetry' && data.data) {
+          setDevice(prev => prev ? {...prev, last_seen: new Date().toISOString(), battery_level: data.data.battery || prev.battery_level} : null);
         }
-
-        const deviceData = await deviceRes.json();
-        setDevice(deviceData.data);
-
-        // Fetch latest telemetry
-        try {
-          const telemetryRes = await fetch(
-            `/api/tenants/${tenant}/devices/${deviceId}/telemetry/latest`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
-
-          if (telemetryRes.ok) {
-            const telemetryData = await telemetryRes.json();
-            setTelemetry(telemetryData.data);
-          }
-        } catch (err) {
-          console.log('Telemetry not available');
-        }
-
-        // Fetch alert rules
-        try {
-          const rulesRes = await fetch(
-            `/api/tenants/${tenant}/alert-rules?device_id=${deviceId}`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
-
-          if (rulesRes.ok) {
-            const rulesData = await rulesRes.json();
-            setAlertRules(rulesData.data || []);
-          }
-        } catch (err) {
-          console.log('Alert rules not available');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load device details');
-      } finally {
-        setLoading(false);
+      } catch (e) {
+        console.error('WebSocket message error:', e);
       }
     };
 
-    loadDeviceDetails();
-  }, [deviceId, router, token]);
+    return () => ws.close();
+  }, [deviceId]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'offline':
-        return 'text-red-600 bg-red-50 border-red-200';
-      case 'idle':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin mb-4">
-            <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
-          </div>
-          <p className="text-gray-600">Loading device details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          <Link href="/dashboard" className="text-primary-600 hover:text-primary-700 font-medium mb-4 inline-block">
-            ← Back to Dashboard
-          </Link>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mt-4">
-            <p className="text-red-700">{error}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!device) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          <Link href="/dashboard" className="text-primary-600 hover:text-primary-700 font-medium mb-4 inline-block">
-            ← Back to Dashboard
-          </Link>
-          <p className="text-gray-600 mt-8">Device not found</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex min-h-screen bg-gray-50"><Sidebar /><main className="flex-1 ml-64 p-8 flex items-center justify-center"><div className="text-center"><div className="inline-block animate-spin mb-4"><div className="w-12 h-12 border-4 border-gray-300 border-t-gray-700 rounded-full"></div></div><p className="text-gray-600 font-medium">Loading device...</p></div></main></div>;
+  if (!device) return <div className="flex min-h-screen bg-gray-50"><Sidebar /><main className="flex-1 ml-64 p-8"><div className="bg-red-50 border border-red-200 rounded p-8 text-center"><p className="text-red-600 mb-4">Device not found</p><button onClick={() => router.push('/dashboard')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">Back to Dashboard</button></div></main></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <Link href="/dashboard" className="text-primary-600 hover:text-primary-700 font-medium mb-4 inline-block">
-            ← Back to Dashboard
-          </Link>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gito-dark">{device.name}</h1>
-              <p className="text-gray-600 mt-1">{device.device_type}</p>
-            </div>
-            <div className={`inline-block px-4 py-2 rounded-lg border ${getStatusColor(device.status)}`}>
-              <span className="font-semibold">
-                {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
-              </span>
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar />
+      <main className="flex-1 ml-64 p-8">
+        <button onClick={() => router.push('/dashboard/devices')} className="text-gray-600 hover:text-gray-900 font-medium mb-4 transition-colors">← Back to Devices</button>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{device.name}</h1>
+            <p className="text-gray-600 mt-1">{device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {wsConnected && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span className="text-sm font-medium text-green-700">Live</span>
+              </div>
+            )}
+            <div className={`px-4 py-2 rounded border ${device.status === 'online' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}`}>
+              <span className="font-semibold capitalize">{device.status}</span>
             </div>
           </div>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Left Column - Details (3 cols) */}
-          <div className="lg:col-span-3">
-            {/* Device Info */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-              <h2 className="text-lg font-semibold text-gito-dark mb-4">Device Information</h2>
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="flex gap-6">
+            {['overview', 'telemetry', 'alerts', 'settings'].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`pb-2 px-1 border-b-2 capitalize font-medium transition-colors ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>{tab}</button>
+            ))}
+          </nav>
+        </div>
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-4 gap-6">
+              <div className="bg-white rounded p-4 border border-green-200 shadow-sm">
+                <p className="text-green-700 text-sm font-medium">Battery</p>
+                <p className="text-3xl font-bold mt-2 text-green-900">{device.battery_level !== null && device.battery_level !== undefined ? `${Math.round(device.battery_level)}%` : 'N/A'}</p>
+              </div>
+              <div className="bg-white rounded p-4 border border-blue-200 shadow-sm">
+                <p className="text-blue-700 text-sm font-medium">Last Seen</p>
+                <p className="text-sm font-semibold mt-2 text-blue-900">{device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never'}</p>
+              </div>
+              <div className="bg-white rounded p-4 border border-purple-200 shadow-sm">
+                <p className="text-purple-700 text-sm font-medium">Signal Strength</p>
+                <p className="text-2xl font-bold mt-2 text-purple-900">{device.signal_strength ? `${device.signal_strength} dBm` : 'N/A'}</p>
+              </div>
+              <div className={`bg-white rounded p-4 border shadow-sm ${device.status === 'online' ? 'border-green-200' : 'border-red-200'}`}>
+                <p className={`text-sm font-medium ${device.status === 'online' ? 'text-green-700' : 'text-red-700'}`}>Status</p>
+                <p className={`text-xl font-bold mt-2 capitalize ${device.status === 'online' ? 'text-green-900' : 'text-red-900'}`}>{device.status}</p>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded p-6 border border-gray-200 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Device Information</h3>
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <p className="text-sm text-gray-600">Device ID</p>
-                  <p className="font-mono text-sm text-gray-900 mt-1">{device.id}</p>
+                  <p className="text-sm text-slate-600 mb-1">Device ID</p>
+                  <p className="font-mono text-sm text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">{deviceId}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Device Type</p>
-                  <p className="text-sm text-gray-900 mt-1">{device.device_type}</p>
+                  <p className="text-sm text-slate-600 mb-1">Device Type</p>
+                  <p className="text-sm text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">{device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Created</p>
-                  <p className="text-sm text-gray-900 mt-1">{new Date(device.created_at).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Last Updated</p>
-                  <p className="text-sm text-gray-900 mt-1">{new Date(device.updated_at).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Last Seen</p>
-                  <p className="text-sm text-gray-900 mt-1">
-                    {device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never'}
-                  </p>
-                </div>
-                {device.signal_strength !== null && (
+                {device.dev_eui && (
                   <div>
-                    <p className="text-sm text-gray-600">Signal Strength</p>
-                    <p className="text-sm text-gray-900 mt-1">{device.signal_strength} dBm</p>
+                    <p className="text-sm text-slate-600 mb-1">Device EUI</p>
+                    <p className="font-mono text-sm text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">{device.dev_eui}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Created</p>
+                  <p className="text-sm text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">{new Date(device.created_at).toLocaleDateString()}</p>
+                </div>
+                {device.ttn_app_id && (
+                  <div>
+                    <p className="text-sm text-slate-600 mb-1">TTN App ID</p>
+                    <p className="font-mono text-sm text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">{device.ttn_app_id}</p>
+                  </div>
+                )}
+                {device.device_profile_id && (
+                  <div>
+                    <p className="text-sm text-slate-600 mb-1">Device Profile</p>
+                    <p className="font-mono text-sm text-slate-900 bg-slate-50 px-3 py-2 rounded border border-slate-200">{device.device_profile_id}</p>
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Real-time Status */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gito-dark">Real-Time Status</h2>
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                  <span className="text-sm font-medium text-gray-600">
-                    {wsConnected ? 'Connected' : 'Disconnected'}
-                  </span>
-                </div>
-              </div>
-              {wsError && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
-                  <p className="text-sm text-yellow-800">{wsError}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Latest Telemetry */}
-            {telemetry && (
-              <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-                <h2 className="text-lg font-semibold text-gito-dark mb-4">Latest Telemetry</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  {telemetry.temperature !== undefined && (
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <p className="text-sm text-gray-600">Temperature</p>
-                      <p className="text-2xl font-bold text-blue-600 mt-1">{telemetry.temperature.toFixed(1)}°C</p>
-                    </div>
-                  )}
-                  {telemetry.humidity !== undefined && (
-                    <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
-                      <p className="text-sm text-gray-600">Humidity</p>
-                      <p className="text-2xl font-bold text-cyan-600 mt-1">{telemetry.humidity.toFixed(1)}%</p>
-                    </div>
-                  )}
-                  {telemetry.pressure !== undefined && (
-                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                      <p className="text-sm text-gray-600">Pressure</p>
-                      <p className="text-2xl font-bold text-purple-600 mt-1">{telemetry.pressure.toFixed(0)} hPa</p>
-                    </div>
-                  )}
-                  {telemetry.battery !== undefined && (
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                      <p className="text-sm text-gray-600">Battery</p>
-                      <p className="text-2xl font-bold text-green-600 mt-1">{telemetry.battery.toFixed(1)}V</p>
-                    </div>
-                  )}
-                  {telemetry.rssi !== undefined && (
-                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-                      <p className="text-sm text-gray-600">RSSI</p>
-                      <p className="text-2xl font-bold text-orange-600 mt-1">{telemetry.rssi} dBm</p>
-                    </div>
-                  )}
-                  {device.battery_level !== null && (
-                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                      <p className="text-sm text-gray-600">Battery Level</p>
-                      <p className="text-2xl font-bold text-yellow-600 mt-1">{device.battery_level.toFixed(0)}%</p>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-4">
-                  Last recorded: {new Date(telemetry.timestamp).toLocaleString()}
-                </p>
-              </div>
-            )}
-
-            {/* Telemetry History Chart */}
-            {telemetryHistory.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-                <h2 className="text-lg font-semibold text-gito-dark mb-4">Telemetry History</h2>
-                <div className="w-full h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={telemetryHistory}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="timestamp" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      {telemetryHistory[0]?.temperature !== undefined && (
-                        <Line type="monotone" dataKey="temperature" stroke="#3B82F6" dot={false} isAnimationActive={false} />
-                      )}
-                      {telemetryHistory[0]?.humidity !== undefined && (
-                        <Line type="monotone" dataKey="humidity" stroke="#06B6D4" dot={false} isAnimationActive={false} />
-                      )}
-                      {telemetryHistory[0]?.pressure !== undefined && (
-                        <Line type="monotone" dataKey="pressure" stroke="#A855F7" dot={false} isAnimationActive={false} />
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Right Column - Alerts (1 col) */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Recent Alerts */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gito-dark mb-4">Recent Alerts</h2>
-              {recentAlerts.length === 0 ? (
-                <p className="text-gray-600 text-sm">No recent alerts</p>
-              ) : (
-                <div className="space-y-2">
-                  {recentAlerts.map((alert) => (
-                    <div key={alert.id} className="bg-red-50 border border-red-200 rounded p-3">
-                      <p className="text-sm font-semibold text-red-800">{alert.metric}</p>
-                      <p className="text-xs text-red-700 mt-1">{alert.message}</p>
-                      <p className="text-xs text-gray-500 mt-1">{alert.timestamp}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Alert Rules */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gito-dark mb-4">Alert Rules</h2>
-
-              {alertRules.length === 0 ? (
-                <p className="text-gray-600 text-sm">No alert rules configured</p>
-              ) : (
-                <div className="space-y-4">
-                  {alertRules.map((rule) => (
-                    <div
-                      key={rule.id}
-                      className={`border rounded-lg p-4 ${
-                        rule.active ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50 opacity-50'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="font-semibold text-sm text-gray-900">{rule.metric}</p>
-                        <span className={`inline-block px-2 py-1 text-xs rounded font-semibold ${
-                            rule.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                          {rule.active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Trigger: value {rule.operator} {rule.threshold}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Cooldown: {rule.cooldown_minutes} min
-                      </p>
-                      {rule.last_fired_at && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Last fired: {new Date(rule.last_fired_at).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+        )}
+        {activeTab === 'telemetry' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <TelemetryChart title="Temperature (Last 24h)" data={telemetryData.temp} color="#ef4444" unit="°C" type="area" />
+            <TelemetryChart title="Humidity (Last 24h)" data={telemetryData.humidity} color="#3b82f6" unit="%" type="line" />
+            <TelemetryChart title="Battery Level (Last 24h)" data={telemetryData.battery} color="#10b981" unit="%" type="line" />
           </div>
-        </div>
+        )}
+        {activeTab === 'alerts' && (
+          <DeviceAlarms deviceId={deviceId as string} />
+        )}
+        {activeTab === 'settings' && <div className="bg-white rounded border border-gray-200 p-8 text-center shadow-sm"><p className="text-gray-600">Device settings coming soon...</p></div>}
       </main>
+    </div>
+  );
+}
+
+function DeviceAlarms({ deviceId }: { deviceId: string }) {
+  type AlarmSeverity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'WARNING';
+  type AlarmStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'CLEARED';
+  interface Alarm {
+    id: string;
+    tenant_id: string;
+    device_id: string;
+    alarm_type: string;
+    severity: AlarmSeverity;
+    status: AlarmStatus;
+    message?: string | null;
+    source?: string | null;
+    metric_name?: string | null;
+    metric_value?: number | null;
+    acknowledged_by?: string | null;
+    acknowledged_at?: string | null;
+    cleared_at?: string | null;
+    fired_at: string;
+  }
+
+  const [alarms, setAlarms] = useState<Alarm[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [severityFilter, setSeverityFilter] = useState<AlarmSeverity | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<AlarmStatus | 'all'>('all');
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+        const params = new URLSearchParams();
+        params.set('page', '1');
+        params.set('per_page', '50');
+        params.set('device_id', deviceId);
+        if (severityFilter !== 'all') params.set('severity', severityFilter);
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        const res = await fetch(`/api/v1/tenants/${tenant}/alarms?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` }});
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error?.message || 'Failed to load alarms');
+        setAlarms(json.data || []);
+        if (!selectedId && json.data?.length) setSelectedId(json.data[0].id);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load alarms');
+      } finally { setLoading(false); }
+    };
+    load();
+  }, [deviceId, severityFilter, statusFilter]);
+
+  const acknowledge = async (alarmId: string) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+    const res = await fetch(`/api/v1/tenants/${tenant}/alarms/${alarmId}/acknowledge`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json();
+    if (res.ok) setAlarms(prev => prev.map(a => a.id === alarmId ? json.data : a));
+  };
+
+  const clear = async (alarmId: string) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+    const res = await fetch(`/api/v1/tenants/${tenant}/alarms/${alarmId}/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json();
+    if (res.ok) setAlarms(prev => prev.map(a => a.id === alarmId ? json.data : a));
+  };
+
+  const severityChip = (s: AlarmSeverity) => {
+    const base = 'px-2 py-0.5 text-xs rounded border ';
+    switch (s) {
+      case 'CRITICAL': return base + 'bg-red-100 text-red-700 border-red-200';
+      case 'MAJOR': return base + 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'MINOR': return base + 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'WARNING': return base + 'bg-blue-100 text-blue-700 border-blue-200';
+    }
+  };
+
+  const statusBadge = (st: AlarmStatus) => {
+    switch (st) {
+      case 'ACTIVE': return <span className="px-2 py-0.5 text-xs rounded bg-red-50 text-red-700 border border-red-200">Active</span>;
+      case 'ACKNOWLEDGED': return <span className="px-2 py-0.5 text-xs rounded bg-yellow-50 text-yellow-700 border border-yellow-200">Acknowledged</span>;
+      case 'CLEARED': return <span className="px-2 py-0.5 text-xs rounded bg-green-50 text-green-700 border border-green-200">Cleared</span>;
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Filters */}
+      <div className="lg:col-span-3 bg-white border border-gray-200 rounded p-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value as any)} className="px-3 py-2 border border-gray-300 rounded bg-white">
+            <option value="all">All severities</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="MAJOR">Major</option>
+            <option value="MINOR">Minor</option>
+            <option value="WARNING">Warning</option>
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="px-3 py-2 border border-gray-300 rounded bg-white">
+            <option value="all">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="ACKNOWLEDGED">Acknowledged</option>
+            <option value="CLEARED">Cleared</option>
+          </select>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="bg-white border border-gray-200 rounded overflow-hidden">
+        <div className="border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+          <span className="text-sm font-semibold text-gray-800">Device alarms</span>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {loading ? (
+            <div className="p-6 text-center text-gray-600">Loading...</div>
+          ) : error ? (
+            <div className="p-6 text-center text-red-600">{error}</div>
+          ) : alarms.length === 0 ? (
+            <div className="p-6 text-center text-gray-600">No alarms for this device</div>
+          ) : (
+            <ul className="divide-y divide-gray-200">
+              {alarms.map(a => (
+                <li key={a.id}>
+                  <button onClick={() => setSelectedId(a.id)} className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 ${selectedId === a.id ? 'bg-blue-50' : ''}`}>
+                    <div className={severityChip(a.severity)}>{a.severity}</div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">{a.alarm_type}</p>
+                      <p className="text-xs text-gray-600">{new Date(a.fired_at).toLocaleString()}</p>
+                      <p className="text-xs text-gray-700 mt-1 line-clamp-2">{a.message || '—'}</p>
+                    </div>
+                    <div className="ml-auto">{statusBadge(a.status)}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Detail */}
+      <div className="lg:col-span-2 bg-white border border-gray-200 rounded p-6">
+        {!selectedId ? (
+          <div className="text-gray-600">Select an alarm to view details</div>
+        ) : (
+          (() => {
+            const a = alarms.find(x => x.id === selectedId)!;
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={severityChip(a.severity)}>{a.severity}</div>
+                    <h3 className="text-lg font-semibold text-gray-900">{a.alarm_type}</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {statusBadge(a.status)}
+                    {a.status === 'ACTIVE' && (
+                      <button onClick={() => acknowledge(a.id)} className="px-3 py-1.5 text-sm rounded border border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100">Acknowledge</button>
+                    )}
+                    {a.status !== 'CLEARED' && (
+                      <button onClick={() => clear(a.id)} className="px-3 py-1.5 text-sm rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100">Clear</button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-600">Status</p>
+                    <p className="text-sm text-gray-900">{a.status}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Fired at</p>
+                    <p className="text-sm text-gray-900">{new Date(a.fired_at).toLocaleString()}</p>
+                  </div>
+                  {a.acknowledged_at && (
+                    <div>
+                      <p className="text-xs text-gray-600">Acknowledged at</p>
+                      <p className="text-sm text-gray-900">{new Date(a.acknowledged_at).toLocaleString()}</p>
+                    </div>
+                  )}
+                  {a.cleared_at && (
+                    <div>
+                      <p className="text-xs text-gray-600">Cleared at</p>
+                      <p className="text-sm text-gray-900">{new Date(a.cleared_at).toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-xs text-gray-600 mb-1">Message</p>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{a.message || '—'}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-600">Source</p>
+                    <p className="text-sm text-gray-900">{a.source || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Metric</p>
+                    <p className="text-sm text-gray-900">{a.metric_name || '—'} {a.metric_value != null ? `(${a.metric_value})` : ''}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-sm font-semibold text-gray-900 mb-2">Audit logs</p>
+                  <div className="text-xs text-gray-600">Alarm created {new Date(a.fired_at).toLocaleString()}</div>
+                  {a.acknowledged_at && (
+                    <div className="text-xs text-gray-600">Acknowledged {new Date(a.acknowledged_at).toLocaleString()}</div>
+                  )}
+                  {a.cleared_at && (
+                    <div className="text-xs text-gray-600">Cleared {new Date(a.cleared_at).toLocaleString()}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })()
+        )}
+      </div>
     </div>
   );
 }

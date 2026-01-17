@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements and install
 COPY pyproject.toml .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir fastapi uvicorn sqlalchemy asyncpg psycopg pydantic pydantic-settings pyjwt passlib python-multipart python-dotenv redis tenacity paho-mqtt httpx pydantic-extra-types python-jose email-validator
+    pip install --no-cache-dir fastapi uvicorn sqlalchemy asyncpg psycopg pydantic pydantic-settings pyjwt passlib python-multipart python-dotenv redis tenacity paho-mqtt httpx aiohttp pydantic-extra-types python-jose email-validator apscheduler jinja2
 
 # Copy application code
 COPY app ./app

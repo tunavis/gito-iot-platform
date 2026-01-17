@@ -1,7 +1,24 @@
 """SQLAlchemy models for Gito IoT Platform."""
 
-from app.models.base import BaseModel, Tenant, User, Device, DeviceCredential, AuditLog
+from app.models.base import (
+    BaseModel,
+    Tenant,
+    User,
+    Device,
+    DeviceCredential,
+    AlertRule,
+    AlertRuleCondition,
+    AlertEvent,
+    AuditLog,
+)
 from app.models.device_group import DeviceGroup, GroupDevice, BulkOperation
+from app.models.notification import (
+    NotificationChannel,
+    NotificationRule,
+    Notification,
+    NotificationTemplate,
+    NotificationQueue,
+)
 
 __all__ = [
     "BaseModel",
@@ -9,8 +26,16 @@ __all__ = [
     "User",
     "Device",
     "DeviceCredential",
+    "AlertRule",
+    "AlertRuleCondition",
+    "AlertEvent",
     "AuditLog",
     "DeviceGroup",
     "GroupDevice",
     "BulkOperation",
+    "NotificationChannel",
+    "NotificationRule",
+    "Notification",
+    "NotificationTemplate",
+    "NotificationQueue",
 ]

@@ -21,6 +21,10 @@ class DeviceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255, description="Device name")
     device_type: str = Field(min_length=1, max_length=100, description="Device type")
     attributes: dict = Field(default_factory=dict, description="Device attributes (JSON)")
+    # Hierarchy fields
+    organization_id: Optional[UUID] = Field(None, description="Organization ID")
+    site_id: Optional[UUID] = Field(None, description="Site ID")
+    device_group_id: Optional[UUID] = Field(None, description="Device group ID")
     # LoRaWAN fields (optional - for ChirpStack integration)
     lorawan_dev_eui: Optional[str] = Field(None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)")
     chirpstack_app_id: Optional[str] = Field(None, description="ChirpStack application ID")
@@ -31,6 +35,10 @@ class DeviceUpdate(BaseModel):
     """Update device request."""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     attributes: Optional[dict] = None
+    # Hierarchy fields
+    organization_id: Optional[UUID] = Field(None, description="Organization ID")
+    site_id: Optional[UUID] = Field(None, description="Site ID")
+    device_group_id: Optional[UUID] = Field(None, description="Device group ID")
     # LoRaWAN fields (optional)
     lorawan_dev_eui: Optional[str] = Field(None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)")
     chirpstack_app_id: Optional[str] = Field(None, description="ChirpStack application ID")
@@ -48,6 +56,10 @@ class DeviceResponse(BaseModel):
     battery_level: Optional[float] = None
     signal_strength: Optional[int] = None
     attributes: dict
+    # Hierarchy fields
+    organization_id: Optional[UUID] = None
+    site_id: Optional[UUID] = None
+    device_group_id: Optional[UUID] = None
     # LoRaWAN fields
     lorawan_dev_eui: Optional[str] = None
     chirpstack_app_id: Optional[str] = None

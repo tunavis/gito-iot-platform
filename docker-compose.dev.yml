@@ -1,0 +1,31 @@
+# Development Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+version: '3.8'
+
+services:
+  # API - Development mode with hot reload
+  api:
+    volumes:
+      - ./api:/app
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Web - Development mode with Next.js dev server
+  web:
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./web/src:/app/src
+      - ./web/public:/app/public:ro
+      - /app/node_modules
+      - /app/.next
+
+  # Processor - Development mode with auto-reload
+  processor:
+    volumes:
+      - ./processor:/app
+    environment:
+      LOG_LEVEL: DEBUG

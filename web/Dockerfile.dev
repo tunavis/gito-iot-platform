@@ -1,0 +1,20 @@
+# Development Dockerfile - Fast startup, hot reload enabled
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy config files (source code mounted via volume)
+COPY next.config.js ./
+COPY tsconfig.json ./
+COPY tailwind.config.ts ./
+COPY postcss.config.js ./
+
+# Expose port
+EXPOSE 3000
+
+# Start Next.js dev server (hot reload enabled)
+CMD ["npm", "run", "dev"]

@@ -1,11 +1,11 @@
 """Telemetry query routes - retrieve historical time-series data with aggregation."""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Literal
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_session, RLSSession
 from app.models.base import Device
@@ -45,13 +45,13 @@ class TelemetryAggregator:
     def get_time_bucket_size(duration_hours: float) -> str:
         """Determine appropriate time bucket size based on query duration."""
         if duration_hours <= 1:
-            return "1 minute"  # 1-minute buckets for last hour
+            return "minute"  # 1-minute buckets for last hour
         elif duration_hours <= 24:
-            return "1 hour"  # 1-hour buckets for last 24 hours
+            return "hour"  # 1-hour buckets for last 24 hours
         elif duration_hours <= 168:  # 1 week
-            return "6 hours"  # 6-hour buckets for last week
+            return "hour"  # Still hourly for week (6 hours not supported)
         else:
-            return "1 day"  # 1-day buckets for longer periods
+            return "day"  # 1-day buckets for longer periods
 
 
 @router.get("", response_model=SuccessResponse)
@@ -102,7 +102,7 @@ async def query_telemetry(
     
     # Set default end_time to now if not provided
     if end_time is None:
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
     
     # Validate time range
     if start_time >= end_time:
@@ -164,7 +164,7 @@ async def _query_raw_telemetry(
     try:
         # Execute count query
         count_result = await session.execute(
-            f"{count_sql}",
+            text(count_sql),
             {"tenant_id": str(tenant_id), "device_id": str(device_id), 
              "start_time": start_time, "end_time": end_time}
         )
@@ -172,7 +172,7 @@ async def _query_raw_telemetry(
         
         # Execute data query
         result = await session.execute(
-            f"{query_sql}",
+            text(query_sql),
             {"tenant_id": str(tenant_id), "device_id": str(device_id), 
              "start_time": start_time, "end_time": end_time,
              "limit": per_page, "offset": offset}
@@ -263,7 +263,7 @@ async def _query_aggregated_telemetry(
     try:
         # Execute count query
         count_result = await session.execute(
-            count_sql,
+            text(count_sql),
             {"tenant_id": str(tenant_id), "device_id": str(device_id), 
              "start_time": start_time, "end_time": end_time}
         )
@@ -271,7 +271,7 @@ async def _query_aggregated_telemetry(
         
         # Execute data query
         result = await session.execute(
-            query_sql,
+            text(query_sql),
             {"tenant_id": str(tenant_id), "device_id": str(device_id), 
              "start_time": start_time, "end_time": end_time,
              "limit": per_page, "offset": offset}
@@ -359,7 +359,7 @@ async def get_latest_telemetry(
     
     try:
         result = await session.execute(
-            query_sql,
+            text(query_sql),
             {"tenant_id": str(tenant_id), "device_id": str(device_id), 
              "start_time": start_time, "end_time": end_time}
         )

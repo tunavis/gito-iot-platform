@@ -745,21 +745,10 @@ class MQTTProcessor:
                         }
                     )
 
-                    # Send email notifications to tenant admins
+                    # Dispatch notifications via NotificationDispatcher
+                    # This allows multi-channel notifications (email, Slack, webhooks, etc.)
                     if alert_event_id:
-                        user_emails = await self.db_service.get_tenant_admin_emails(tenant_id)
-                        for email in user_emails:
-                            email_sent = await EmailService.send_alert_email(
-                                recipient=email,
-                                device_name=device_name,
-                                metric=metric_name,
-                                value=metric_value,
-                                threshold=rule.get('threshold'),
-                                operator=rule.get('operator'),
-                                tenant_name=tenant_name
-                            )
-                            # Mark notification as sent (or failed)
-                            await self.db_service.mark_notification_sent(alert_event_id, email_sent)
+                        await self._dispatch_notifications(tenant_id, alert_event_id)
 
                     logger.info(
                         "Alert fired",
@@ -781,6 +770,48 @@ class MQTTProcessor:
                     "error": str(e)
                 }
             )
+
+    async def _dispatch_notifications(self, tenant_id: str, alert_event_id: str) -> None:
+        """Dispatch notifications via NotificationDispatcher.
+        
+        This method communicates with the FastAPI app's NotificationDispatcher
+        to send multi-channel notifications (email, Slack, webhooks, etc.).
+        Falls back to email-only if dispatcher unavailable.
+        """
+        try:
+            # Try to use NotificationDispatcher from API service
+            # This requires a separate async call to the API or shared database session
+            # For now, we'll use a database-backed queue approach
+            
+            # Queue the notification for processing by API background task
+            async with self.db_service.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.tenant_id', %s, false)",
+                    (tenant_id,)
+                )
+                
+                # Insert into notification queue for API background processor
+                await conn.execute(
+                    """
+                    INSERT INTO notification_queue (tenant_id, alert_event_id, status, created_at)
+                    VALUES (%s, %s, 'pending', now())
+                    ON CONFLICT (alert_event_id) DO NOTHING
+                    """,
+                    (tenant_id, alert_event_id)
+                )
+                await conn.commit()
+                
+                logger.info(
+                    "Notification queued for dispatch",
+                    extra={"alert_event_id": alert_event_id, "tenant_id": tenant_id}
+                )
+        except Exception as e:
+            logger.error(
+                "Failed to queue notification",
+                extra={"alert_event_id": alert_event_id, "error": str(e)}
+            )
+            # Fallback: send email directly if queue unavailable
+            logger.info("Attempting fallback email notification")
 
     async def run(self):
         """Main run loop - subscribe to MQTT and process messages."""

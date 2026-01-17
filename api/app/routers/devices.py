@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID
 import logging
 
@@ -49,8 +49,11 @@ async def list_devices(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
+    organization_id: Optional[UUID] = Query(None),
+    site_id: Optional[UUID] = Query(None),
+    device_group_id: Optional[UUID] = Query(None),
 ):
-    """List all devices for tenant with pagination.
+    """List all devices for tenant with pagination and optional hierarchy filtering.
     
     RLS ensures user can only see their tenant's devices.
     """
@@ -62,18 +65,26 @@ async def list_devices(
     
     await session.set_tenant_context(tenant_id)
     
-    count_query = select(func.count(Device.id)).where(Device.tenant_id == tenant_id)
+    # Build query with optional filters
+    base_filter = Device.tenant_id == tenant_id
+    query = select(Device).where(base_filter)
+    count_query = select(func.count(Device.id)).where(base_filter)
+    
+    if organization_id:
+        query = query.where(Device.organization_id == organization_id)
+        count_query = count_query.where(Device.organization_id == organization_id)
+    if site_id:
+        query = query.where(Device.site_id == site_id)
+        count_query = count_query.where(Device.site_id == site_id)
+    if device_group_id:
+        query = query.where(Device.device_group_id == device_group_id)
+        count_query = count_query.where(Device.device_group_id == device_group_id)
+    
     count_result = await session.execute(count_query)
     total = count_result.scalar() or 0
     
     offset = (page - 1) * per_page
-    query = (
-        select(Device)
-        .where(Device.tenant_id == tenant_id)
-        .offset(offset)
-        .limit(per_page)
-        .order_by(Device.created_at.desc())
-    )
+    query = query.offset(offset).limit(per_page).order_by(Device.created_at.desc())
     
     result = await session.execute(query)
     devices = result.scalars().all()
@@ -108,9 +119,12 @@ async def create_device(
         tenant_id=tenant_id,
         name=device_data.name,
         device_type=device_data.device_type,
-        dev_eui=device_data.lorawan_dev_eui,  # Map from schema to model
-        chirpstack_app_id=device_data.chirpstack_app_id,
-        device_profile_id=device_data.device_profile_id,
+        organization_id=device_data.organization_id,
+        site_id=device_data.site_id,
+        device_group_id=device_data.device_group_id,
+        dev_eui=device_data.lorawan_dev_eui if hasattr(device_data, 'lorawan_dev_eui') else None,
+        ttn_app_id=device_data.ttn_app_id if hasattr(device_data, 'ttn_app_id') else None,
+        device_profile_id=device_data.device_profile_id if hasattr(device_data, 'device_profile_id') else None,
         attributes=device_data.attributes if device_data.attributes else {},
         status="offline",
     )
@@ -119,22 +133,22 @@ async def create_device(
     await session.commit()
     await session.refresh(device)
     
-    # Trigger async ChirpStack sync if LoRaWAN fields present
-    if device_data.lorawan_dev_eui or device_data.chirpstack_app_id:
+    # Trigger async TTN Server sync if LoRaWAN fields present
+    if device_data.lorawan_dev_eui or (hasattr(device_data, 'ttn_app_id') and device_data.ttn_app_id):
         device_mgmt = DeviceManagementService(session)
         # Non-blocking background sync
         try:
-            await device_mgmt.sync_to_chirpstack(device, is_update=False)
+            await device_mgmt.sync_to_ttn(device, is_update=False)
         except Exception as e:
             logger.error(
-                "chirpstack_sync_failed_on_create",
+                "ttn_sync_failed_on_create",
                 extra={
                     "tenant_id": str(tenant_id),
                     "device_id": str(device.id),
                     "error": str(e),
                 },
             )
-            # Don't fail device creation if ChirpStack sync fails
+            # Don't fail device creation if TTN sync fails
     
     return SuccessResponse(data=DeviceResponse.from_orm(device))
 
@@ -208,12 +222,19 @@ async def update_device(
         device.name = device_data.name
     if device_data.attributes is not None:
         device.attributes = device_data.attributes
-    # Update LoRaWAN fields
-    if device_data.lorawan_dev_eui is not None:
+    # Update hierarchy fields
+    if device_data.organization_id is not None:
+        device.organization_id = device_data.organization_id
+    if device_data.site_id is not None:
+        device.site_id = device_data.site_id
+    if device_data.device_group_id is not None:
+        device.device_group_id = device_data.device_group_id
+    # Update LoRaWAN/TTN Server fields
+    if hasattr(device_data, 'lorawan_dev_eui') and device_data.lorawan_dev_eui is not None:
         device.dev_eui = device_data.lorawan_dev_eui
-    if device_data.chirpstack_app_id is not None:
-        device.chirpstack_app_id = device_data.chirpstack_app_id
-    if device_data.device_profile_id is not None:
+    if hasattr(device_data, 'ttn_app_id') and device_data.ttn_app_id is not None:
+        device.ttn_app_id = device_data.ttn_app_id
+    if hasattr(device_data, 'device_profile_id') and device_data.device_profile_id is not None:
         device.device_profile_id = device_data.device_profile_id
     
     await session.commit()

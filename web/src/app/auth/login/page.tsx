@@ -1,28 +1,38 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (isLoading || isRedirecting) {
+      console.log('Already processing, ignoring submission');
+      return;
+    }
+    
     setError('');
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      console.log('Attempting login...');
+      const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.error?.message || 'Login failed');
@@ -30,11 +40,27 @@ export default function LoginPage() {
 
       // Store token
       if (data.data?.access_token) {
-        localStorage.setItem('auth_token', data.data.access_token);
-        // Token will also be set as HTTP-only cookie by server
-        router.push('/dashboard');
+        console.log('Token received, storing...');
+        const token = data.data.access_token;
+        
+        // Store in localStorage
+        localStorage.setItem('auth_token', token);
+        
+        // CRITICAL: Also store in cookie for middleware
+        document.cookie = `auth_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+        
+        console.log('Token stored in localStorage and cookie');
+        setIsRedirecting(true);
+        
+        // Use router.push for proper Next.js navigation
+        console.log('Navigating to dashboard...');
+        window.location.href = '/dashboard';
+      } else {
+        console.error('No access token in response');
+        setError('No access token received');
       }
     } catch (err) {
+      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
@@ -42,21 +68,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="inline-block mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary-600 to-accent-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">G</span>
-            </div>
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/images/GitoLogo.png"
+              alt="Gito IT Solutions"
+              width={280}
+              height={84}
+              className="h-20 w-auto object-contain"
+              priority
+              unoptimized
+            />
           </div>
-          <h1 className="text-3xl font-bold text-gito-dark">Gito IoT</h1>
-          <p className="mt-2 text-gray-600">Sign in to your account</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Gito IoT Platform</h2>
+          <p className="text-gray-600">Sign in to your account</p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+        <div className="bg-white rounded border border-gray-300 shadow-lg p-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Error Alert */}
           {error && (
             <div className="rounded-md bg-red-50 p-4 border border-red-200">
@@ -67,7 +100,7 @@ export default function LoginPage() {
           {/* Demo Credentials */}
           <div className="rounded-md bg-blue-50 p-4 border border-blue-200">
             <p className="text-sm text-blue-800 font-medium">Demo Credentials:</p>
-            <p className="text-sm text-blue-700 mt-1">Email: admin@demo.gito.local</p>
+            <p className="text-sm text-blue-700 mt-1">Email: admin@gito.demo</p>
             <p className="text-sm text-blue-700">Password: admin123</p>
           </div>
 
@@ -106,12 +139,13 @@ export default function LoginPage() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
+            disabled={isLoading || isRedirecting}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2.5 px-4 rounded transition-colors"
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isRedirecting ? 'Redirecting...' : isLoading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
+        </div>
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-600">

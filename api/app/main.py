@@ -35,6 +35,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ Cadence initialization warning: {e}")
     
+    # Initialize background task scheduler for notification retry and queue processing
+    try:
+        from app.services.background_tasks import notification_background_tasks
+        await notification_background_tasks.start()
+    except Exception as e:
+        print(f"⚠️ Background tasks initialization warning: {e}")
+    
     yield
     
     # Shutdown
@@ -46,6 +53,12 @@ async def lifespan(app: FastAPI):
         await workflow_client.close()
     except Exception as e:
         print(f"⚠️ Cadence shutdown warning: {e}")
+    # Stop background task scheduler
+    try:
+        from app.services.background_tasks import notification_background_tasks
+        await notification_background_tasks.stop()
+    except Exception as e:
+        print(f"⚠️ Background tasks shutdown warning: {e}")
     print(f"Shutting down {settings.APP_NAME}")
 
 
@@ -87,28 +100,39 @@ def create_app() -> FastAPI:
     # Global error handler (placeholder - customize as needed)
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
+        import traceback
+        print(f"❌ UNHANDLED EXCEPTION: {type(exc).__name__}: {str(exc)}")
+        print(f"   URL: {request.url}")
+        print(f"   Traceback:\n{traceback.format_exc()}")
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": "Internal server error",
+                    "message": str(exc) if settings.APP_ENV != "production" else "Internal server error",
                 }
             }
         )
     
     # Import and include routers
-    from app.routers import auth, devices, websocket, alert_rules, telemetry, firmware, lorawan, device_groups, bulk_operations
+    from app.routers import auth, devices, websocket, alert_rules, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(devices.router, prefix="/api/v1")
     app.include_router(alert_rules.router, prefix="/api/v1")
+    app.include_router(alarms.router, prefix="/api/v1")  # Alarms system
+    app.include_router(organizations.router, prefix="/api/v1")  # Hierarchy: Organizations
+    app.include_router(sites.router, prefix="/api/v1")  # Hierarchy: Sites
+    app.include_router(device_groups.router, prefix="/api/v1")  # Hierarchy: Device Groups
+    # app.include_router(composite_alerts.router)
+    # app.include_router(notifications.router)
+    # app.include_router(grafana.router)
     app.include_router(telemetry.router, prefix="/api/v1")
-    app.include_router(firmware.router, prefix="/api/v1")
-    app.include_router(device_groups.router)
-    app.include_router(bulk_operations.router)
+    app.include_router(telemetry_aggregate.router, prefix="/api/v1")
+    # app.include_router(firmware.router, prefix="/api/v1")
+    # app.include_router(bulk_operations.router)
     app.include_router(websocket.router, prefix="/api/v1")
-    app.include_router(lorawan.router)  # No prefix: uses /api/v1/lorawan from router
+    # app.include_router(lorawan.router)  # No prefix: uses /api/v1/lorawan from router
     
     return app
 

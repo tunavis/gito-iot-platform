@@ -5,11 +5,12 @@ const nextConfig = {
 
   // API proxy for development
   async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     return {
       beforeFiles: [
         {
           source: '/api/:path*',
-          destination: 'http://api:8000/api/:path*',
+          destination: `${apiUrl}/api/:path*`,
         },
       ],
     };

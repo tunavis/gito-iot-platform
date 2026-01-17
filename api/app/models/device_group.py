@@ -1,6 +1,6 @@
 """Device group models - organize devices into logical units for bulk operations."""
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Index
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
 import uuid
@@ -14,14 +14,23 @@ class DeviceGroup(BaseModel):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Hierarchy: Groups belong to organizations and sites
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=True, index=True)
+    
     name = Column(String(255), nullable=False)
     description = Column(Text)
+    group_type = Column(String(50))  # logical, physical, functional
     membership_rule = Column(JSONB, default={}, nullable=False)  # Dynamic membership rules (e.g., tags, status)
+    attributes = Column(JSONB, default={}, nullable=False)  # Custom attributes (renamed from metadata to avoid SQLAlchemy conflict)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
         Index("idx_device_groups_tenant", "tenant_id"),
+        Index("idx_device_groups_org", "organization_id"),
+        Index("idx_device_groups_site", "site_id"),
     )
 
 
@@ -54,7 +63,7 @@ class BulkOperation(BaseModel):
     devices_completed = Column(Integer, default=0, nullable=False)
     devices_failed = Column(Integer, default=0, nullable=False)
     progress_percent = Column(Integer, default=0, nullable=False)
-    metadata = Column(JSONB, default={}, nullable=False)  # Operation-specific metadata
+    operation_metadata = Column(JSONB, default={}, nullable=False)  # Operation-specific metadata
     error_message = Column(Text)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))

@@ -1,302 +1,311 @@
-"""Device group API endpoints - manage logical device groupings for bulk operations."""
+"""Device Groups API - Logical device grouping for bulk operations."""
 
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from datetime import datetime
+from pydantic import BaseModel, Field
 
-from app.database import get_db
-from app.middleware.auth import get_current_user
-from app.schemas.device_group import (
-    DeviceGroupCreate, DeviceGroupUpdate, DeviceGroupResponse,
-    DeviceGroupDetailResponse, BulkDevicesRequest, BulkDevicesResponse
-)
-from app.services.device_group_service import DeviceGroupService
+from app.database import get_session, RLSSession
+from app.models.device_group import DeviceGroup
+from app.models.base import Device
+from app.schemas.common import SuccessResponse, PaginationMeta
+from app.security import decode_token
 
-router = APIRouter(prefix="/api/v1", tags=["device-groups"])
+router = APIRouter(prefix="/tenants/{tenant_id}/device-groups", tags=["device-groups"])
 
 
-@router.post(
-    "/tenants/{tenant_id}/device-groups",
-    response_model=DeviceGroupResponse,
-    summary="Create device group",
-    responses={
-        201: {"description": "Group created successfully"},
-        400: {"description": "Invalid group data"},
-        403: {"description": "Not authorized to create group"},
-        409: {"description": "Group name already exists"}
-    }
-)
+async def get_current_tenant(
+    authorization: str = Header(None),
+) -> UUID:
+    """Extract and validate tenant_id from JWT token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+        )
+    
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+    tenant_id = payload.get("tenant_id")
+    
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing tenant_id",
+        )
+    
+    return UUID(tenant_id)
+
+
+# Schemas
+class DeviceGroupCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    organization_id: Optional[UUID] = None
+    site_id: Optional[UUID] = None
+    group_type: Optional[str] = Field(None, max_length=50)
+    membership_rule: dict = Field(default_factory=dict)
+    attributes: dict = Field(default_factory=dict)
+
+
+class DeviceGroupUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    group_type: Optional[str] = Field(None, max_length=50)
+    membership_rule: Optional[dict] = None
+    attributes: Optional[dict] = None
+
+
+class DeviceGroupResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    organization_id: Optional[UUID]
+    site_id: Optional[UUID]
+    name: str
+    description: Optional[str]
+    group_type: Optional[str]
+    membership_rule: dict
+    attributes: dict
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("", response_model=SuccessResponse)
+async def list_device_groups(
+    tenant_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    organization_id: Optional[UUID] = Query(None),
+    site_id: Optional[UUID] = Query(None),
+    group_type: Optional[str] = Query(None),
+):
+    """List all device groups for a tenant with optional filtering."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    
+    await session.set_tenant_context(tenant_id)
+    
+    # Build query
+    query = select(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id)
+    
+    if organization_id:
+        query = query.where(DeviceGroup.organization_id == organization_id)
+    if site_id:
+        query = query.where(DeviceGroup.site_id == site_id)
+    if group_type:
+        query = query.where(DeviceGroup.group_type == group_type)
+    
+    query = query.order_by(DeviceGroup.created_at.desc())
+    
+    # Count total
+    count_query = select(func.count()).select_from(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id)
+    if organization_id:
+        count_query = count_query.where(DeviceGroup.organization_id == organization_id)
+    if site_id:
+        count_query = count_query.where(DeviceGroup.site_id == site_id)
+    if group_type:
+        count_query = count_query.where(DeviceGroup.group_type == group_type)
+    
+    total_result = await session.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Paginate
+    query = query.offset((page - 1) * per_page).limit(per_page)
+    result = await session.execute(query)
+    groups = result.scalars().all()
+    
+    return SuccessResponse(
+        data=[DeviceGroupResponse.from_orm(group) for group in groups],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+    )
+
+
+@router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def create_device_group(
     tenant_id: UUID,
     group_data: DeviceGroupCreate,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Create a new device group.
+    """Create a new device group."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
-    Device groups allow organizing devices for bulk operations like firmware updates.
-    """
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    await session.set_tenant_context(tenant_id)
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        group = service.create_group(group_data)
-        return group
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create group: {str(e)}")
-
-
-@router.get(
-    "/tenants/{tenant_id}/device-groups",
-    response_model=dict,
-    summary="List device groups",
-    responses={
-        200: {"description": "List of groups"},
-        403: {"description": "Not authorized"}
-    }
-)
-async def list_device_groups(
-    tenant_id: UUID,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """List all device groups for the tenant with pagination."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    # Create group
+    group = DeviceGroup(
+        tenant_id=tenant_id,
+        organization_id=group_data.organization_id,
+        site_id=group_data.site_id,
+        name=group_data.name,
+        description=group_data.description,
+        group_type=group_data.group_type,
+        membership_rule=group_data.membership_rule,
+        attributes=group_data.attributes,
+    )
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        groups, total = service.list_groups(skip=skip, limit=limit)
-        
-        return {
-            "data": groups,
-            "meta": {
-                "skip": skip,
-                "limit": limit,
-                "total": total
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list groups: {str(e)}")
+    session.add(group)
+    await session.commit()
+    await session.refresh(group)
+    
+    return SuccessResponse(data=DeviceGroupResponse.from_orm(group))
 
 
-@router.get(
-    "/tenants/{tenant_id}/device-groups/{group_id}",
-    response_model=DeviceGroupDetailResponse,
-    summary="Get device group",
-    responses={
-        200: {"description": "Group details with members"},
-        403: {"description": "Not authorized"},
-        404: {"description": "Group not found"}
-    }
-)
+@router.get("/{group_id}", response_model=SuccessResponse)
 async def get_device_group(
     tenant_id: UUID,
     group_id: UUID,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Get device group with all member details."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    """Get a specific device group."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        group = service.get_group_with_members(group_id)
-        
-        if not group:
-            raise HTTPException(status_code=404, detail="Group not found")
-        
-        return group
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get group: {str(e)}")
+    await session.set_tenant_context(tenant_id)
+    
+    result = await session.execute(
+        select(DeviceGroup).where(
+            DeviceGroup.tenant_id == tenant_id,
+            DeviceGroup.id == group_id
+        )
+    )
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
+    
+    return SuccessResponse(data=DeviceGroupResponse.from_orm(group))
 
 
-@router.patch(
-    "/tenants/{tenant_id}/device-groups/{group_id}",
-    response_model=DeviceGroupResponse,
-    summary="Update device group",
-    responses={
-        200: {"description": "Group updated"},
-        400: {"description": "Invalid update data"},
-        403: {"description": "Not authorized"},
-        404: {"description": "Group not found"},
-        409: {"description": "Group name already exists"}
-    }
-)
+@router.put("/{group_id}", response_model=SuccessResponse)
 async def update_device_group(
     tenant_id: UUID,
     group_id: UUID,
     group_data: DeviceGroupUpdate,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Update device group details."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    """Update a device group."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        group = service.update_group(group_id, group_data)
-        
-        if not group:
-            raise HTTPException(status_code=404, detail="Group not found")
-        
-        return group
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update group: {str(e)}")
+    await session.set_tenant_context(tenant_id)
+    
+    result = await session.execute(
+        select(DeviceGroup).where(
+            DeviceGroup.tenant_id == tenant_id,
+            DeviceGroup.id == group_id
+        )
+    )
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
+    
+    # Update fields
+    update_data = group_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(group, field, value)
+    
+    group.updated_at = datetime.utcnow()
+    
+    await session.commit()
+    await session.refresh(group)
+    
+    return SuccessResponse(data=DeviceGroupResponse.from_orm(group))
 
 
-@router.delete(
-    "/tenants/{tenant_id}/device-groups/{group_id}",
-    summary="Delete device group",
-    responses={
-        204: {"description": "Group deleted"},
-        403: {"description": "Not authorized"},
-        404: {"description": "Group not found"}
-    }
-)
+@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_device_group(
     tenant_id: UUID,
     group_id: UUID,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Delete device group and all memberships."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    """Delete a device group."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        deleted = service.delete_group(group_id)
-        
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Group not found")
-        
-        return {"message": "Group deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete group: {str(e)}")
+    await session.set_tenant_context(tenant_id)
+    
+    result = await session.execute(
+        select(DeviceGroup).where(
+            DeviceGroup.tenant_id == tenant_id,
+            DeviceGroup.id == group_id
+        )
+    )
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
+    
+    await session.delete(group)
+    await session.commit()
 
 
-@router.get(
-    "/tenants/{tenant_id}/device-groups/{group_id}/members",
-    response_model=dict,
-    summary="List group members",
-    responses={
-        200: {"description": "List of group members"},
-        403: {"description": "Not authorized"},
-        404: {"description": "Group not found"}
-    }
-)
-async def get_group_members(
+@router.get("/{group_id}/devices", response_model=SuccessResponse)
+async def list_group_devices(
     tenant_id: UUID,
     group_id: UUID,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
 ):
-    """Get all devices in group with pagination."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    """List all devices in a device group."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        members, total = service.get_group_members(group_id, skip=skip, limit=limit)
-        
-        return {
-            "data": members,
-            "meta": {
-                "skip": skip,
-                "limit": limit,
-                "total": total
-            }
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get members: {str(e)}")
-
-
-@router.post(
-    "/tenants/{tenant_id}/device-groups/{group_id}/members/add",
-    response_model=BulkDevicesResponse,
-    summary="Add devices to group",
-    responses={
-        200: {"description": "Devices added/processed"},
-        400: {"description": "Invalid device IDs"},
-        403: {"description": "Not authorized"},
-        404: {"description": "Group not found"}
-    }
-)
-async def add_devices_to_group(
-    tenant_id: UUID,
-    group_id: UUID,
-    request: BulkDevicesRequest,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Add one or more devices to a group."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    await session.set_tenant_context(tenant_id)
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        result = service.add_devices_to_group(group_id, request.device_ids)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to add devices: {str(e)}")
-
-
-@router.post(
-    "/tenants/{tenant_id}/device-groups/{group_id}/members/remove",
-    response_model=BulkDevicesResponse,
-    summary="Remove devices from group",
-    responses={
-        200: {"description": "Devices removed/processed"},
-        400: {"description": "Invalid device IDs"},
-        403: {"description": "Not authorized"},
-        404: {"description": "Group not found"}
-    }
-)
-async def remove_devices_from_group(
-    tenant_id: UUID,
-    group_id: UUID,
-    request: BulkDevicesRequest,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Remove one or more devices from a group."""
-    # Verify tenant authorization
-    if str(current_user.get("tenant_id")) != str(tenant_id):
-        raise HTTPException(status_code=403, detail="Not authorized for this tenant")
+    # Verify group exists
+    group_result = await session.execute(
+        select(DeviceGroup).where(
+            DeviceGroup.tenant_id == tenant_id,
+            DeviceGroup.id == group_id
+        )
+    )
+    if not group_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
     
-    try:
-        service = DeviceGroupService(db, tenant_id)
-        result = service.remove_devices_from_group(group_id, request.device_ids)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to remove devices: {str(e)}")
+    # Query devices
+    query = select(Device).where(
+        Device.tenant_id == tenant_id,
+        Device.device_group_id == group_id
+    ).order_by(Device.created_at.desc())
+    
+    # Count
+    count_query = select(func.count()).select_from(Device).where(
+        Device.tenant_id == tenant_id,
+        Device.device_group_id == group_id
+    )
+    total_result = await session.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Paginate
+    query = query.offset((page - 1) * per_page).limit(per_page)
+    result = await session.execute(query)
+    devices = result.scalars().all()
+    
+    return SuccessResponse(
+        data=[{
+            "id": str(d.id),
+            "name": d.name,
+            "device_type": d.device_type,
+            "status": d.status,
+            "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+            "battery_level": d.battery_level,
+            "signal_strength": d.signal_strength,
+        } for d in devices],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+    )
