@@ -332,25 +332,55 @@ function NewCompositeRuleForm({ onSuccess, onCancel }: { onSuccess: () => void; 
     }
   };
 
+  const getFieldLabel = (field: string) => {
+    const labels: Record<string, string> = {
+      alert_type: 'Alert Type',
+      severity: 'Severity',
+      device_id: 'Device ID',
+      metric: 'Metric',
+      temperature: 'Temperature',
+      humidity: 'Humidity',
+      battery: 'Battery Level'
+    };
+    return labels[field] || field;
+  };
+
+  const getOperatorSymbol = (operator: string) => {
+    const symbols: Record<string, string> = {
+      equals: '=',
+      contains: '∋',
+      gt: '>',
+      gte: '≥',
+      lt: '<',
+      lte: '≤',
+      neq: '≠'
+    };
+    return symbols[operator] || operator;
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded p-6 mb-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Composite Alert Rule</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Create Composite Alert Rule</h3>
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Rule Name</label>
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rule Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="e.g., High Temperature Alert"
               required
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Severity</label>
-            <select value={severity} onChange={e => setSeverity(e.target.value as 'info' | 'warning' | 'critical')} className="w-full px-3 py-2 border border-gray-300 rounded">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <select 
+              value={severity} 
+              onChange={e => setSeverity(e.target.value as 'info' | 'warning' | 'critical')} 
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
               <option value="info">Info</option>
               <option value="warning">Warning</option>
               <option value="critical">Critical</option>
@@ -358,104 +388,166 @@ function NewCompositeRuleForm({ onSuccess, onCancel }: { onSuccess: () => void; 
           </div>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm text-gray-600 mb-1">Description</label>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             rows={2}
-            placeholder="Optional description..."
+            placeholder="Optional description of this rule..."
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Logic</label>
-            <select value={logic} onChange={e => setLogic(e.target.value as 'AND' | 'OR')} className="w-full px-3 py-2 border border-gray-300 rounded">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Combine Conditions With</label>
+            <select 
+              value={logic} 
+              onChange={e => setLogic(e.target.value as 'AND' | 'OR')} 
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
               <option value="AND">AND (all conditions must match)</option>
-              <option value="OR">OR (any condition matches)</option>
+              <option value="OR">OR (any condition can match)</option>
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {logic === 'AND' 
+                ? 'Alert triggers only when ALL conditions are true' 
+                : 'Alert triggers when ANY condition is true'}
+            </p>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Weight Score (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Weight Score (optional)</label>
             <input
               type="number"
               value={weightScore ?? ''}
               onChange={e => setWeightScore(e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="0-100"
               min="0"
               max="100"
             />
+            <p className="text-xs text-gray-500 mt-1">Priority weight for scoring</p>
           </div>
         </div>
 
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm text-gray-600 font-semibold">Conditions</label>
+        {/* Conditions Builder */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-3">
+            <label className="block text-sm font-semibold text-gray-900">Rule Logic</label>
             <button
               type="button"
               onClick={handleAddCondition}
-              className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+              className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
             >
               + Add Condition
             </button>
           </div>
 
           {conditions.length === 0 ? (
-            <div className="bg-gray-50 border border-gray-200 rounded p-3 text-center text-sm text-gray-600">
-              No conditions added yet. Click "Add Condition" to start.
+            <div className="bg-blue-50 border border-blue-200 rounded p-4 text-center">
+              <p className="text-sm text-blue-700 font-medium">No conditions yet</p>
+              <p className="text-xs text-blue-600 mt-1">Click "Add Condition" to start building your rule</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {conditions.map((cond, idx) => (
-                <div key={idx} className="flex gap-2 items-end">
-                  <select
-                    value={cond.field}
-                    onChange={e => handleConditionChange(idx, 'field', e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  >
-                    <option value="alert_type">Alert Type</option>
-                    <option value="severity">Severity</option>
-                    <option value="device_id">Device ID</option>
-                    <option value="metric">Metric</option>
-                  </select>
-                  <select
-                    value={cond.operator}
-                    onChange={e => handleConditionChange(idx, 'operator', e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  >
-                    <option value="equals">Equals</option>
-                    <option value="contains">Contains</option>
-                    <option value="gt">Greater Than</option>
-                    <option value="lt">Less Than</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={cond.value}
-                    onChange={e => handleConditionChange(idx, 'value', e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                    placeholder="Value"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCondition(idx)}
-                    className="px-2 py-1 text-xs text-red-600 hover:text-red-700"
-                  >
-                    Remove
-                  </button>
+            <div>
+              {/* Conditions List */}
+              <div className="space-y-3 mb-4">
+                {conditions.map((cond, idx) => (
+                  <div key={idx} className="relative">
+                    {idx > 0 && (
+                      <div className="absolute left-6 top-0 -translate-y-4 text-xs font-semibold text-gray-500 bg-white px-2">
+                        {logic}
+                      </div>
+                    )}
+                    <div className="flex gap-3 items-end bg-gray-50 p-4 rounded border border-gray-200 hover:border-gray-300 transition-colors">
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Field</label>
+                        <select
+                          value={cond.field}
+                          onChange={e => handleConditionChange(idx, 'field', e.target.value)}
+                          className="w-full px-2.5 py-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="alert_type">Alert Type</option>
+                          <option value="severity">Severity</option>
+                          <option value="device_id">Device ID</option>
+                          <option value="metric">Metric</option>
+                          <option value="temperature">Temperature</option>
+                          <option value="humidity">Humidity</option>
+                          <option value="battery">Battery Level</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Operator</label>
+                        <select
+                          value={cond.operator}
+                          onChange={e => handleConditionChange(idx, 'operator', e.target.value)}
+                          className="w-full px-2.5 py-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="equals">Equals (=)</option>
+                          <option value="contains">Contains (∋)</option>
+                          <option value="gt">Greater Than (&gt;)</option>
+                          <option value="gte">Greater Than or Equal (≥)</option>
+                          <option value="lt">Less Than (&lt;)</option>
+                          <option value="lte">Less Than or Equal (≤)</option>
+                          <option value="neq">Not Equal (≠)</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Value</label>
+                        <input
+                          type="text"
+                          value={cond.value}
+                          onChange={e => handleConditionChange(idx, 'value', e.target.value)}
+                          className="w-full px-2.5 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Value..."
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCondition(idx)}
+                        className="px-3 py-2 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Visual Preview */}
+              {conditions.length > 0 && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded p-4">
+                  <p className="text-xs font-semibold text-blue-900 mb-2 uppercase tracking-wide">Rule Preview</p>
+                  <div className="bg-white rounded p-3 text-sm font-mono text-gray-700 break-words">
+                    {conditions.map((cond, idx) => (
+                      <div key={idx}>
+                        {idx > 0 && <div className="text-blue-600 font-semibold my-1">{logic}</div>}
+                        <div className="text-gray-900">
+                          {getFieldLabel(cond.field)} <span className="text-blue-600">{getOperatorSymbol(cond.operator)}</span> <span className="text-orange-600">"{cond.value || '?'}"</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
 
-        <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">
+        <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <button 
+            type="button" 
+            onClick={onCancel} 
+            className="px-4 py-2 text-sm font-medium border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors"
+          >
             Cancel
           </button>
-          <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+          <button 
+            type="submit" 
+            disabled={!name.trim() || conditions.length === 0}
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
             Create Rule
           </button>
         </div>
@@ -469,6 +561,21 @@ function EditCompositeRuleForm({ rule, onSuccess, onCancel }: { rule: CompositeA
   const [description, setDescription] = useState(rule.description || '');
   const [severity, setSeverity] = useState(rule.severity);
   const [conditions, setConditions] = useState(rule.conditions || []);
+  const [logic, setLogic] = useState(rule.logic);
+
+  const handleAddCondition = () => {
+    setConditions([...conditions, { field: 'alert_type', operator: 'equals', value: '' }]);
+  };
+
+  const handleConditionChange = (idx: number, field: string, value: any) => {
+    const newConditions = [...conditions];
+    newConditions[idx] = { ...newConditions[idx], [field]: value };
+    setConditions(newConditions);
+  };
+
+  const handleRemoveCondition = (idx: number) => {
+    setConditions(conditions.filter((_, i) => i !== idx));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -479,6 +586,7 @@ function EditCompositeRuleForm({ rule, onSuccess, onCancel }: { rule: CompositeA
       name,
       description,
       severity,
+      logic,
       conditions
     };
 
@@ -493,23 +601,53 @@ function EditCompositeRuleForm({ rule, onSuccess, onCancel }: { rule: CompositeA
     }
   };
 
+  const getFieldLabel = (field: string) => {
+    const labels: Record<string, string> = {
+      alert_type: 'Alert Type',
+      severity: 'Severity',
+      device_id: 'Device ID',
+      metric: 'Metric',
+      temperature: 'Temperature',
+      humidity: 'Humidity',
+      battery: 'Battery Level'
+    };
+    return labels[field] || field;
+  };
+
+  const getOperatorSymbol = (operator: string) => {
+    const symbols: Record<string, string> = {
+      equals: '=',
+      contains: '∋',
+      gt: '>',
+      gte: '≥',
+      lt: '<',
+      lte: '≤',
+      neq: '≠'
+    };
+    return symbols[operator] || operator;
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded p-6 mb-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Rule</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Edit Rule</h3>
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Name</label>
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rule Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Severity</label>
-            <select value={severity} onChange={e => setSeverity(e.target.value as any)} className="w-full px-3 py-2 border border-gray-300 rounded">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <select 
+              value={severity} 
+              onChange={e => setSeverity(e.target.value as any)} 
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
               <option value="info">Info</option>
               <option value="warning">Warning</option>
               <option value="critical">Critical</option>
@@ -517,21 +655,145 @@ function EditCompositeRuleForm({ rule, onSuccess, onCancel }: { rule: CompositeA
           </div>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm text-gray-600 mb-1">Description</label>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             rows={2}
           />
         </div>
 
-        <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Combine Conditions With</label>
+            <select 
+              value={logic} 
+              onChange={e => setLogic(e.target.value as 'AND' | 'OR')} 
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="AND">AND (all conditions must match)</option>
+              <option value="OR">OR (any condition can match)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Conditions Builder */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-3">
+            <label className="block text-sm font-semibold text-gray-900">Rule Logic</label>
+            <button
+              type="button"
+              onClick={handleAddCondition}
+              className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              + Add Condition
+            </button>
+          </div>
+
+          {conditions.length === 0 ? (
+            <div className="bg-blue-50 border border-blue-200 rounded p-4 text-center">
+              <p className="text-sm text-blue-700 font-medium">No conditions</p>
+            </div>
+          ) : (
+            <div>
+              {/* Conditions List */}
+              <div className="space-y-3 mb-4">
+                {conditions.map((cond, idx) => (
+                  <div key={idx} className="relative">
+                    {idx > 0 && (
+                      <div className="absolute left-6 top-0 -translate-y-4 text-xs font-semibold text-gray-500 bg-white px-2">
+                        {logic}
+                      </div>
+                    )}
+                    <div className="flex gap-3 items-end bg-gray-50 p-4 rounded border border-gray-200 hover:border-gray-300 transition-colors">
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Field</label>
+                        <select
+                          value={cond.field}
+                          onChange={e => handleConditionChange(idx, 'field', e.target.value)}
+                          className="w-full px-2.5 py-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="alert_type">Alert Type</option>
+                          <option value="severity">Severity</option>
+                          <option value="device_id">Device ID</option>
+                          <option value="metric">Metric</option>
+                          <option value="temperature">Temperature</option>
+                          <option value="humidity">Humidity</option>
+                          <option value="battery">Battery Level</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Operator</label>
+                        <select
+                          value={cond.operator}
+                          onChange={e => handleConditionChange(idx, 'operator', e.target.value)}
+                          className="w-full px-2.5 py-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="equals">Equals (=)</option>
+                          <option value="contains">Contains (∋)</option>
+                          <option value="gt">Greater Than (&gt;)</option>
+                          <option value="gte">Greater Than or Equal (≥)</option>
+                          <option value="lt">Less Than (&lt;)</option>
+                          <option value="lte">Less Than or Equal (≤)</option>
+                          <option value="neq">Not Equal (≠)</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Value</label>
+                        <input
+                          type="text"
+                          value={cond.value}
+                          onChange={e => handleConditionChange(idx, 'value', e.target.value)}
+                          className="w-full px-2.5 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Value..."
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCondition(idx)}
+                        className="px-3 py-2 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Visual Preview */}
+              {conditions.length > 0 && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded p-4">
+                  <p className="text-xs font-semibold text-blue-900 mb-2 uppercase tracking-wide">Rule Preview</p>
+                  <div className="bg-white rounded p-3 text-sm font-mono text-gray-700 break-words">
+                    {conditions.map((cond, idx) => (
+                      <div key={idx}>
+                        {idx > 0 && <div className="text-blue-600 font-semibold my-1">{logic}</div>}
+                        <div className="text-gray-900">
+                          {getFieldLabel(cond.field)} <span className="text-blue-600">{getOperatorSymbol(cond.operator)}</span> <span className="text-orange-600">"{cond.value || '?'}"</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <button 
+            type="button" 
+            onClick={onCancel} 
+            className="px-4 py-2 text-sm font-medium border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors"
+          >
             Cancel
           </button>
-          <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+          <button 
+            type="submit" 
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
             Update Rule
           </button>
         </div>
