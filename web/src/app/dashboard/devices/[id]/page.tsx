@@ -12,6 +12,11 @@ interface Device {
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
+  signal_strength: number | null;
+  dev_eui: string | null;
+  created_at: string;
+  ttn_app_id: string | null;
+  device_profile_id: string | null;
 }
 
 export default function DeviceDetailPage() {
@@ -178,7 +183,9 @@ export default function DeviceDetailPage() {
         {activeTab === 'alerts' && (
           <DeviceAlarms deviceId={deviceId as string} />
         )}
-        {activeTab === 'settings' && <div className="bg-white rounded border border-gray-200 p-8 text-center shadow-sm"><p className="text-gray-600">Device settings coming soon...</p></div>}
+        {activeTab === 'settings' && (
+          <DeviceSettings device={device} deviceId={deviceId as string} onUpdate={(updated) => setDevice(updated)} />
+        )}
       </main>
     </div>
   );
@@ -402,6 +409,237 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
             );
           })()
         )}
+      </div>
+    </div>
+  );
+}
+
+function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; deviceId: string; onUpdate: (d: Device) => void }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [formData, setFormData] = useState({ name: device.name, device_type: device.device_type });
+  const [alertRules, setAlertRules] = useState<any[]>([]);
+  const [showNewRule, setShowNewRule] = useState(false);
+
+  useEffect(() => {
+    const loadRules = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+      const res = await fetch(`/api/v1/tenants/${tenant}/alert-rules?device_id=${deviceId}`, { headers: { Authorization: `Bearer ${token}` }});
+      if (res.ok) {
+        const json = await res.json();
+        setAlertRules(json.data || []);
+      }
+    };
+    loadRules();
+  }, [deviceId]);
+
+  const saveDevice = async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(formData)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      onUpdate(json.data);
+      setEditing(false);
+    }
+  };
+
+  const deleteDevice = async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      router.push('/dashboard/devices');
+    }
+  };
+
+  const toggleRule = async (ruleId: string, active: boolean) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/alert-rules/${ruleId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ active })
+    });
+    if (res.ok) {
+      setAlertRules(prev => prev.map(r => r.id === ruleId ? { ...r, active } : r));
+    }
+  };
+
+  const deleteRule = async (ruleId: string) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/alert-rules/${ruleId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      setAlertRules(prev => prev.filter(r => r.id !== ruleId));
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Device Information */}
+      <div className="bg-white rounded border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Device Information</h3>
+          {!editing ? (
+            <button onClick={() => setEditing(true)} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">Edit</button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+              <button onClick={saveDevice} className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Device Name</label>
+            {editing ? (
+              <input value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            ) : (
+              <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.name}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Device Type</label>
+            {editing ? (
+              <input value={formData.device_type} onChange={e => setFormData(prev => ({ ...prev, device_type: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded" />
+            ) : (
+              <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.device_type}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Device ID</label>
+            <p className="text-sm font-mono text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{deviceId}</p>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Status</label>
+            <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200 capitalize">{device.status}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Alert Rules */}
+      <div className="bg-white rounded border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Alert Rules</h3>
+          <button onClick={() => setShowNewRule(!showNewRule)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Add Rule</button>
+        </div>
+        
+        {showNewRule && <NewAlertRuleForm deviceId={deviceId} onCreated={(rule) => { setAlertRules(prev => [rule, ...prev]); setShowNewRule(false); }} onCancel={() => setShowNewRule(false)} />}
+
+        <div className="space-y-2">
+          {alertRules.length === 0 ? (
+            <p className="text-sm text-gray-600 text-center py-4">No alert rules configured</p>
+          ) : (
+            alertRules.map(rule => (
+              <div key={rule.id} className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">
+                    {rule.metric.toUpperCase()} {rule.operator === 'gt' ? '>' : rule.operator === 'lt' ? '<' : rule.operator === 'gte' ? '≥' : rule.operator === 'lte' ? '≤' : '='} {rule.threshold}
+                  </p>
+                  <p className="text-xs text-gray-600">Cooldown: {rule.cooldown_minutes}min</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => toggleRule(rule.id, !rule.active)} className={`px-3 py-1 text-xs rounded ${rule.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {rule.active ? 'Active' : 'Inactive'}
+                  </button>
+                  <button onClick={() => deleteRule(rule.id)} className="px-3 py-1 text-xs rounded bg-red-50 text-red-600 hover:bg-red-100">Delete</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="bg-white rounded border border-red-200 p-6">
+        <h3 className="text-lg font-semibold text-red-900 mb-2">Danger Zone</h3>
+        <p className="text-sm text-gray-600 mb-4">Once you delete a device, there is no going back. Please be certain.</p>
+        {!deleting ? (
+          <button onClick={() => setDeleting(true)} className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete Device</button>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={() => setDeleting(false)} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+            <button onClick={deleteDevice} className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700">Confirm Delete</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string; onCreated: (rule: any) => void; onCancel: () => void }) {
+  const [formData, setFormData] = useState({ metric: 'temperature', operator: 'gt', threshold: 0, cooldown_minutes: 5 });
+
+  const create = async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/alert-rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ...formData, device_id: deviceId })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      onCreated(json.data);
+    }
+  };
+
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded p-4 mb-4">
+      <h4 className="text-sm font-semibold text-gray-900 mb-3">New Alert Rule</h4>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Metric</label>
+          <select value={formData.metric} onChange={e => setFormData(prev => ({ ...prev, metric: e.target.value as any }))} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-white">
+            <option value="temperature">Temperature</option>
+            <option value="humidity">Humidity</option>
+            <option value="battery">Battery</option>
+            <option value="rssi">RSSI</option>
+            <option value="pressure">Pressure</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Operator</label>
+          <select value={formData.operator} onChange={e => setFormData(prev => ({ ...prev, operator: e.target.value as any }))} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-white">
+            <option value="gt">&gt; Greater than</option>
+            <option value="gte">≥ Greater or equal</option>
+            <option value="lt">&lt; Less than</option>
+            <option value="lte">≤ Less or equal</option>
+            <option value="eq">= Equal</option>
+            <option value="neq">≠ Not equal</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Threshold</label>
+          <input type="number" value={formData.threshold} onChange={e => setFormData(prev => ({ ...prev, threshold: parseFloat(e.target.value) || 0 }))} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Cooldown (minutes)</label>
+          <input type="number" value={formData.cooldown_minutes} onChange={e => setFormData(prev => ({ ...prev, cooldown_minutes: parseInt(e.target.value) || 5 }))} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button onClick={onCancel} className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-white">Cancel</button>
+        <button onClick={create} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Create Rule</button>
       </div>
     </div>
   );
