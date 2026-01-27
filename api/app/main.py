@@ -116,23 +116,25 @@ def create_app() -> FastAPI:
         )
     
     # Import and include routers
-    from app.routers import auth, devices, websocket, alert_rules, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms
+    from app.routers import auth, devices, websocket, alert_rules, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(devices.router, prefix="/api/v1")
     app.include_router(alert_rules.router, prefix="/api/v1")
-    app.include_router(alarms.router, prefix="/api/v1")  # Alarms system
+    app.include_router(alarms.router, prefix="/api/v1")  # Unified enterprise alarm system
     app.include_router(organizations.router, prefix="/api/v1")  # Hierarchy: Organizations
     app.include_router(sites.router, prefix="/api/v1")  # Hierarchy: Sites
     app.include_router(device_groups.router, prefix="/api/v1")  # Hierarchy: Device Groups
-    # app.include_router(composite_alerts.router)
-    # app.include_router(notifications.router)
-    # app.include_router(grafana.router)
+    app.include_router(notifications.router, prefix="/api/v1")  # Notification channels & history
     app.include_router(telemetry.router, prefix="/api/v1")
     app.include_router(telemetry_aggregate.router, prefix="/api/v1")
-    # app.include_router(firmware.router, prefix="/api/v1")
-    # app.include_router(bulk_operations.router)
     app.include_router(websocket.router, prefix="/api/v1")
-    # app.include_router(lorawan.router)  # No prefix: uses /api/v1/lorawan from router
+    
+    # Disabled routers (functionality moved to unified systems):
+    # - composite_alerts: Merged into alert_rules (COMPLEX rule_type)
+    # - grafana: External integration
+    # - firmware: OTA functionality
+    # - bulk_operations: Batch operations
+    # - lorawan: LoRaWAN-specific operations
     
     return app
 

@@ -1,576 +1,281 @@
-"""API routes for notification system."""
+"""Notification system routes - channels, templates, and history."""
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, and_
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from sqlalchemy import select, and_, func
 
-from app.core.auth import get_current_user
-from app.core.database import get_session
-from app.models import User, NotificationChannel, NotificationRule, Notification, NotificationTemplate
-from app.schemas.notifications import (
-    CreateNotificationChannelSchema,
-    UpdateNotificationChannelSchema,
-    NotificationChannelResponseSchema,
-    NotificationPreferencesSchema,
-    CreateNotificationRuleSchema,
-    NotificationRuleResponseSchema,
-    NotificationResponseSchema,
-    NotificationListResponseSchema,
-    NotificationTemplateSchema,
-    NotificationTemplateResponseSchema,
-    NotificationStatsSchema,
-)
-from app.services.channels import ChannelFactory
+from app.database import get_session, RLSSession
+from app.models import NotificationChannel, NotificationTemplate, Notification
+from app.security import decode_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 
-# ============================================================================
-# NOTIFICATION CHANNEL ENDPOINTS
-# ============================================================================
-
-
-@router.post("/channels", response_model=NotificationChannelResponseSchema)
-async def create_notification_channel(
-    channel_data: CreateNotificationChannelSchema,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Create a new notification channel for current user."""
-    try:
-        # Verify channel configuration
-        service = ChannelFactory.create_service(channel_data.channel_type)
-        if not service or not service.verify_config(channel_data.config):
-            raise HTTPException(status_code=400, detail="Invalid channel configuration")
-
-        # Create channel
-        channel = NotificationChannel(
-            tenant_id=current_user.tenant_id,
-            user_id=current_user.id,
-            channel_type=channel_data.channel_type,
-            config=channel_data.config,
-            enabled=channel_data.enabled,
+async def get_current_tenant(
+    authorization: str = Header(None),
+) -> UUID:
+    """Extract and validate tenant_id from JWT token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
         )
-        session.add(channel)
-        session.commit()
-        session.refresh(channel)
-
-        logger.info(
-            "notification_channel_created",
-            extra={
-                "user_id": str(current_user.id),
-                "channel_type": channel_data.channel_type,
-            },
+    
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+    tenant_id = payload.get("tenant_id")
+    
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing tenant_id",
         )
-
-        return channel
-
-    except Exception as e:
-        logger.error(f"Failed to create notification channel: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create channel")
+    
+    return UUID(tenant_id)
 
 
-@router.get("/channels", response_model=List[NotificationChannelResponseSchema])
-async def list_notification_channels(
-    enabled_only: bool = Query(False),
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+async def get_current_user_id(
+    authorization: str = Header(None),
+) -> UUID:
+    """Extract user_id from JWT token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+        )
+    
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+    return UUID(payload["sub"])
+
+
+# ============================================================================
+# NOTIFICATION CHANNELS
+# ============================================================================
+
+@router.get("/channels")
+async def list_channels(
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """List all notification channels for current user."""
-    query = select(NotificationChannel).where(
-        NotificationChannel.user_id == current_user.id
-    )
-
-    if enabled_only:
-        query = query.where(NotificationChannel.enabled == True)
-
-    channels = session.exec(query).all()
-    return channels
-
-
-@router.get("/channels/{channel_id}", response_model=NotificationChannelResponseSchema)
-async def get_notification_channel(
-    channel_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Get a specific notification channel."""
-    channel = session.exec(
+    """List all notification channels for tenant."""
+    await session.set_tenant_context(current_tenant)
+    
+    result = await session.execute(
         select(NotificationChannel).where(
-            and_(
-                NotificationChannel.id == channel_id,
-                NotificationChannel.user_id == current_user.id,
-            )
+            NotificationChannel.tenant_id == current_tenant
         )
-    ).first()
+    )
+    channels = result.scalars().all()
+    
+    return {"data": [
+        {
+            "id": str(c.id),
+            "user_id": str(c.user_id),
+            "channel_type": c.channel_type,
+            "config": c.config,
+            "enabled": c.enabled,
+            "verified": c.verified,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        }
+        for c in channels
+    ]}
 
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
 
-    return channel
+@router.post("/channels")
+async def create_channel(
+    channel_data: dict,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    current_user_id: Annotated[UUID, Depends(get_current_user_id)],
+):
+    """Create a new notification channel."""
+    await session.set_tenant_context(current_tenant)
+    
+    channel = NotificationChannel(
+        tenant_id=current_tenant,
+        user_id=current_user_id,
+        channel_type=channel_data.get("channel_type"),
+        config=channel_data.get("config", {}),
+        enabled=channel_data.get("enabled", True),
+        verified=True
+    )
+    
+    session.add(channel)
+    await session.commit()
+    await session.refresh(channel)
+    
+    return {
+        "id": str(channel.id),
+        "user_id": str(channel.user_id),
+        "channel_type": channel.channel_type,
+        "config": channel.config,
+        "enabled": channel.enabled,
+        "verified": channel.verified,
+    }
 
 
-@router.put("/channels/{channel_id}", response_model=NotificationChannelResponseSchema)
-async def update_notification_channel(
+@router.put("/channels/{channel_id}")
+async def update_channel(
     channel_id: UUID,
-    update_data: UpdateNotificationChannelSchema,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    channel_data: dict,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update a notification channel."""
-    channel = session.exec(
+    await session.set_tenant_context(current_tenant)
+    
+    result = await session.execute(
         select(NotificationChannel).where(
             and_(
                 NotificationChannel.id == channel_id,
-                NotificationChannel.user_id == current_user.id,
+                NotificationChannel.tenant_id == current_tenant
             )
         )
-    ).first()
-
+    )
+    channel = result.scalar_one_or_none()
+    
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-
-    # Verify new config if provided
-    if update_data.config:
-        service = ChannelFactory.create_service(channel.channel_type)
-        if not service or not service.verify_config(update_data.config):
-            raise HTTPException(status_code=400, detail="Invalid channel configuration")
-        channel.config = update_data.config
-
-    if update_data.enabled is not None:
-        channel.enabled = update_data.enabled
-
-    session.commit()
-    session.refresh(channel)
-
-    return channel
+    
+    # Update fields
+    if "channel_type" in channel_data:
+        channel.channel_type = channel_data["channel_type"]
+    if "config" in channel_data:
+        channel.config = channel_data["config"]
+    if "enabled" in channel_data:
+        channel.enabled = channel_data["enabled"]
+    if "verified" in channel_data:
+        channel.verified = channel_data["verified"]
+    
+    await session.commit()
+    await session.refresh(channel)
+    
+    return {
+        "id": str(channel.id),
+        "user_id": str(channel.user_id),
+        "channel_type": channel.channel_type,
+        "config": channel.config,
+        "enabled": channel.enabled,
+        "verified": channel.verified,
+    }
 
 
 @router.delete("/channels/{channel_id}")
-async def delete_notification_channel(
+async def delete_channel(
     channel_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete a notification channel."""
-    channel = session.exec(
+    await session.set_tenant_context(current_tenant)
+    
+    result = await session.execute(
         select(NotificationChannel).where(
             and_(
                 NotificationChannel.id == channel_id,
-                NotificationChannel.user_id == current_user.id,
+                NotificationChannel.tenant_id == current_tenant
             )
         )
-    ).first()
-
+    )
+    channel = result.scalar_one_or_none()
+    
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-
-    session.delete(channel)
-    session.commit()
-
-    logger.info(
-        "notification_channel_deleted",
-        extra={"user_id": str(current_user.id), "channel_id": str(channel_id)},
-    )
-
-    return {"success": True, "message": "Channel deleted"}
-
-
-# ============================================================================
-# USER NOTIFICATION PREFERENCES
-# ============================================================================
-
-
-@router.put("/preferences", response_model=NotificationPreferencesSchema)
-async def update_notification_preferences(
-    preferences: NotificationPreferencesSchema,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Update user notification preferences (quiet hours, muted rules, etc)."""
-    user = session.exec(
-        select(User).where(User.id == current_user.id)
-    ).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Update preferences
-    user.notification_preferences = preferences.model_dump()
-    session.commit()
-
-    logger.info(
-        "notification_preferences_updated",
-        extra={"user_id": str(current_user.id)},
-    )
-
-    return preferences
-
-
-@router.get("/preferences", response_model=NotificationPreferencesSchema)
-async def get_notification_preferences(
-    current_user: User = Depends(get_current_user),
-):
-    """Get user notification preferences."""
-    if not current_user.notification_preferences:
-        return NotificationPreferencesSchema()
-
-    return NotificationPreferencesSchema(**current_user.notification_preferences)
-
-
-# ============================================================================
-# NOTIFICATION RULES (Link alerts to channels)
-# ============================================================================
-
-
-@router.post("/rules", response_model=NotificationRuleResponseSchema)
-async def create_notification_rule(
-    rule_data: CreateNotificationRuleSchema,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Link an alert rule to a notification channel."""
-    # Verify channel exists and belongs to user
-    channel = session.exec(
-        select(NotificationChannel).where(
-            and_(
-                NotificationChannel.id == rule_data.channel_id,
-                NotificationChannel.user_id == current_user.id,
-            )
-        )
-    ).first()
-
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
-
-    # Create rule link
-    rule = NotificationRule(
-        tenant_id=current_user.tenant_id,
-        alert_rule_id=rule_data.alert_rule_id,
-        channel_id=rule_data.channel_id,
-        enabled=rule_data.enabled,
-    )
-    session.add(rule)
-    session.commit()
-    session.refresh(rule)
-
-    return rule
-
-
-@router.get("/rules", response_model=List[NotificationRuleResponseSchema])
-async def list_notification_rules(
-    alert_rule_id: Optional[UUID] = Query(None),
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """List notification rules for current user's channels."""
-    query = select(NotificationRule).where(
-        NotificationRule.tenant_id == current_user.tenant_id
-    )
-
-    if alert_rule_id:
-        query = query.where(NotificationRule.alert_rule_id == alert_rule_id)
-
-    rules = session.exec(query).all()
-    return rules
-
-
-@router.delete("/rules/{rule_id}")
-async def delete_notification_rule(
-    rule_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Delete a notification rule."""
-    rule = session.exec(
-        select(NotificationRule).where(
-            and_(
-                NotificationRule.id == rule_id,
-                NotificationRule.tenant_id == current_user.tenant_id,
-            )
-        )
-    ).first()
-
-    if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
-
-    session.delete(rule)
-    session.commit()
-
-    return {"success": True, "message": "Rule deleted"}
-
-
-# ============================================================================
-# NOTIFICATION HISTORY & MANAGEMENT
-# ============================================================================
-
-
-@router.get("/history", response_model=List[NotificationListResponseSchema])
-async def list_notifications(
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None),
-    channel_type: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Get notification history for current user."""
-    query = select(Notification).where(
-        Notification.tenant_id == current_user.tenant_id
-    )
-
-    if status:
-        query = query.where(Notification.status == status)
-
-    if channel_type:
-        query = query.where(Notification.channel_type == channel_type)
-
-    # Order by creation date descending
-    query = query.order_by(Notification.created_at.desc())
-
-    notifications = session.exec(query.offset(offset).limit(limit)).all()
-    return notifications
-
-
-@router.get("/history/{notification_id}", response_model=NotificationResponseSchema)
-async def get_notification(
-    notification_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Get details of a specific notification."""
-    notification = session.exec(
-        select(Notification).where(
-            and_(
-                Notification.id == notification_id,
-                Notification.tenant_id == current_user.tenant_id,
-            )
-        )
-    ).first()
-
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    return notification
-
-
-@router.post("/history/{notification_id}/resend")
-async def resend_notification(
-    notification_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Manually resend a notification."""
-    notification = session.exec(
-        select(Notification).where(
-            and_(
-                Notification.id == notification_id,
-                Notification.tenant_id == current_user.tenant_id,
-            )
-        )
-    ).first()
-
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    # Mark for retry
-    notification.status = "pending"
-    notification.retry_count = 0
-    notification.next_retry_at = None
-    session.commit()
-
-    logger.info(
-        "notification_resend_requested",
-        extra={
-            "notification_id": str(notification_id),
-            "user_id": str(current_user.id),
-        },
-    )
-
-    return {"success": True, "message": "Notification marked for resend"}
-
-
-@router.get("/stats", response_model=NotificationStatsSchema)
-async def get_notification_stats(
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Get notification delivery statistics for tenant."""
-    from sqlalchemy import func
-
-    # Count notifications by status
-    total_sent = session.exec(
-        select(func.count(Notification.id)).where(
-            and_(
-                Notification.tenant_id == current_user.tenant_id,
-                Notification.status == "sent",
-            )
-        )
-    ).first() or 0
-
-    total_pending = session.exec(
-        select(func.count(Notification.id)).where(
-            and_(
-                Notification.tenant_id == current_user.tenant_id,
-                Notification.status == "pending",
-            )
-        )
-    ).first() or 0
-
-    total_failed = session.exec(
-        select(func.count(Notification.id)).where(
-            and_(
-                Notification.tenant_id == current_user.tenant_id,
-                Notification.status.in_(["failed", "bounced"]),
-            )
-        )
-    ).first() or 0
-
-    # Calculate success rate
-    total = total_sent + total_pending + total_failed
-    success_rate = (total_sent / total * 100) if total > 0 else 0
-
-    # Count by channel type
-    channels_data = session.exec(
-        select(Notification.channel_type, func.count(Notification.id)).where(
-            Notification.tenant_id == current_user.tenant_id
-        ).group_by(Notification.channel_type)
-    ).all()
-
-    channels = {channel_type: count for channel_type, count in channels_data}
-
-    return NotificationStatsSchema(
-        total_sent=total_sent,
-        total_pending=total_pending,
-        total_failed=total_failed,
-        success_rate=round(success_rate, 1),
-        channels=channels,
-    )
+    
+    await session.delete(channel)
+    await session.commit()
+    
+    return {"success": True}
 
 
 # ============================================================================
 # NOTIFICATION TEMPLATES
 # ============================================================================
 
-
-@router.post("/templates", response_model=NotificationTemplateResponseSchema)
-async def create_notification_template(
-    template_data: NotificationTemplateSchema,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+@router.get("/templates")
+async def list_templates(
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Create a notification template."""
-    # Check if template already exists
-    existing = session.exec(
+    """List all notification templates for tenant."""
+    await session.set_tenant_context(current_tenant)
+    
+    result = await session.execute(
         select(NotificationTemplate).where(
-            and_(
-                NotificationTemplate.tenant_id == current_user.tenant_id,
-                NotificationTemplate.channel_type == template_data.channel_type,
-                NotificationTemplate.alert_type == template_data.alert_type,
-            )
+            NotificationTemplate.tenant_id == current_tenant
         )
-    ).first()
-
-    if existing:
-        raise HTTPException(status_code=409, detail="Template already exists")
-
-    template = NotificationTemplate(
-        tenant_id=current_user.tenant_id,
-        channel_type=template_data.channel_type,
-        alert_type=template_data.alert_type,
-        name=template_data.name,
-        subject=template_data.subject,
-        body=template_data.body,
-        variables=template_data.variables,
-        enabled=template_data.enabled,
     )
-    session.add(template)
-    session.commit()
-    session.refresh(template)
+    templates = result.scalars().all()
+    
+    return {"data": [
+        {
+            "id": str(t.id),
+            "channel_type": t.channel_type,
+            "alert_type": t.alert_type,
+            "name": t.name,
+            "subject": t.subject,
+            "body": t.body,
+            "enabled": t.enabled,
+        }
+        for t in templates
+    ]}
 
-    return template
 
+# ============================================================================
+# NOTIFICATION HISTORY
+# ============================================================================
 
-@router.get("/templates", response_model=List[NotificationTemplateResponseSchema])
-async def list_notification_templates(
-    channel_type: Optional[str] = Query(None),
-    enabled_only: bool = Query(False),
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+@router.get("")
+async def list_notifications(
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
 ):
-    """List notification templates for tenant."""
-    query = select(NotificationTemplate).where(
-        NotificationTemplate.tenant_id == current_user.tenant_id
+    """List notification delivery history."""
+    await session.set_tenant_context(current_tenant)
+    
+    offset = (page - 1) * per_page
+    
+    result = await session.execute(
+        select(Notification)
+        .where(Notification.tenant_id == current_tenant)
+        .order_by(Notification.created_at.desc())
+        .offset(offset)
+        .limit(per_page)
     )
-
-    if channel_type:
-        query = query.where(NotificationTemplate.channel_type == channel_type)
-
-    if enabled_only:
-        query = query.where(NotificationTemplate.enabled == True)
-
-    templates = session.exec(query).all()
-    return templates
-
-
-@router.put("/templates/{template_id}", response_model=NotificationTemplateResponseSchema)
-async def update_notification_template(
-    template_id: UUID,
-    template_data: NotificationTemplateSchema,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Update a notification template."""
-    template = session.exec(
-        select(NotificationTemplate).where(
-            and_(
-                NotificationTemplate.id == template_id,
-                NotificationTemplate.tenant_id == current_user.tenant_id,
-            )
+    notifications = result.scalars().all()
+    
+    # Get total count
+    count_result = await session.execute(
+        select(func.count(Notification.id)).where(
+            Notification.tenant_id == current_tenant
         )
-    ).first()
-
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    template.name = template_data.name
-    template.subject = template_data.subject
-    template.body = template_data.body
-    template.variables = template_data.variables
-    template.enabled = template_data.enabled
-
-    session.commit()
-    session.refresh(template)
-
-    return template
-
-
-@router.delete("/templates/{template_id}")
-async def delete_notification_template(
-    template_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Delete a notification template."""
-    template = session.exec(
-        select(NotificationTemplate).where(
-            and_(
-                NotificationTemplate.id == template_id,
-                NotificationTemplate.tenant_id == current_user.tenant_id,
-            )
-        )
-    ).first()
-
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    session.delete(template)
-    session.commit()
-
-    return {"success": True, "message": "Template deleted"}
+    )
+    total = count_result.scalar()
+    
+    return {
+        "data": [
+            {
+                "id": str(n.id),
+                "channel_id": str(n.channel_id),
+                "alert_event_id": str(n.alert_event_id),
+                "channel_type": n.channel_type,
+                "recipient": n.recipient,
+                "status": n.status,
+                "created_at": n.created_at.isoformat() if n.created_at else None,
+                "sent_at": n.sent_at.isoformat() if n.sent_at else None,
+            }
+            for n in notifications
+        ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }

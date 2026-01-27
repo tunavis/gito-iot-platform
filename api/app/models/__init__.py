@@ -8,7 +8,6 @@ from app.models.base import (
     DeviceCredential,
     AlertRule,
     AlertRuleCondition,
-    AlertEvent,
     AuditLog,
 )
 from app.models.device_group import DeviceGroup, GroupDevice, BulkOperation
@@ -19,6 +18,7 @@ from app.models.notification import (
     NotificationTemplate,
     NotificationQueue,
 )
+from app.models.alarm import Alarm
 
 __all__ = [
     "BaseModel",
@@ -28,7 +28,6 @@ __all__ = [
     "DeviceCredential",
     "AlertRule",
     "AlertRuleCondition",
-    "AlertEvent",
     "AuditLog",
     "DeviceGroup",
     "GroupDevice",
@@ -38,4 +37,5 @@ __all__ = [
     "Notification",
     "NotificationTemplate",
     "NotificationQueue",
+    "Alarm",
 ]

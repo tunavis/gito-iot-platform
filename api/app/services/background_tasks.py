@@ -90,11 +90,11 @@ class NotificationBackgroundTasks:
             
             try:
                 # Query pending queue items
-                pending_items = session.exec(
+                pending_items = (await session.execute(
                     select(NotificationQueue).where(
                         NotificationQueue.status == "pending"
                     ).order_by(NotificationQueue.created_at)
-                ).all()
+                )).scalars().all()
                 
                 if not pending_items:
                     return
@@ -162,7 +162,7 @@ class NotificationBackgroundTasks:
             
             try:
                 # Find failed notifications ready for retry
-                failed_notifications = session.exec(
+                failed_notifications = (await session.execute(
                     select(Notification).where(
                         and_(
                             Notification.status == "pending",
@@ -170,7 +170,7 @@ class NotificationBackgroundTasks:
                             Notification.next_retry_at <= datetime.utcnow(),
                         )
                     ).order_by(Notification.created_at)
-                ).all()
+                )).scalars().all()
                 
                 if not failed_notifications:
                     return
@@ -194,11 +194,11 @@ class NotificationBackgroundTasks:
                         from app.services.channels import ChannelFactory
                         from app.models import NotificationChannel
                         
-                        channel = session.exec(
+                        channel = (await session.execute(
                             select(NotificationChannel).where(
                                 NotificationChannel.id == notif.channel_id
                             )
-                        ).first()
+                        )).scalars().first()
                         
                         if not channel:
                             notif.status = "failed"
@@ -249,14 +249,14 @@ class NotificationBackgroundTasks:
                 cutoff_date = datetime.utcnow() - timedelta(days=30)
                 
                 # Find old completed/failed notifications
-                old_notifications = session.exec(
+                old_notifications = (await session.execute(
                     select(Notification).where(
                         and_(
                             Notification.status.in_(["sent", "failed"]),
                             Notification.created_at < cutoff_date
                         )
                     )
-                ).all()
+                )).scalars().all()
                 
                 if not old_notifications:
                     return

@@ -31,6 +31,7 @@ export default function CompositeAlertsPage() {
   const [previewingRule, setPreviewingRule] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [filterEnabled, setFilterEnabled] = useState<boolean | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     loadRules();
@@ -54,19 +55,20 @@ export default function CompositeAlertsPage() {
     setLoading(false);
   };
 
-  const deleteRule = async (id: string) => {
-    if (!confirm('Delete this composite alert rule?')) return;
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
     const token = localStorage.getItem('auth_token');
     if (!token) return;
 
-    const res = await fetch(`/api/v1/alert-rules/composite/${id}`, {
+    const res = await fetch(`/api/v1/alert-rules/composite/${deleteConfirm.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
 
     if (res.ok) {
-      setRules(prev => prev.filter(r => r.id !== id));
+      setRules(prev => prev.filter(r => r.id !== deleteConfirm.id));
     }
+    setDeleteConfirm(null);
   };
 
   const toggleRule = async (id: string, enabled: boolean) => {
@@ -248,7 +250,7 @@ export default function CompositeAlertsPage() {
                     Edit
                   </button>
                   <button
-                    onClick={() => deleteRule(rule.id)}
+                    onClick={() => setDeleteConfirm({ id: rule.id, name: rule.name })}
                     className="px-3 py-1 text-xs font-medium rounded bg-red-50 text-red-600 hover:bg-red-100"
                   >
                     Delete
@@ -271,6 +273,33 @@ export default function CompositeAlertsPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Deletion</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete this composite alert rule? 
+                <span className="font-medium text-gray-900"> {deleteConfirm.name}</span>
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-4 py-2 text-sm font-medium border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

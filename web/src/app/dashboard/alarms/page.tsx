@@ -44,11 +44,13 @@ export default function AlarmsPage() {
       try {
         const token = localStorage.getItem('auth_token');
         if (!token) { router.push('/auth/login'); return; }
-        const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const tenant = payload.tenant_id;
 
         const params = new URLSearchParams();
         params.set('page', String(page));
-        params.set('per_page', '50');
+        params.set('page_size', '50');
         if (severityFilter !== 'all') params.set('severity', severityFilter);
         if (statusFilter !== 'all') params.set('status', statusFilter);
         if (typeFilter.trim()) params.set('alarm_type', typeFilter.trim());
@@ -58,9 +60,9 @@ export default function AlarmsPage() {
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error?.message || 'Failed to load alarms');
-        setAlarms(json.data || []);
-        setMeta(json.meta || null);
-        if (!selectedAlarmId && json.data?.length) setSelectedAlarmId(json.data[0].id);
+        setAlarms(json.alarms || []);
+        setMeta({ page: json.page, per_page: json.page_size, total: json.total });
+        if (!selectedAlarmId && json.alarms?.length) setSelectedAlarmId(json.alarms[0].id);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load alarms');
       } finally { setLoading(false); }
@@ -73,28 +75,38 @@ export default function AlarmsPage() {
   const acknowledge = async (alarmId: string) => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
-    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const tenant = payload.tenant_id;
     const res = await fetch(`/api/v1/tenants/${tenant}/alarms/${alarmId}/acknowledge`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
     });
     const json = await res.json();
     if (res.ok) {
-      setAlarms(prev => prev.map(a => a.id === alarmId ? json.data : a));
+      setAlarms(prev => prev.map(a => a.id === alarmId ? json : a));
     }
   };
 
   const clear = async (alarmId: string) => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
-    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const tenant = payload.tenant_id;
     const res = await fetch(`/api/v1/tenants/${tenant}/alarms/${alarmId}/clear`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
     });
     const json = await res.json();
     if (res.ok) {
-      setAlarms(prev => prev.map(a => a.id === alarmId ? json.data : a));
+      setAlarms(prev => prev.map(a => a.id === alarmId ? json : a));
     }
   };
 

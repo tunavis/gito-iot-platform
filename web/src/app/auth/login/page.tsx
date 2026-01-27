@@ -76,14 +76,14 @@ export default function LoginPage() {
             <Image
               src="/images/GitoLogo.png"
               alt="Gito IT Solutions"
-              width={280}
-              height={84}
-              className="h-20 w-auto object-contain"
+              width={168}
+              height={50}
+              style={{ maxHeight: '56px', width: 'auto', height: 'auto' }}
               priority
               unoptimized
             />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Gito IoT Platform</h2>
+
           <p className="text-gray-600">Sign in to your account</p>
         </div>
 

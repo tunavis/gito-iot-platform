@@ -1,20 +1,27 @@
-"""Alarms API - Cumulocity-style alarm management with severity levels and acknowledgment workflow."""
-
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated, Optional, List
-from uuid import UUID
+"""
+Alarms Router - Enterprise-grade alarm lifecycle management
+Following Cumulocity patterns: ACTIVE → ACKNOWLEDGED → CLEARED
+"""
 from datetime import datetime
-from pydantic import BaseModel, Field
-from enum import Enum
+from typing import Optional, Annotated
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from sqlalchemy import select, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session, RLSSession
-from app.models.base import AlertEvent, Device
-from app.schemas.common import SuccessResponse, PaginationMeta
+from app.models import Alarm
+from app.schemas.alarm import (
+    Alarm as AlarmSchema,
+    AlarmCreate,
+    AlarmAcknowledge,
+    AlarmClear,
+    AlarmSummary,
+    AlarmListResponse,
+)
 from app.security import decode_token
 
-router = APIRouter(prefix="/tenants/{tenant_id}/alarms", tags=["alarms"])
+router = APIRouter(prefix="/tenants/{tenant_id}/alarms", tags=["Alarms"])
 
 
 async def get_current_tenant(
@@ -40,373 +47,276 @@ async def get_current_tenant(
     return UUID(tenant_id)
 
 
-# Enums
-class AlarmSeverity(str, Enum):
-    CRITICAL = "CRITICAL"
-    MAJOR = "MAJOR"
-    MINOR = "MINOR"
-    WARNING = "WARNING"
+@router.get("/summary", response_model=AlarmSummary)
+async def get_alarm_summary(
+    tenant_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    status: Optional[str] = Query(None, description="Filter by status"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    device_id: Optional[UUID] = Query(None, description="Filter by device"),
+):
+    """Get alarm summary statistics"""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    
+    await session.set_tenant_context(tenant_id)
+
+    # Build filter
+    filters = [Alarm.tenant_id == tenant_id]
+    if status:
+        filters.append(Alarm.status == status.upper())
+    if severity:
+        filters.append(Alarm.severity == severity.upper())
+    if device_id:
+        filters.append(Alarm.device_id == device_id)
+
+    # Total count
+    total_query = select(func.count(Alarm.id)).where(and_(*filters))
+    total_result = await session.execute(total_query)
+    total = total_result.scalar() or 0
+
+    # Status counts
+    active_query = select(func.count(Alarm.id)).where(
+        and_(*filters, Alarm.status == "ACTIVE")
+    )
+    active_result = await session.execute(active_query)
+    active = active_result.scalar() or 0
+
+    acknowledged_query = select(func.count(Alarm.id)).where(
+        and_(*filters, Alarm.status == "ACKNOWLEDGED")
+    )
+    ack_result = await session.execute(acknowledged_query)
+    acknowledged = ack_result.scalar() or 0
+
+    cleared_query = select(func.count(Alarm.id)).where(
+        and_(*filters, Alarm.status == "CLEARED")
+    )
+    cleared_result = await session.execute(cleared_query)
+    cleared = cleared_result.scalar() or 0
+
+    # Severity counts
+    severity_query = select(
+        Alarm.severity, func.count(Alarm.id)
+    ).where(and_(*filters)).group_by(Alarm.severity)
+    severity_result = await session.execute(severity_query)
+    by_severity = {row[0]: row[1] for row in severity_result}
+
+    return AlarmSummary(
+        total=total,
+        active=active,
+        acknowledged=acknowledged,
+        cleared=cleared,
+        by_severity=by_severity,
+    )
 
 
-class AlarmStatus(str, Enum):
-    ACTIVE = "ACTIVE"
-    ACKNOWLEDGED = "ACKNOWLEDGED"
-    CLEARED = "CLEARED"
-
-
-# Schemas
-class AlarmCreate(BaseModel):
-    device_id: UUID
-    alert_rule_id: Optional[UUID] = None
-    alarm_type: str = Field(..., min_length=1, max_length=100)
-    severity: AlarmSeverity = AlarmSeverity.MAJOR
-    message: str
-    source: Optional[str] = Field(None, max_length=100)
-    metric_name: Optional[str] = Field(None, max_length=50)
-    metric_value: Optional[float] = None
-
-
-class AlarmUpdate(BaseModel):
-    severity: Optional[AlarmSeverity] = None
-    message: Optional[str] = None
-
-
-class AlarmAcknowledge(BaseModel):
-    """Request to acknowledge an alarm."""
-    pass
-
-
-class AlarmClear(BaseModel):
-    """Request to clear an alarm."""
-    pass
-
-
-class AlarmResponse(BaseModel):
-    id: UUID
-    tenant_id: UUID
-    device_id: UUID
-    alert_rule_id: Optional[UUID]
-    alarm_type: str
-    severity: AlarmSeverity
-    status: AlarmStatus
-    message: Optional[str]
-    source: Optional[str]
-    metric_name: Optional[str]
-    metric_value: Optional[float]
-    acknowledged_by: Optional[UUID]
-    acknowledged_at: Optional[datetime]
-    cleared_at: Optional[datetime]
-    fired_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class AlarmSummary(BaseModel):
-    """Alarm counts by severity and status."""
-    critical_active: int = 0
-    critical_acknowledged: int = 0
-    major_active: int = 0
-    major_acknowledged: int = 0
-    minor_active: int = 0
-    minor_acknowledged: int = 0
-    warning_active: int = 0
-    warning_acknowledged: int = 0
-
-
-@router.get("", response_model=SuccessResponse)
+@router.get("", response_model=AlarmListResponse)
 async def list_alarms(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=100),
-    device_id: Optional[UUID] = Query(None),
-    severity: Optional[List[AlarmSeverity]] = Query(None),
-    status: Optional[List[AlarmStatus]] = Query(None),
-    alarm_type: Optional[str] = Query(None),
+    page_size: int = Query(50, ge=1, le=100),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    device_id: Optional[UUID] = Query(None, description="Filter by device"),
+    alarm_type: Optional[str] = Query(None, description="Filter by alarm type"),
 ):
-    """List alarms with filtering by device, severity, status, and type."""
+    """List alarms with filtering and pagination"""
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
     await session.set_tenant_context(tenant_id)
-    
-    # Build query
-    query = select(AlertEvent).where(AlertEvent.tenant_id == tenant_id)
-    
-    if device_id:
-        query = query.where(AlertEvent.device_id == device_id)
-    if severity:
-        query = query.where(AlertEvent.severity.in_([s.value for s in severity]))
+
+    # Build filters
+    filters = [Alarm.tenant_id == tenant_id]
     if status:
-        query = query.where(AlertEvent.status.in_([s.value for s in status]))
+        filters.append(Alarm.status == status.upper())
+    if severity:
+        filters.append(Alarm.severity == severity.upper())
+    if device_id:
+        filters.append(Alarm.device_id == device_id)
     if alarm_type:
-        query = query.where(AlertEvent.alarm_type == alarm_type)
-    
-    query = query.order_by(AlertEvent.fired_at.desc())
-    
+        filters.append(Alarm.alarm_type == alarm_type)
+
     # Count total
-    count_query = select(func.count()).select_from(AlertEvent).where(AlertEvent.tenant_id == tenant_id)
-    if device_id:
-        count_query = count_query.where(AlertEvent.device_id == device_id)
-    if severity:
-        count_query = count_query.where(AlertEvent.severity.in_([s.value for s in severity]))
-    if status:
-        count_query = count_query.where(AlertEvent.status.in_([s.value for s in status]))
-    if alarm_type:
-        count_query = count_query.where(AlertEvent.alarm_type == alarm_type)
-    
-    total_result = await session.execute(count_query)
-    total = total_result.scalar() or 0
-    
-    # Paginate
-    query = query.offset((page - 1) * per_page).limit(per_page)
+    count_query = select(func.count(Alarm.id)).where(and_(*filters))
+    count_result = await session.execute(count_query)
+    total = count_result.scalar() or 0
+
+    # Get page of alarms
+    offset = (page - 1) * page_size
+    query = (
+        select(Alarm)
+        .where(and_(*filters))
+        .order_by(Alarm.fired_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
     result = await session.execute(query)
     alarms = result.scalars().all()
-    
-    return SuccessResponse(
-        data=[AlarmResponse.from_orm(alarm) for alarm in alarms],
-        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+
+    return AlarmListResponse(
+        alarms=[AlarmSchema.model_validate(a) for a in alarms],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
-@router.get("/summary", response_model=SuccessResponse)
-async def get_alarm_summary(
-    tenant_id: UUID,
-    session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    device_id: Optional[UUID] = Query(None),
-):
-    """Get alarm counts by severity and status for dashboard display."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
-    
-    await session.set_tenant_context(tenant_id)
-    
-    # Build base query
-    base_query = select(
-        AlertEvent.severity,
-        AlertEvent.status,
-        func.count().label('count')
-    ).where(
-        AlertEvent.tenant_id == tenant_id,
-        AlertEvent.status.in_(['ACTIVE', 'ACKNOWLEDGED'])
-    )
-    
-    if device_id:
-        base_query = base_query.where(AlertEvent.device_id == device_id)
-    
-    base_query = base_query.group_by(AlertEvent.severity, AlertEvent.status)
-    
-    result = await session.execute(base_query)
-    rows = result.all()
-    
-    # Build summary dict
-    summary = AlarmSummary()
-    for row in rows:
-        severity = row.severity.lower()
-        status = row.status.lower()
-        field_name = f"{severity}_{status}"
-        if hasattr(summary, field_name):
-            setattr(summary, field_name, row.count)
-    
-    return SuccessResponse(data=summary)
-
-
-@router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
-async def create_alarm(
-    tenant_id: UUID,
-    alarm_data: AlarmCreate,
-    session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-):
-    """Create a new alarm manually (for system-generated alarms)."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
-    
-    await session.set_tenant_context(tenant_id)
-    
-    # Verify device exists
-    device_result = await session.execute(
-        select(Device).where(
-            Device.tenant_id == tenant_id,
-            Device.id == alarm_data.device_id
-        )
-    )
-    if not device_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
-    
-    # Create alarm
-    alarm = AlertEvent(
-        tenant_id=tenant_id,
-        device_id=alarm_data.device_id,
-        alert_rule_id=alarm_data.alert_rule_id,
-        alarm_type=alarm_data.alarm_type,
-        severity=alarm_data.severity.value,
-        status="ACTIVE",
-        message=alarm_data.message,
-        source=alarm_data.source,
-        metric_name=alarm_data.metric_name,
-        metric_value=alarm_data.metric_value,
-    )
-    
-    session.add(alarm)
-    await session.commit()
-    await session.refresh(alarm)
-    
-    return SuccessResponse(data=AlarmResponse.from_orm(alarm))
-
-
-@router.get("/{alarm_id}", response_model=SuccessResponse)
+@router.get("/{alarm_id}", response_model=AlarmSchema)
 async def get_alarm(
     tenant_id: UUID,
     alarm_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Get a specific alarm by ID."""
+    """Get a specific alarm"""
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
     await session.set_tenant_context(tenant_id)
-    
-    result = await session.execute(
-        select(AlertEvent).where(
-            AlertEvent.tenant_id == tenant_id,
-            AlertEvent.id == alarm_id
-        )
-    )
+
+    query = select(Alarm).where(Alarm.id == alarm_id, Alarm.tenant_id == tenant_id)
+    result = await session.execute(query)
     alarm = result.scalar_one_or_none()
-    
+
     if not alarm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
-    
-    return SuccessResponse(data=AlarmResponse.from_orm(alarm))
+        raise HTTPException(status_code=404, detail="Alarm not found")
+
+    return AlarmSchema.model_validate(alarm)
 
 
-@router.put("/{alarm_id}", response_model=SuccessResponse)
-async def update_alarm(
+@router.post("", response_model=AlarmSchema, status_code=status.HTTP_201_CREATED)
+async def create_alarm(
+    alarm_data: AlarmCreate,
     tenant_id: UUID,
-    alarm_id: UUID,
-    alarm_data: AlarmUpdate,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Update alarm severity or message (does not change status)."""
+    """Create a new alarm (manual alarm creation)"""
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
     await session.set_tenant_context(tenant_id)
-    
-    result = await session.execute(
-        select(AlertEvent).where(
-            AlertEvent.tenant_id == tenant_id,
-            AlertEvent.id == alarm_id
-        )
+
+    alarm = Alarm(
+        tenant_id=tenant_id,
+        alert_rule_id=alarm_data.alert_rule_id,
+        device_id=alarm_data.device_id,
+        alarm_type=alarm_data.alarm_type,
+        source=alarm_data.source,
+        severity=alarm_data.severity.upper(),
+        status="ACTIVE",
+        message=alarm_data.message,
+        context=alarm_data.context,
+        fired_at=datetime.utcnow(),
     )
-    alarm = result.scalar_one_or_none()
-    
-    if not alarm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
-    
-    # Update fields
-    if alarm_data.severity:
-        alarm.severity = alarm_data.severity.value
-    if alarm_data.message:
-        alarm.message = alarm_data.message
-    
+
+    session.add(alarm)
     await session.commit()
     await session.refresh(alarm)
-    
-    return SuccessResponse(data=AlarmResponse.from_orm(alarm))
+
+    return AlarmSchema.model_validate(alarm)
 
 
-@router.post("/{alarm_id}/acknowledge", response_model=SuccessResponse)
+@router.post("/{alarm_id}/acknowledge", response_model=AlarmSchema)
 async def acknowledge_alarm(
+    ack_data: AlarmAcknowledge,
     tenant_id: UUID,
     alarm_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     authorization: str = Header(None),
 ):
-    """Acknowledge an alarm (status: ACTIVE → ACKNOWLEDGED)."""
+    """
+    Acknowledge an alarm (transition ACTIVE → ACKNOWLEDGED)
+    Indicates operator is aware and investigating
+    """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
-    
-    await session.set_tenant_context(tenant_id)
     
     # Get user ID from token
     token = authorization.split(" ")[1]
     payload = decode_token(token)
     user_id = UUID(payload.get("sub"))
     
-    result = await session.execute(
-        select(AlertEvent).where(
-            AlertEvent.tenant_id == tenant_id,
-            AlertEvent.id == alarm_id
-        )
-    )
+    await session.set_tenant_context(tenant_id)
+
+    # Get alarm
+    query = select(Alarm).where(Alarm.id == alarm_id, Alarm.tenant_id == tenant_id)
+    result = await session.execute(query)
     alarm = result.scalar_one_or_none()
-    
+
     if not alarm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
-    
+        raise HTTPException(status_code=404, detail="Alarm not found")
+
     if alarm.status != "ACTIVE":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Alarm must be ACTIVE to acknowledge (current status: {alarm.status})"
+            status_code=400,
+            detail=f"Cannot acknowledge alarm in {alarm.status} state. Only ACTIVE alarms can be acknowledged.",
         )
-    
-    # Update to acknowledged
+
+    # Acknowledge
     alarm.status = "ACKNOWLEDGED"
     alarm.acknowledged_by = user_id
     alarm.acknowledged_at = datetime.utcnow()
-    
+    if ack_data.comment:
+        if not alarm.context:
+            alarm.context = {}
+        alarm.context["ack_comment"] = ack_data.comment
+
     await session.commit()
     await session.refresh(alarm)
-    
-    return SuccessResponse(data=AlarmResponse.from_orm(alarm))
+
+    return AlarmSchema.model_validate(alarm)
 
 
-@router.post("/{alarm_id}/clear", response_model=SuccessResponse)
+@router.post("/{alarm_id}/clear", response_model=AlarmSchema)
 async def clear_alarm(
+    clear_data: AlarmClear,
     tenant_id: UUID,
     alarm_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Clear an alarm (status: ACTIVE/ACKNOWLEDGED → CLEARED)."""
+    """
+    Clear an alarm (transition ACKNOWLEDGED → CLEARED)
+    Indicates issue is resolved
+    """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
     await session.set_tenant_context(tenant_id)
-    
-    result = await session.execute(
-        select(AlertEvent).where(
-            AlertEvent.tenant_id == tenant_id,
-            AlertEvent.id == alarm_id
-        )
-    )
+
+    # Get alarm
+    query = select(Alarm).where(Alarm.id == alarm_id, Alarm.tenant_id == tenant_id)
+    result = await session.execute(query)
     alarm = result.scalar_one_or_none()
-    
+
     if not alarm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
-    
+        raise HTTPException(status_code=404, detail="Alarm not found")
+
+    # Can clear from ACTIVE or ACKNOWLEDGED
     if alarm.status == "CLEARED":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Alarm is already cleared"
+            status_code=400,
+            detail="Alarm is already cleared",
         )
-    
-    # Update to cleared
+
+    # Clear
     alarm.status = "CLEARED"
     alarm.cleared_at = datetime.utcnow()
-    
+    if clear_data.comment:
+        if not alarm.context:
+            alarm.context = {}
+        alarm.context["clear_comment"] = clear_data.comment
+
     await session.commit()
     await session.refresh(alarm)
-    
-    return SuccessResponse(data=AlarmResponse.from_orm(alarm))
+
+    return AlarmSchema.model_validate(alarm)
 
 
 @router.delete("/{alarm_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -416,22 +326,25 @@ async def delete_alarm(
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
-    """Delete an alarm (use sparingly - clearing is preferred)."""
+    """Delete an alarm (only CLEARED alarms can be deleted)"""
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     
     await session.set_tenant_context(tenant_id)
-    
-    result = await session.execute(
-        select(AlertEvent).where(
-            AlertEvent.tenant_id == tenant_id,
-            AlertEvent.id == alarm_id
-        )
-    )
+
+    # Get alarm
+    query = select(Alarm).where(Alarm.id == alarm_id, Alarm.tenant_id == tenant_id)
+    result = await session.execute(query)
     alarm = result.scalar_one_or_none()
-    
+
     if not alarm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
-    
+        raise HTTPException(status_code=404, detail="Alarm not found")
+
+    if alarm.status != "CLEARED":
+        raise HTTPException(
+            status_code=400,
+            detail="Only CLEARED alarms can be deleted. Clear the alarm first.",
+        )
+
     await session.delete(alarm)
     await session.commit()
