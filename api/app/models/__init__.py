@@ -19,6 +19,8 @@ from app.models.notification import (
     NotificationQueue,
 )
 from app.models.alarm import Alarm
+from app.models.composite_alert_rule import CompositeAlertRule
+from app.models.unified_alert_rule import UnifiedAlertRule
 
 __all__ = [
     "BaseModel",
@@ -38,4 +40,6 @@ __all__ = [
     "NotificationTemplate",
     "NotificationQueue",
     "Alarm",
+    "CompositeAlertRule",  # Legacy - use UnifiedAlertRule
+    "UnifiedAlertRule",    # Unified alert rules (THRESHOLD + COMPOSITE)
 ]

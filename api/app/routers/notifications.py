@@ -13,13 +13,14 @@ from app.security import decode_token
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
+router = APIRouter(prefix="/tenants/{tenant_id}/notifications", tags=["notifications"])
 
 
 async def get_current_tenant(
+    tenant_id: UUID,
     authorization: str = Header(None),
 ) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
+    """Extract and validate tenant_id from JWT token and verify it matches path."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -28,15 +29,22 @@ async def get_current_tenant(
     
     token = authorization.split(" ")[1]
     payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
+    token_tenant_id = payload.get("tenant_id")
     
-    if not tenant_id:
+    if not token_tenant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token: missing tenant_id",
         )
     
-    return UUID(tenant_id)
+    # Verify path tenant matches token tenant
+    if str(tenant_id) != str(token_tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch",
+        )
+    
+    return UUID(token_tenant_id)
 
 
 async def get_current_user_id(
@@ -60,6 +68,7 @@ async def get_current_user_id(
 
 @router.get("/channels")
 async def list_channels(
+    tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
@@ -90,6 +99,7 @@ async def list_channels(
 
 @router.post("/channels")
 async def create_channel(
+    tenant_id: UUID,
     channel_data: dict,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
@@ -123,6 +133,7 @@ async def create_channel(
 
 @router.put("/channels/{channel_id}")
 async def update_channel(
+    tenant_id: UUID,
     channel_id: UUID,
     channel_data: dict,
     session: Annotated[RLSSession, Depends(get_session)],
@@ -169,6 +180,7 @@ async def update_channel(
 
 @router.delete("/channels/{channel_id}")
 async def delete_channel(
+    tenant_id: UUID,
     channel_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
@@ -201,6 +213,7 @@ async def delete_channel(
 
 @router.get("/templates")
 async def list_templates(
+    tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
@@ -234,6 +247,7 @@ async def list_templates(
 
 @router.get("")
 async def list_notifications(
+    tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     page: int = Query(1, ge=1),

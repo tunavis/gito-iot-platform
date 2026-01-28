@@ -116,10 +116,13 @@ def create_app() -> FastAPI:
         )
     
     # Import and include routers
-    from app.routers import auth, devices, websocket, alert_rules, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications
+    from app.routers import auth, devices, websocket, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications, device_types
+    from app.routers import alert_rules_unified  # Unified alert rules (THRESHOLD + COMPOSITE)
+    
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(devices.router, prefix="/api/v1")
-    app.include_router(alert_rules.router, prefix="/api/v1")
+    app.include_router(device_types.router, prefix="/api/v1")  # Device Type templates (AWS IoT pattern)
+    app.include_router(alert_rules_unified.router, prefix="/api/v1")  # Unified alert rules (THRESHOLD + COMPOSITE)
     app.include_router(alarms.router, prefix="/api/v1")  # Unified enterprise alarm system
     app.include_router(organizations.router, prefix="/api/v1")  # Hierarchy: Organizations
     app.include_router(sites.router, prefix="/api/v1")  # Hierarchy: Sites
@@ -129,12 +132,14 @@ def create_app() -> FastAPI:
     app.include_router(telemetry_aggregate.router, prefix="/api/v1")
     app.include_router(websocket.router, prefix="/api/v1")
     
-    # Disabled routers (functionality moved to unified systems):
-    # - composite_alerts: Merged into alert_rules (COMPLEX rule_type)
-    # - grafana: External integration
-    # - firmware: OTA functionality
-    # - bulk_operations: Batch operations
-    # - lorawan: LoRaWAN-specific operations
+    # Disabled routers (superseded by unified systems):
+    # - alert_rules: Replaced by alert_rules_unified
+    # - alert_rules_composite: Replaced by alert_rules_unified
+    # - composite_alerts: Replaced by alert_rules_unified
+    # - grafana: External integration (future)
+    # - firmware: OTA functionality (future)
+    # - bulk_operations: Batch operations (future)
+    # - lorawan: LoRaWAN-specific operations (future)
     
     return app
 

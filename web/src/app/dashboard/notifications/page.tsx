@@ -37,6 +37,18 @@ interface Notification {
   created_at: string;
 }
 
+// Helper to extract tenant_id from JWT token
+function getTenantFromToken(): string | null {
+  const token = localStorage.getItem('auth_token');
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.tenant_id || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<'channels' | 'rules' | 'history'>('channels');
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
@@ -46,19 +58,25 @@ export default function NotificationsPage() {
   const [showNewChannelForm, setShowNewChannelForm] = useState(false);
   const [editingChannel, setEditingChannel] = useState<NotificationChannel | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'channel' | 'rule'; id: string; name: string } | null>(null);
+  const [tenant, setTenant] = useState<string | null>(null);
 
   useEffect(() => {
-    loadData();
-  }, [activeTab]);
+    const t = getTenantFromToken();
+    setTenant(t);
+  }, []);
+
+  useEffect(() => {
+    if (tenant) loadData();
+  }, [activeTab, tenant]);
 
   const loadData = async () => {
     const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    if (!token || !tenant) return;
 
     setLoading(true);
 
     if (activeTab === 'channels') {
-      const res = await fetch('/api/v1/notifications/channels', {
+      const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -66,7 +84,7 @@ export default function NotificationsPage() {
         setChannels(Array.isArray(json.data) ? json.data : json);
       }
     } else if (activeTab === 'rules') {
-      const res = await fetch('/api/v1/notifications/rules', {
+      const res = await fetch(`/api/v1/tenants/${tenant}/notifications/rules`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -74,7 +92,7 @@ export default function NotificationsPage() {
         setRules(Array.isArray(json.data) ? json.data : json);
       }
     } else {
-      const res = await fetch('/api/v1/notifications?page=1&per_page=100', {
+      const res = await fetch(`/api/v1/tenants/${tenant}/notifications?page=1&per_page=100`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -87,12 +105,12 @@ export default function NotificationsPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteConfirm) return;
+    if (!deleteConfirm || !tenant) return;
     const token = localStorage.getItem('auth_token');
     if (!token) return;
 
     if (deleteConfirm.type === 'channel') {
-      const res = await fetch(`/api/v1/notifications/channels/${deleteConfirm.id}`, {
+      const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels/${deleteConfirm.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -100,7 +118,7 @@ export default function NotificationsPage() {
         setChannels(prev => prev.filter(c => c.id !== deleteConfirm.id));
       }
     } else {
-      const res = await fetch(`/api/v1/notifications/rules/${deleteConfirm.id}`, {
+      const res = await fetch(`/api/v1/tenants/${tenant}/notifications/rules/${deleteConfirm.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -113,9 +131,9 @@ export default function NotificationsPage() {
 
   const toggleChannel = async (id: string, enabled: boolean) => {
     const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    if (!token || !tenant) return;
 
-    const res = await fetch(`/api/v1/notifications/channels/${id}`, {
+    const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ enabled: !enabled })
@@ -206,6 +224,7 @@ export default function NotificationsPage() {
 
             {showNewChannelForm && (
               <AddChannelForm
+                tenant={tenant}
                 onSuccess={() => {
                   setShowNewChannelForm(false);
                   loadData();
@@ -217,6 +236,7 @@ export default function NotificationsPage() {
             {editingChannel && (
               <EditChannelForm
                 channel={editingChannel}
+                tenant={tenant}
                 onSuccess={() => {
                   setEditingChannel(null);
                   loadData();
@@ -435,16 +455,16 @@ export default function NotificationsPage() {
   );
 }
 
-function AddChannelForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel: () => void }) {
+function AddChannelForm({ tenant, onSuccess, onCancel }: { tenant: string | null; onSuccess: () => void; onCancel: () => void }) {
   const [type, setType] = useState<'email' | 'webhook' | 'sms'>('email');
   const [config, setConfig] = useState<Record<string, any>>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    if (!token || !tenant) return;
 
-    const res = await fetch('/api/v1/notifications/channels', {
+    const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ channel_type: type, config, enabled: true })
@@ -522,15 +542,15 @@ function AddChannelForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
   );
 }
 
-function EditChannelForm({ channel, onSuccess, onCancel }: { channel: NotificationChannel; onSuccess: () => void; onCancel: () => void }) {
+function EditChannelForm({ channel, tenant, onSuccess, onCancel }: { channel: NotificationChannel; tenant: string | null; onSuccess: () => void; onCancel: () => void }) {
   const [config, setConfig] = useState(channel.config);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    if (!token || !tenant) return;
 
-    const res = await fetch(`/api/v1/notifications/channels/${channel.id}`, {
+    const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels/${channel.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ config })

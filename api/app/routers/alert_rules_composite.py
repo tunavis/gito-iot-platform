@@ -13,10 +13,11 @@ from app.security import decode_token
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/alert-rules/composite", tags=["composite-alerts"])
+router = APIRouter(prefix="/tenants/{tenant_id}/composite-alert-rules", tags=["composite-alerts"])
 
 
 async def get_current_tenant(
+    tenant_id: UUID,
     authorization: str = Header(None),
 ) -> UUID:
     """Extract and validate tenant_id from JWT token."""
@@ -28,19 +29,27 @@ async def get_current_tenant(
     
     token = authorization.split(" ")[1]
     payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
+    token_tenant_id = payload.get("tenant_id")
     
-    if not tenant_id:
+    if not token_tenant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token: missing tenant_id",
         )
     
-    return UUID(tenant_id)
+    # Verify tenant_id from path matches JWT
+    if str(tenant_id) != str(token_tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch",
+        )
+    
+    return UUID(token_tenant_id)
 
 
 @router.get("")
 async def list_composite_rules(
+    tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     page: int = Query(1, ge=1),
@@ -80,6 +89,7 @@ async def list_composite_rules(
 
 @router.post("")
 async def create_composite_rule(
+    tenant_id: UUID,
     rule_data: dict,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
@@ -116,6 +126,7 @@ async def create_composite_rule(
 
 @router.get("/{rule_id}")
 async def get_composite_rule(
+    tenant_id: UUID,
     rule_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
@@ -150,6 +161,7 @@ async def get_composite_rule(
 
 @router.put("/{rule_id}")
 async def update_composite_rule(
+    tenant_id: UUID,
     rule_id: UUID,
     rule_data: dict,
     session: Annotated[RLSSession, Depends(get_session)],
@@ -204,6 +216,7 @@ async def update_composite_rule(
 
 @router.delete("/{rule_id}")
 async def delete_composite_rule(
+    tenant_id: UUID,
     rule_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
@@ -232,6 +245,7 @@ async def delete_composite_rule(
 
 @router.post("/{rule_id}/preview")
 async def preview_composite_rule(
+    tenant_id: UUID,
     rule_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
