@@ -314,5 +314,121 @@ async def delete_device(
     
     await session.delete(device)
     await session.commit()
-    
+
     return SuccessResponse(data={"message": "Device deleted"})
+
+
+# ============================================================================
+# BULK OPERATIONS
+# ============================================================================
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+class BulkDeleteRequest(BaseModel):
+    device_ids: List[UUID]
+
+class BulkAssignGroupRequest(BaseModel):
+    device_ids: List[UUID]
+    device_group_id: Optional[UUID] = None  # None to unassign
+
+
+@router.post("/bulk/delete", response_model=SuccessResponse)
+async def bulk_delete_devices(
+    tenant_id: UUID,
+    request: BulkDeleteRequest,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+):
+    """Bulk delete multiple devices.
+
+    Args:
+        tenant_id: Tenant UUID from path
+        request: List of device IDs to delete
+
+    Returns:
+        Count of deleted devices
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+
+    await session.set_tenant_context(tenant_id)
+
+    # Get devices
+    query = select(Device).where(
+        Device.tenant_id == tenant_id,
+        Device.id.in_(request.device_ids)
+    )
+    result = await session.execute(query)
+    devices = result.scalars().all()
+
+    if not devices:
+        return SuccessResponse(data={"deleted_count": 0, "message": "No devices found"})
+
+    # Delete devices
+    for device in devices:
+        await session.delete(device)
+
+    await session.commit()
+
+    return SuccessResponse(data={
+        "deleted_count": len(devices),
+        "message": f"Successfully deleted {len(devices)} device(s)"
+    })
+
+
+@router.post("/bulk/assign-group", response_model=SuccessResponse)
+async def bulk_assign_device_group(
+    tenant_id: UUID,
+    request: BulkAssignGroupRequest,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+):
+    """Bulk assign devices to a device group.
+
+    Args:
+        tenant_id: Tenant UUID from path
+        request: List of device IDs and target group ID (None to unassign)
+
+    Returns:
+        Count of updated devices
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+
+    await session.set_tenant_context(tenant_id)
+
+    # Verify group exists if provided
+    if request.device_group_id:
+        from app.models.device_group import DeviceGroup
+        group_query = select(DeviceGroup).where(
+            DeviceGroup.tenant_id == tenant_id,
+            DeviceGroup.id == request.device_group_id
+        )
+        group_result = await session.execute(group_query)
+        if not group_result.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
+
+    # Get devices
+    query = select(Device).where(
+        Device.tenant_id == tenant_id,
+        Device.id.in_(request.device_ids)
+    )
+    result = await session.execute(query)
+    devices = result.scalars().all()
+
+    if not devices:
+        return SuccessResponse(data={"updated_count": 0, "message": "No devices found"})
+
+    # Update devices
+    for device in devices:
+        device.device_group_id = request.device_group_id
+        device.updated_at = datetime.utcnow()
+
+    await session.commit()
+
+    action = "assigned to group" if request.device_group_id else "unassigned from groups"
+    return SuccessResponse(data={
+        "updated_count": len(devices),
+        "message": f"Successfully {action} for {len(devices)} device(s)"
+    })

@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Leaflet Map Styles */
+@import '~leaflet/dist/leaflet.css';
+
 /* Gito brand colors CSS variables */
 :root {
   --color-primary: #0066CC;

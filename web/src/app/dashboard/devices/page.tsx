@@ -50,6 +50,7 @@ export default function DevicesPage() {
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
 
   useEffect(() => {
     const loadDevices = async () => {
@@ -82,6 +83,44 @@ export default function DevicesPage() {
 
     loadDevices();
   }, [router]);
+
+  // Bulk delete devices
+  const handleBulkDelete = async () => {
+    if (!confirm(`Are you sure you want to delete ${selectedDevices.size} device(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const tenant = payload.tenant_id;
+
+      const response = await fetch(`/api/v1/tenants/${tenant}/devices/bulk/delete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          device_ids: Array.from(selectedDevices)
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || 'Failed to delete devices');
+      }
+
+      // Reload devices and clear selection
+      const data = await response.json();
+      alert(data.data.message);
+      setSelectedDevices(new Set());
+      window.location.reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete devices');
+    }
+  };
 
   // Sort devices
   const sortDevices = (devices: Device[]) => {
@@ -336,10 +375,16 @@ export default function DevicesPage() {
                 {selectedDevices.size} device{selectedDevices.size !== 1 ? 's' : ''} selected
               </span>
               <div className="flex gap-2">
-                <button className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-medium">
-                  Configure
+                <button
+                  onClick={() => setShowBulkAssignModal(true)}
+                  className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
+                  Assign to Group
                 </button>
-                <button className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium">
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium"
+                >
                   Delete
                 </button>
                 <button 
@@ -647,7 +692,156 @@ export default function DevicesPage() {
             </div>
           </div>
         )}
+
+        {/* Bulk Assign Modal */}
+        {showBulkAssignModal && (
+          <BulkAssignModal
+            selectedCount={selectedDevices.size}
+            onSubmit={async (groupId) => {
+              try {
+                const token = localStorage.getItem('auth_token');
+                if (!token) return;
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                const tenant = payload.tenant_id;
+
+                const response = await fetch(`/api/v1/tenants/${tenant}/devices/bulk/assign-group`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    device_ids: Array.from(selectedDevices),
+                    device_group_id: groupId || null
+                  })
+                });
+
+                if (!response.ok) {
+                  const data = await response.json();
+                  throw new Error(data.error?.message || 'Failed to assign devices');
+                }
+
+                const data = await response.json();
+                alert(data.data.message);
+                setShowBulkAssignModal(false);
+                setSelectedDevices(new Set());
+                window.location.reload();
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Failed to assign devices');
+              }
+            }}
+            onCancel={() => setShowBulkAssignModal(false)}
+          />
+        )}
       </main>
+    </div>
+  );
+}
+
+// Bulk Assign Modal Component
+function BulkAssignModal({
+  selectedCount,
+  onSubmit,
+  onCancel
+}: {
+  selectedCount: number;
+  onSubmit: (groupId: string | null) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [deviceGroups, setDeviceGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const tenant = payload.tenant_id;
+
+        const response = await fetch(`/api/v1/tenants/${tenant}/device-groups?page=1&per_page=100`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setDeviceGroups(data.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to load device groups:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGroups();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await onSubmit(selectedGroupId || null);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Assign Devices to Group
+        </h3>
+
+        <p className="text-sm text-gray-600 mb-4">
+          Assign {selectedCount} selected device{selectedCount !== 1 ? 's' : ''} to a device group.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Device Group
+            </label>
+            {loading ? (
+              <div className="text-sm text-gray-500">Loading groups...</div>
+            ) : (
+              <select
+                value={selectedGroupId}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">No Group (Unassign)</option>
+                {deviceGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={submitting}
+              className="flex-1 px-4 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || loading}
+              className="flex-1 px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+            >
+              {submitting ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -116,10 +116,13 @@ def create_app() -> FastAPI:
         )
     
     # Import and include routers
-    from app.routers import auth, devices, websocket, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications, device_types
+    from app.routers import auth, devices, websocket, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications, device_types, users, audit_logs, notification_rules, analytics
     from app.routers import alert_rules_unified  # Unified alert rules (THRESHOLD + COMPOSITE)
-    
+    from app.routers import dashboards, dashboard_widgets, solution_templates  # Dashboard builder system
+
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
+    app.include_router(audit_logs.router, prefix="/api/v1")  # Audit Logs for compliance
     app.include_router(devices.router, prefix="/api/v1")
     app.include_router(device_types.router, prefix="/api/v1")  # Device Type templates (AWS IoT pattern)
     app.include_router(alert_rules_unified.router, prefix="/api/v1")  # Unified alert rules (THRESHOLD + COMPOSITE)
@@ -128,6 +131,11 @@ def create_app() -> FastAPI:
     app.include_router(sites.router, prefix="/api/v1")  # Hierarchy: Sites
     app.include_router(device_groups.router, prefix="/api/v1")  # Hierarchy: Device Groups
     app.include_router(notifications.router, prefix="/api/v1")  # Notification channels & history
+    app.include_router(notification_rules.router, prefix="/api/v1")  # Notification routing rules
+    app.include_router(analytics.router, prefix="/api/v1")  # Analytics & dashboard metrics
+    app.include_router(dashboards.router, prefix="/api/v1")  # Dashboard builder
+    app.include_router(dashboard_widgets.router, prefix="/api/v1")  # Dashboard widgets
+    app.include_router(solution_templates.router, prefix="/api/v1")  # Solution templates
     app.include_router(telemetry.router, prefix="/api/v1")
     app.include_router(telemetry_aggregate.router, prefix="/api/v1")
     app.include_router(websocket.router, prefix="/api/v1")

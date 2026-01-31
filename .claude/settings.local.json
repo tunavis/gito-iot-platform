@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__postgres_Gito_IOT__list_schemas",
+      "mcp__postgres_Gito_IOT__list_objects",
+      "mcp__postgres_Gito_IOT__execute_sql",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(ConvertFrom-Json)",
+      "Bash(Select-Object Name, Health)",
+      "Bash(docker inspect:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(tail:*)",
+      "Bash(npm install:*)",
+      "mcp__postgres_Gito_IOT__get_object_details",
+      "Bash(docker exec:*)",
+      "Bash(docker restart:*)",
+      "Bash(bash test_dashboard_api.sh:*)"
+    ]
+  }
+}

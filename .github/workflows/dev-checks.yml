@@ -1,0 +1,67 @@
+name: Development Checks
+
+# Run on all pull requests to dev/feature branches
+on:
+  pull_request:
+    branches:
+      - dev
+      - develop
+      - feature/*
+  push:
+    branches:
+      - dev
+      - develop
+
+jobs:
+  mock-data-warning:
+    name: ⚠️  Mock Data Warning (Non-blocking)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make check script executable
+        run: chmod +x scripts/check-mock-data.sh
+
+      - name: Check for mock data (warning only)
+        continue-on-error: true  # Don't fail the build
+        run: |
+          echo "=================================================="
+          echo "Running mock data detection (warnings only)..."
+          echo "=================================================="
+          ./scripts/check-mock-data.sh || true
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ **Mock Data Detection**\n\nThis PR may contain mock data or temporary code. This is OK for development branches.\n\n**Before merging to production:**\n- Remove all `Math.random()` from widgets\n- Replace with real API calls\n- Check `CLEANUP_TODO.md`\n\n_This is a friendly reminder, not a blocker._'
+            })
+
+  quick-tests:
+    name: 🧪 Quick Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Frontend - Install & Build
+        working-directory: ./web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Success message
+        run: echo "✅ Development checks passed!"
