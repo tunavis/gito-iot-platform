@@ -1,11 +1,18 @@
 "use client";
 
-import { Responsive, WidthProvider, Layout } from "react-grid-layout";
+// TODO: Upgrade react-grid-layout from v1.4.4 to v2.x+ before production
+// Currently using v1.4.4 for stability during development
+// See CLEANUP_TODO.md for upgrade steps
+import RGL from "react-grid-layout";
+import type { Layout } from "react-grid-layout";
 import { useState, useCallback } from "react";
 import KPICard from "../Widgets/KPICard";
+import ChartWidget from "../Widgets/ChartWidget";
+import WidgetWrapper from "../Widgets/WidgetWrapper";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
+const { Responsive, WidthProvider } = RGL;
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 interface Widget {
@@ -89,7 +96,23 @@ export default function DashboardGrid({
           />
         );
 
-      // TODO: Add more widget types (chart, gauge, map, table, etc.)
+      case "chart":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Chart"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <ChartWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      // TODO: Add more widget types in Iteration 3 (gauge, map, table, etc.)
 
       default:
         return (

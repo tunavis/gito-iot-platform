@@ -6,6 +6,35 @@ This document tracks all mock data and temporary implementations that MUST be re
 
 ---
 
+## 🔄 Dependencies to Upgrade
+
+### react-grid-layout Version Upgrade
+**Current Version:** `1.4.4` (Intentionally using older version)
+**Latest Version:** `2.x+` (Major version with breaking changes)
+**Status:** 📌 PLANNED FOR LATER
+
+**Why we're on v1.4.4:**
+- Stable and tested API
+- Working on both local (port 3001) and Docker (port 3000)
+- Focused on completing features first
+
+**When to Upgrade:**
+- After Iteration 3 is complete
+- Before production deployment
+- When we have time to test thoroughly
+
+**Upgrade Steps:**
+1. Check latest version and changelog
+2. Update `web/package.json`: `"react-grid-layout": "^2.x.x"`
+3. Run `npm install` locally AND in Docker
+4. Update `DashboardGrid.tsx` for new API (if needed)
+5. Test drag, drop, resize functionality
+6. Update ADR-002 with new version
+
+**Impact:** Should be minimal - mostly import syntax changes
+
+---
+
 ## 📊 Mock Data to Remove
 
 ### 1. KPI Card Widget - Mock Telemetry Data
@@ -30,14 +59,56 @@ const mockTrend = (Math.random() - 0.5) * 20;
 
 ---
 
-## 🔄 Future Widgets (Will Need Real Data Integration)
+### 2. Chart Widget - Mock Time-Series Data
+**File:** `web/src/components/Widgets/ChartWidget.tsx`
+**Lines:** ~30-55
+**Status:** ❌ TEMPORARY
 
-### 2. Chart Widget (Not Yet Implemented)
-**Status:** 🔮 FUTURE
-**Will Need:**
-- Time-series telemetry data
-- Aggregation support (avg, min, max, sum)
-- Multi-device support for comparison
+**Current:**
+```typescript
+const generateMockData = () => {
+  // Generates random data points for demo
+  const mockData = [];
+  // ... Math.random() based generation
+};
+```
+
+**When to Remove:** After implementing real telemetry API integration
+**Replace With:** Actual API call to `/api/v1/tenants/{id}/devices/{id}/telemetry` with time-series data
+
+**Action Required:**
+1. Uncomment the real implementation code (already prepared in file)
+2. Delete the `generateMockData()` function
+3. Test with actual device time-series data
+4. Verify multi-device comparison works
+
+---
+
+### 3. Template Gallery - Mock Template Data
+**File:** `web/src/app/dashboard/templates/page.tsx`
+**Lines:** ~65-140
+**Status:** ❌ TEMPORARY
+
+**Current:**
+```typescript
+const mockTemplates: SolutionTemplate[] = [
+  { id: "1", name: "Water Flow Monitoring", ... },
+  // ... hardcoded template data
+];
+```
+
+**When to Remove:** After database templates are seeded and API is connected
+**Replace With:** Real API call to `/api/v1/tenants/{id}/solution-templates`
+
+**Action Required:**
+1. Run migration `011_seed_solution_templates.sql` to add templates to database
+2. Uncomment the real API fetch code
+3. Delete the mockTemplates array
+4. Test template application flow
+
+---
+
+## 🔄 Future Widgets (Will Need Real Data Integration)
 
 ### 3. Gauge Widget (Not Yet Implemented)
 **Status:** 🔮 FUTURE
@@ -87,7 +158,8 @@ grep -r "MOCK DATA" web/src/
 | Component | Mock Data? | Real API Ready? | Status | ETA |
 |-----------|------------|-----------------|--------|-----|
 | KPICard | ✅ Yes | ❌ No | Iteration 1 | TBD |
-| ChartWidget | N/A | ❌ No | Not built | Iteration 2 |
+| ChartWidget | ✅ Yes | ❌ No | Iteration 2 | TBD |
+| Template Gallery | ✅ Yes | ❌ No | Iteration 2 | TBD |
 | GaugeWidget | N/A | ❌ No | Not built | Iteration 3 |
 | MapWidget | N/A | ❌ No | Not built | Iteration 3 |
 | TableWidget | N/A | ❌ No | Not built | Iteration 3 |
@@ -209,5 +281,5 @@ This document can be archived when:
 ---
 
 **Last Updated:** 2026-01-31
-**Iteration:** 1 - Foundation
-**Next Review:** After Iteration 2 (Charts & Templates)
+**Iteration:** 2 - Charts & Templates
+**Next Review:** After Iteration 3 (Advanced Widgets)

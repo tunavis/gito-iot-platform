@@ -178,10 +178,93 @@ export default function WidgetConfigModal({
     </div>
   );
 
+  const renderChartConfig = () => (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Chart Type
+        </label>
+        <select
+          value={config.chart_type || "line"}
+          onChange={(e) => setConfig({ ...config, chart_type: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="line">Line Chart</option>
+          <option value="area">Area Chart</option>
+          <option value="bar">Bar Chart</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Metrics
+        </label>
+        <input
+          type="text"
+          value={(config.metrics || []).join(", ")}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              metrics: e.target.value.split(",").map((m) => m.trim()).filter(Boolean),
+            })
+          }
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="e.g., temperature, humidity"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Separate multiple metrics with commas
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Time Range
+        </label>
+        <select
+          value={config.time_range || "24h"}
+          onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="1h">Last Hour</option>
+          <option value="6h">Last 6 Hours</option>
+          <option value="12h">Last 12 Hours</option>
+          <option value="24h">Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Colors
+        </label>
+        <div className="space-y-2">
+          {(config.metrics || ["metric1"]).map((metric: string, index: number) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                type="color"
+                value={(config.colors || ["#3b82f6"])[index] || "#3b82f6"}
+                onChange={(e) => {
+                  const newColors = [...(config.colors || ["#3b82f6"])];
+                  newColors[index] = e.target.value;
+                  setConfig({ ...config, colors: newColors });
+                }}
+                className="h-10 w-16 rounded-lg border border-gray-300 cursor-pointer"
+              />
+              <span className="text-sm text-gray-700">{metric}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderConfigForm = () => {
     switch (widgetType) {
       case "kpi_card":
         return renderKPICardConfig();
+      case "chart":
+        return renderChartConfig();
       default:
         return (
           <div className="text-center py-8 text-gray-500">

@@ -139,12 +139,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    # volumes:  # Disabled for production build
-    #   - ./web/src:/app/src
-    #   - ./web/public:/app/public
-    #   - ./web/next.config.js:/app/next.config.js
-    #   - /app/node_modules
-    #   - /app/.next
+    volumes:  # Development mode - live code sync
+      - ./web/src:/app/src
+      - ./web/public:/app/public
+      - ./web/next.config.js:/app/next.config.js
+      - /app/node_modules
+      - /app/.next
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s

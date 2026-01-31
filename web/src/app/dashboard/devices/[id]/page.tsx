@@ -268,7 +268,7 @@ export default function DeviceDetailPage() {
           <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
             <XCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
             <p className="text-red-900 font-semibold mb-2">Device not found</p>
-            <p className="text-red-600 text-sm mb-4">The device you're looking for doesn't exist or you don't have access.</p>
+            <p className="text-red-600 text-sm mb-4">The device you&apos;re looking for doesn&apos;t exist or you don&apos;t have access.</p>
             <button
               onClick={() => router.push('/dashboard/devices')}
               className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -535,7 +535,7 @@ export default function DeviceDetailPage() {
                   <div className="text-center py-8 text-gray-500">
                     <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                     <p className="font-medium">No telemetry data available</p>
-                    <p className="text-sm mt-1">This device hasn't sent any data yet.</p>
+                    <p className="text-sm mt-1">This device hasn&apos;t sent any data yet.</p>
                   </div>
                 ) : (
                   telemetryData.slice(-5).reverse().map((point, idx) => (
@@ -622,7 +622,7 @@ export default function DeviceDetailPage() {
                 <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-900 font-semibold mb-2">No telemetry data available</p>
                 <p className="text-gray-600 text-sm">
-                  This device hasn't sent any telemetry data in the selected time range.
+                  This device hasn&apos;t sent any telemetry data in the selected time range.
                 </p>
               </div>
             ) : (

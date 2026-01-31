@@ -13,7 +13,7 @@ import {
   Calendar,
   BarChart3
 } from 'lucide-react';
-import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 interface FleetOverview {
   total_devices: number;
@@ -56,7 +56,7 @@ export default function AnalyticsPage() {
   const [alerts, setAlerts] = useState<AlertTrends | null>(null);
   const [uptime, setUptime] = useState<DeviceUptime | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState(30); // days
 
   useEffect(() => {
@@ -117,13 +117,6 @@ export default function AnalyticsPage() {
     offline: '#ef4444',
     idle: '#f59e0b',
     error: '#dc2626'
-  };
-
-  const SEVERITY_COLORS: Record<string, string> = {
-    CRITICAL: '#dc2626',
-    MAJOR: '#f97316',
-    MINOR: '#eab308',
-    WARNING: '#3b82f6'
   };
 
   return (

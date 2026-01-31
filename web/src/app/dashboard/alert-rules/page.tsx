@@ -798,17 +798,17 @@ function NewRuleForm({
 // EDIT RULE FORM
 // ============================================================================
 
-function EditRuleForm({ 
-  tenant, 
-  devices, 
-  rule, 
-  onSuccess, 
-  onCancel 
-}: { 
-  tenant: string | null; 
-  devices: Device[]; 
-  rule: AlertRule; 
-  onSuccess: () => void; 
+function EditRuleForm({
+  tenant,
+  devices: _devices,
+  rule,
+  onSuccess,
+  onCancel
+}: {
+  tenant: string | null;
+  devices: Device[];
+  rule: AlertRule;
+  onSuccess: () => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(rule.name);

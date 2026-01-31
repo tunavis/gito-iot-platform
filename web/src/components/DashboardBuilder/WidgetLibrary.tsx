@@ -30,18 +30,43 @@ const WIDGET_TYPES: WidgetType[] = [
       threshold_critical: 85,
     },
   },
-  // TODO: Add more widget types in future iterations
+  {
+    id: "chart",
+    name: "Chart",
+    description: "Line, area, or bar chart for time-series data",
+    icon: <BarChart3 className="w-6 h-6" />,
+    category: "Charts",
+    defaultConfig: {
+      chart_type: "line",
+      metrics: ["temperature"],
+      time_range: "24h",
+      colors: ["#3b82f6"],
+    },
+  },
+  // TODO: Add more widget types in Iteration 3
   // {
-  //   id: "chart",
-  //   name: "Chart",
-  //   description: "Line, area, or bar chart for time-series data",
-  //   icon: <BarChart3 className="w-6 h-6" />,
-  //   category: "Charts",
-  //   defaultConfig: {
-  //     chart_type: "area",
-  //     time_range: "24h",
-  //     aggregation: "avg",
-  //   },
+  //   id: "gauge",
+  //   name: "Gauge",
+  //   description: "Circular or linear gauge for single metrics",
+  //   icon: <Gauge className="w-6 h-6" />,
+  //   category: "Metrics & KPIs",
+  //   defaultConfig: {},
+  // },
+  // {
+  //   id: "map",
+  //   name: "Map",
+  //   description: "Device location map",
+  //   icon: <Map className="w-6 h-6" />,
+  //   category: "Maps & Location",
+  //   defaultConfig: {},
+  // },
+  // {
+  //   id: "table",
+  //   name: "Table",
+  //   description: "Data table with sorting and filtering",
+  //   icon: <Table className="w-6 h-6" />,
+  //   category: "Data Display",
+  //   defaultConfig: {},
   // },
 ];
 

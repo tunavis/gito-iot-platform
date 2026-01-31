@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { Shield, User, Calendar, Clock, Search, Download, Eye, Activity } from 'lucide-react';
+import { User, Calendar, Clock, Search, Download, Eye, Activity } from 'lucide-react';
 
 interface AuditLog {
   id: string;
