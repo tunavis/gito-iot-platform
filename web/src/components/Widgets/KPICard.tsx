@@ -48,6 +48,7 @@ export default function KPICard({
     unit = "",
     decimal_places = 2,
     show_trend = true,
+    trend_period = "24h",
     color = "#3b82f6",
     threshold_warning,
     threshold_critical,
@@ -57,39 +58,40 @@ export default function KPICard({
     // Fetch latest value from device
     const fetchData = async () => {
       try {
-        // TODO: REMOVE MOCK DATA AFTER REAL API INTEGRATION
-        // This is TEMPORARY demo data for Iteration 1
-        // Replace with actual API call to:
-        // GET /api/v1/tenants/{tenant_id}/devices/{device_id}/telemetry?metric={metric}
-
-        // MOCK DATA - TO BE REMOVED:
-        const mockValue = Math.random() * 100;
-        const mockTrend = (Math.random() - 0.5) * 20;
-
-        setValue(mockValue);
-        setTrend(mockTrend);
-        setLoading(false);
-
-        /* REAL IMPLEMENTATION (Uncomment when ready):
         if (!data_sources || data_sources.length === 0) {
           setValue(null);
           setLoading(false);
           return;
         }
 
-        const token = localStorage.getItem('auth_token');
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const token = localStorage.getItem("auth_token");
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const payload = JSON.parse(atob(token.split(".")[1]));
         const tenantId = payload.tenant_id;
         const source = data_sources[0];
         const deviceId = source.device_id;
         const metricName = source.metric || metric;
 
+        // Get latest value (last 1 hour)
+        const endTime = new Date();
+        const startTime = new Date(endTime.getTime() - 60 * 60 * 1000);
+
+        const params = new URLSearchParams({
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          per_page: "1",
+        });
+
         const response = await fetch(
-          `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry?metric=${metricName}&limit=1`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
+          `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry?${params}`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
-        if (!response.ok) throw new Error('Failed to fetch telemetry');
+        if (!response.ok) throw new Error("Failed to fetch telemetry");
 
         const data = await response.json();
         const latestValue = data.data?.[0]?.[metricName];
@@ -97,17 +99,39 @@ export default function KPICard({
         setValue(latestValue ?? null);
 
         // Calculate trend (compare with previous period)
-        const trendResponse = await fetch(
-          `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry?metric=${metricName}&time_range=${trend_period}`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        );
-        const trendData = await trendResponse.json();
-        const avgPrevious = calculateAverage(trendData.data);
-        const trendPercentage = ((latestValue - avgPrevious) / avgPrevious) * 100;
+        if (show_trend && trend_period) {
+          const trendHours = parseInt(trend_period.replace(/[^0-9]/g, "")) || 24;
+          const trendStart = new Date(endTime.getTime() - trendHours * 60 * 60 * 1000);
 
-        setTrend(trendPercentage);
+          const trendParams = new URLSearchParams({
+            start_time: trendStart.toISOString(),
+            end_time: endTime.toISOString(),
+            per_page: "100",
+          });
+
+          const trendResponse = await fetch(
+            `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry?${trendParams}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (trendResponse.ok) {
+            const trendData = await trendResponse.json();
+            if (trendData.data && trendData.data.length > 0) {
+              const sum = trendData.data.reduce(
+                (acc: number, item: any) => acc + (item[metricName] || 0),
+                0
+              );
+              const avgPrevious = sum / trendData.data.length;
+              const trendPercentage =
+                avgPrevious > 0
+                  ? ((latestValue - avgPrevious) / avgPrevious) * 100
+                  : 0;
+              setTrend(trendPercentage);
+            }
+          }
+        }
+
         setLoading(false);
-        */
       } catch (error) {
         console.error("Error fetching KPI data:", error);
         setLoading(false);
@@ -120,7 +144,7 @@ export default function KPICard({
     const interval = setInterval(fetchData, 30000); // 30 seconds
 
     return () => clearInterval(interval);
-  }, [data_sources, metric]);
+  }, [data_sources, metric, show_trend, trend_period]);
 
   // Determine color based on thresholds
   const getValueColor = () => {
@@ -183,7 +207,7 @@ export default function KPICard({
 
             {(!data_sources || data_sources.length === 0) && (
               <div className="text-xs text-gray-400 mt-2">
-                Demo data - bind device in production
+                No device bound - configure widget
               </div>
             )}
           </>

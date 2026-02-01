@@ -16,19 +16,36 @@ Base = declarative_base()
 class RLSSession(AsyncSession):
     """AsyncSession with Row-Level Security context support."""
 
-    async def set_tenant_context(self, tenant_id: UUID | str) -> None:
-        """Set the tenant_id for RLS policies.
-        
+    async def set_tenant_context(self, tenant_id: UUID | str, user_id: UUID | str = None) -> None:
+        """Set the tenant_id and optionally user_id for RLS policies.
+
         This must be called before any queries to ensure RLS filters apply.
+
+        Args:
+            tenant_id: Tenant UUID for multi-tenant isolation
+            user_id: Optional user UUID for user-level RLS policies (dashboards, etc.)
         """
         if isinstance(tenant_id, UUID):
             tenant_id = str(tenant_id)
-        
-        # Set the app.tenant_id that RLS policies check
+
+        # Set both app.tenant_id (legacy) and app.current_tenant_id (new) for compatibility
         await self.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, FALSE)"),
             {"tenant_id": tenant_id}
         )
+        await self.execute(
+            text("SELECT set_config('app.current_tenant_id', :tenant_id, FALSE)"),
+            {"tenant_id": tenant_id}
+        )
+
+        # Set user context if provided (for user-scoped resources like dashboards)
+        if user_id is not None:
+            if isinstance(user_id, UUID):
+                user_id = str(user_id)
+            await self.execute(
+                text("SELECT set_config('app.current_user_id', :user_id, FALSE)"),
+                {"user_id": user_id}
+            )
 
 
 def get_database_engine():

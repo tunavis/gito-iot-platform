@@ -55,13 +55,33 @@ export default function DashboardBuilderPage() {
   const loadDashboard = async (id: string) => {
     setLoading(true);
     try {
-      // TODO: Implement actual API call
-      // const response = await fetch(`/api/v1/tenants/${tenantId}/dashboards/${id}`);
-      // const data = await response.json();
-      // setDashboard(data);
-      console.log("Loading dashboard:", id);
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        router.push("/auth/login");
+        return;
+      }
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      const response = await fetch(
+        `/api/v1/tenants/${tenantId}/dashboards/${id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to load dashboard");
+      }
+
+      const result = await response.json();
+      setDashboard(result);
     } catch (error) {
       console.error("Error loading dashboard:", error);
+      alert("Failed to load dashboard");
     } finally {
       setLoading(false);
     }
@@ -70,56 +90,166 @@ export default function DashboardBuilderPage() {
   const handleSaveDashboard = async () => {
     setSaving(true);
     try {
-      // TODO: Implement actual API call
-      // if (dashboard.id) {
-      //   // Update existing
-      //   await fetch(`/api/v1/tenants/${tenantId}/dashboards/${dashboard.id}`, {
-      //     method: 'PUT',
-      //     body: JSON.stringify(dashboard),
-      //   });
-      // } else {
-      //   // Create new
-      //   const response = await fetch(`/api/v1/tenants/${tenantId}/dashboards`, {
-      //     method: 'POST',
-      //     body: JSON.stringify(dashboard),
-      //   });
-      //   const data = await response.json();
-      //   setDashboard({ ...dashboard, id: data.id });
-      // }
-      console.log("Saving dashboard:", dashboard);
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        router.push("/auth/login");
+        return;
+      }
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      if (dashboard.id) {
+        // Update existing dashboard
+        const response = await fetch(
+          `/api/v1/tenants/${tenantId}/dashboards/${dashboard.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: dashboard.name,
+              description: dashboard.description,
+              is_default: dashboard.is_default,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to update dashboard");
+        }
+      } else {
+        // Create new dashboard
+        const response = await fetch(
+          `/api/v1/tenants/${tenantId}/dashboards`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: dashboard.name,
+              description: dashboard.description,
+              is_default: dashboard.is_default,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error("Dashboard creation failed:", response.status, errorData);
+          throw new Error(errorData.error?.message || `Failed to create dashboard (${response.status})`);
+        }
+
+        const result = await response.json();
+        setDashboard({ ...dashboard, id: result.id });
+
+        // Update URL with new dashboard ID
+        router.push(`/dashboard/builder?id=${result.id}`);
+      }
+
       alert("Dashboard saved successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving dashboard:", error);
-      alert("Failed to save dashboard");
+      alert(`Failed to save dashboard: ${error.message || error}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAddWidget = (widgetType: any) => {
-    const newWidget: Widget = {
-      id: `widget-${Date.now()}`,
-      widget_type: widgetType.id,
-      title: widgetType.name,
-      position_x: 0,
-      position_y: dashboard.widgets.length * 2,
-      width: 3,
-      height: 2,
-      configuration: widgetType.defaultConfig,
-      data_sources: [],
-    };
+  const handleAddWidget = async (widgetType: any) => {
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        router.push("/auth/login");
+        return;
+      }
 
-    setDashboard({
-      ...dashboard,
-      widgets: [...dashboard.widgets, newWidget],
-    });
+      // Ensure dashboard is saved first
+      if (!dashboard.id) {
+        await handleSaveDashboard();
+        return; // Wait for save to complete and dashboard.id to be set
+      }
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      const response = await fetch(
+        `/api/v1/tenants/${tenantId}/dashboards/${dashboard.id}/widgets`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            widget_type: widgetType.id,
+            title: widgetType.name,
+            position_x: 0,
+            position_y: dashboard.widgets.length * 2,
+            width: 3,
+            height: 2,
+            configuration: widgetType.defaultConfig,
+            data_sources: [],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to add widget");
+      }
+
+      const result = await response.json();
+      setDashboard({
+        ...dashboard,
+        widgets: [...dashboard.widgets, result],
+      });
+    } catch (error) {
+      console.error("Error adding widget:", error);
+      alert("Failed to add widget");
+    }
   };
 
-  const handleLayoutChange = (updatedWidgets: Widget[]) => {
-    setDashboard({
-      ...dashboard,
-      widgets: updatedWidgets,
-    });
+  const handleLayoutChange = async (updatedWidgets: Widget[]) => {
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token || !dashboard.id) return;
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      // Update local state immediately for smooth UX
+      setDashboard({
+        ...dashboard,
+        widgets: updatedWidgets,
+      });
+
+      // Batch update widget positions in backend
+      const updates = updatedWidgets.map((w) => ({
+        widget_id: w.id,
+        position_x: w.position_x,
+        position_y: w.position_y,
+        width: w.width,
+        height: w.height,
+      }));
+
+      await fetch(
+        `/api/v1/tenants/${tenantId}/dashboards/${dashboard.id}/layout`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ widgets: updates }),
+        }
+      );
+    } catch (error) {
+      console.error("Error updating layout:", error);
+    }
   };
 
   const handleWidgetSettings = (widgetId: string) => {
@@ -127,24 +257,83 @@ export default function DashboardBuilderPage() {
     setShowWidgetConfig(true);
   };
 
-  const handleWidgetRemove = (widgetId: string) => {
-    if (confirm("Are you sure you want to remove this widget?")) {
+  const handleWidgetRemove = async (widgetId: string) => {
+    if (!confirm("Are you sure you want to remove this widget?")) return;
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token || !dashboard.id) return;
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      const response = await fetch(
+        `/api/v1/tenants/${tenantId}/dashboards/${dashboard.id}/widgets/${widgetId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to remove widget");
+      }
+
       setDashboard({
         ...dashboard,
         widgets: dashboard.widgets.filter((w) => w.id !== widgetId),
       });
+    } catch (error) {
+      console.error("Error removing widget:", error);
+      alert("Failed to remove widget");
     }
   };
 
-  const handleSaveWidgetConfig = (config: any) => {
+  const handleSaveWidgetConfig = async (config: any, title?: string, dataSources?: any[]) => {
     if (!selectedWidgetId) return;
 
-    setDashboard({
-      ...dashboard,
-      widgets: dashboard.widgets.map((w) =>
-        w.id === selectedWidgetId ? { ...w, configuration: config } : w
-      ),
-    });
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token || !dashboard.id) return;
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      const response = await fetch(
+        `/api/v1/tenants/${tenantId}/dashboards/${dashboard.id}/widgets/${selectedWidgetId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: title,
+            configuration: config,
+            data_sources: dataSources,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update widget");
+      }
+
+      const result = await response.json();
+
+      // Update local state with server response
+      setDashboard({
+        ...dashboard,
+        widgets: dashboard.widgets.map((w) =>
+          w.id === selectedWidgetId ? result : w
+        ),
+      });
+    } catch (error) {
+      console.error("Error updating widget:", error);
+      alert("Failed to update widget configuration");
+    }
   };
 
   const selectedWidget = dashboard.widgets.find(
@@ -267,6 +456,8 @@ export default function DashboardBuilderPage() {
         isOpen={showWidgetConfig}
         widgetType={selectedWidget?.widget_type || ""}
         currentConfig={selectedWidget?.configuration || {}}
+        currentTitle={selectedWidget?.title}
+        currentDataSources={selectedWidget?.data_sources || []}
         onClose={() => {
           setShowWidgetConfig(false);
           setSelectedWidgetId(null);

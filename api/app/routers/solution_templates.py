@@ -66,7 +66,7 @@ async def list_solution_templates(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get all active templates
     result = await session.execute(
@@ -133,7 +133,7 @@ async def get_solution_template(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get template
     result = await session.execute(
@@ -203,7 +203,7 @@ async def apply_solution_template(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get template
     result = await session.execute(

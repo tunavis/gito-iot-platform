@@ -15,7 +15,13 @@
       "mcp__postgres_Gito_IOT__get_object_details",
       "Bash(docker exec:*)",
       "Bash(docker restart:*)",
-      "Bash(bash test_dashboard_api.sh:*)"
+      "Bash(bash test_dashboard_api.sh:*)",
+      "Bash(docker cp:*)",
+      "Bash(python:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(ls:*)",
+      "mcp__postgres_Gito_IOT__analyze_db_health",
+      "Bash(curl:*)"
     ]
   }
 }

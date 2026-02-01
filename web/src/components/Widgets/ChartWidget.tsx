@@ -1,10 +1,24 @@
 "use client";
 
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useState, useEffect } from "react";
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 interface ChartWidgetProps {
   config: {
-    chart_type?: 'line' | 'area' | 'bar';
+    chart_type?: "line" | "area" | "bar";
     metrics?: string[];
     time_range?: string;
     colors?: string[];
@@ -19,132 +33,143 @@ interface ChartWidgetProps {
 
 export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
   const {
-    chart_type = 'line',
+    chart_type = "line",
     metrics = [],
-    time_range = '24h',
-    colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'],
+    time_range = "24h",
+    colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"],
     color,
   } = config;
 
-  // TODO: REMOVE MOCK DATA AFTER REAL API INTEGRATION
-  // This is TEMPORARY demo data for Iteration 2
-  const generateMockData = () => {
-    const hours = parseInt(time_range) || 24;
-    const data = [];
-    const now = Date.now();
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    for (let i = hours; i >= 0; i--) {
-      const timestamp = new Date(now - i * 60 * 60 * 1000);
-      const dataPoint: any = {
-        time: timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: timestamp.getTime(),
-      };
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        if (!dataSources || dataSources.length === 0) {
+          setChartData([]);
+          setLoading(false);
+          return;
+        }
 
-      metrics.forEach((metric, index) => {
-        // Generate realistic-looking data
-        const base = 50 + index * 20;
-        const variance = 15;
-        dataPoint[metric] = base + (Math.random() - 0.5) * variance;
-      });
+        const token = localStorage.getItem("auth_token");
+        if (!token) {
+          setLoading(false);
+          return;
+        }
 
-      data.push(dataPoint);
-    }
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        const tenantId = payload.tenant_id;
 
-    return data;
-  };
+        // Parse time range (e.g., "24h" -> 24 hours)
+        const rangeHours = parseInt(time_range.replace(/[^0-9]/g, "")) || 24;
+        const endTime = new Date();
+        const startTime = new Date(endTime.getTime() - rangeHours * 60 * 60 * 1000);
 
-  const mockData = generateMockData();
+        // Fetch telemetry data for each data source
+        const promises = dataSources.map(async (ds) => {
+          const params = new URLSearchParams({
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            per_page: "100",
+          });
 
-  /* REAL IMPLEMENTATION (Uncomment when ready):
-  const { data: chartData, isLoading } = useQuery({
-    queryKey: ['chart-data', dataSources, time_range],
-    queryFn: async () => {
-      if (!dataSources || dataSources.length === 0) return [];
+          const response = await fetch(
+            `/api/v1/tenants/${tenantId}/devices/${ds.device_id}/telemetry?${params}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
 
-      const promises = dataSources.map(async (ds) => {
-        const response = await fetch(
-          `/api/v1/tenants/${tenantId}/devices/${ds.device_id}/telemetry?` +
-          `metrics=${ds.metric}&timeRange=${time_range}`
-        );
-        return response.json();
-      });
-
-      const results = await Promise.all(promises);
-
-      // Merge telemetry data by timestamp
-      const mergedData: Record<number, any> = {};
-
-      results.forEach((result, index) => {
-        const ds = dataSources[index];
-        result.data.forEach((point: any) => {
-          const timestamp = new Date(point.timestamp).getTime();
-          if (!mergedData[timestamp]) {
-            mergedData[timestamp] = {
-              time: new Date(point.timestamp).toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
-              timestamp,
-            };
+          if (!response.ok) {
+            console.error(`Failed to fetch data for ${ds.device_id}`);
+            return { device_id: ds.device_id, metric: ds.metric, alias: ds.alias, data: [] };
           }
-          mergedData[timestamp][ds.alias || ds.metric] = point.value;
+
+          const result = await response.json();
+          return {
+            device_id: ds.device_id,
+            metric: ds.metric,
+            alias: ds.alias || ds.metric,
+            data: result.data || [],
+          };
         });
-      });
 
-      return Object.values(mergedData).sort((a, b) => a.timestamp - b.timestamp);
-    },
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
+        const results = await Promise.all(promises);
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center text-gray-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+        // Merge telemetry data by timestamp
+        const mergedData: Record<number, any> = {};
 
-  if (!chartData || chartData.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center text-gray-400">
-        No data available
-      </div>
-    );
-  }
-  */
+        results.forEach((result) => {
+          if (!result.data) return;
 
-  // Show demo data message
-  if (!dataSources || dataSources.length === 0) {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="flex-1">
-          {renderChart()}
-        </div>
-        <div className="mt-2 text-xs text-gray-400 text-center">
-          Demo data • Bind device for real data
-        </div>
-      </div>
-    );
-  }
+          result.data.forEach((point: any) => {
+            const timestamp = new Date(point.timestamp).getTime();
+            if (!mergedData[timestamp]) {
+              mergedData[timestamp] = {
+                time: new Date(point.timestamp).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                timestamp,
+              };
+            }
+            mergedData[timestamp][result.alias] = point[result.metric];
+          });
+        });
+
+        const sortedData = Object.values(mergedData).sort(
+          (a, b) => a.timestamp - b.timestamp
+        );
+
+        setChartData(sortedData);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching chart data:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // Set up auto-refresh
+    const interval = setInterval(fetchData, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [dataSources, time_range]);
 
   function renderChart() {
     const chartColors = color ? [color] : colors;
+    const dataKeys = dataSources?.map((ds) => ds.alias || ds.metric) || metrics;
 
     const commonProps = {
-      data: mockData,
+      data: chartData,
       margin: { top: 5, right: 20, left: 0, bottom: 5 },
     };
 
     switch (chart_type) {
-      case 'area':
+      case "area":
         return (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart {...commonProps}>
               <defs>
-                {metrics.map((metric, index) => (
-                  <linearGradient key={metric} id={`gradient-${metric}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={chartColors[index % chartColors.length]} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={chartColors[index % chartColors.length]} stopOpacity={0} />
+                {dataKeys.map((metric, index) => (
+                  <linearGradient
+                    key={metric}
+                    id={`gradient-${metric}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="5%"
+                      stopColor={chartColors[index % chartColors.length]}
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor={chartColors[index % chartColors.length]}
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 ))}
               </defs>
@@ -155,21 +180,19 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
                 fontSize={12}
                 tickLine={false}
               />
-              <YAxis
-                stroke="#9ca3af"
-                fontSize={12}
-                tickLine={false}
-              />
+              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '0.375rem',
-                  fontSize: '12px'
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.375rem",
+                  fontSize: "12px",
                 }}
               />
-              {metrics.length > 1 && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-              {metrics.map((metric, index) => (
+              {dataKeys.length > 1 && (
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+              )}
+              {dataKeys.map((metric, index) => (
                 <Area
                   key={metric}
                   type="monotone"
@@ -183,7 +206,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
           </ResponsiveContainer>
         );
 
-      case 'bar':
+      case "bar":
         return (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart {...commonProps}>
@@ -194,21 +217,19 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
                 fontSize={12}
                 tickLine={false}
               />
-              <YAxis
-                stroke="#9ca3af"
-                fontSize={12}
-                tickLine={false}
-              />
+              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '0.375rem',
-                  fontSize: '12px'
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.375rem",
+                  fontSize: "12px",
                 }}
               />
-              {metrics.length > 1 && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-              {metrics.map((metric, index) => (
+              {dataKeys.length > 1 && (
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+              )}
+              {dataKeys.map((metric, index) => (
                 <Bar
                   key={metric}
                   dataKey={metric}
@@ -220,7 +241,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
           </ResponsiveContainer>
         );
 
-      case 'line':
+      case "line":
       default:
         return (
           <ResponsiveContainer width="100%" height="100%">
@@ -232,21 +253,19 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
                 fontSize={12}
                 tickLine={false}
               />
-              <YAxis
-                stroke="#9ca3af"
-                fontSize={12}
-                tickLine={false}
-              />
+              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '0.375rem',
-                  fontSize: '12px'
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.375rem",
+                  fontSize: "12px",
                 }}
               />
-              {metrics.length > 1 && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-              {metrics.map((metric, index) => (
+              {dataKeys.length > 1 && (
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+              )}
+              {dataKeys.map((metric, index) => (
                 <Line
                   key={metric}
                   type="monotone"
@@ -262,9 +281,29 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
     }
   }
 
-  return (
-    <div className="h-full">
-      {renderChart()}
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center text-gray-400">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!dataSources || dataSources.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+        No device bound - configure widget
+      </div>
+    );
+  }
+
+  if (!chartData || chartData.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+        No data available for selected time range
+      </div>
+    );
+  }
+
+  return <div className="h-full">{renderChart()}</div>;
 }

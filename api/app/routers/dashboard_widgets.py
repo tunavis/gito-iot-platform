@@ -91,7 +91,7 @@ async def create_widget(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Verify dashboard ownership
     await verify_dashboard_ownership(tenant_id, dashboard_id, current_user_id, session)
@@ -137,7 +137,7 @@ async def update_widget(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Verify dashboard ownership
     await verify_dashboard_ownership(tenant_id, dashboard_id, current_user_id, session)
@@ -187,7 +187,7 @@ async def delete_widget(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Verify dashboard ownership
     await verify_dashboard_ownership(tenant_id, dashboard_id, current_user_id, session)
@@ -215,10 +215,7 @@ async def delete_widget(
 
     logger.info(f"Widget deleted: {widget_id}")
 
-    return SuccessResponse(
-        success=True,
-        message="Widget deleted successfully"
-    )
+    return SuccessResponse(data={"message": "Widget deleted successfully"})
 
 
 @router.post("/{widget_id}/bind-device", response_model=WidgetResponse)
@@ -242,7 +239,7 @@ async def bind_device_to_widget(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Verify dashboard ownership
     await verify_dashboard_ownership(tenant_id, dashboard_id, current_user_id, session)

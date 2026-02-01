@@ -26,6 +26,7 @@ interface SolutionTemplate {
   target_device_types: string[];
   required_capabilities: string[];
   is_active: boolean;
+  compatible_device_count?: number;
 }
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -59,87 +60,30 @@ export default function TemplateGalleryPage() {
     try {
       setIsLoading(true);
 
-      // TODO: Replace with actual API call when backend is connected
-      /* REAL IMPLEMENTATION (Uncomment when ready):
-      const response = await fetch('/api/v1/tenants/{tenant_id}/solution-templates', {
-        headers: {
-          'Authorization': `Bearer ${getToken()}`,
-        },
-      });
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        router.push("/auth/login");
+        return;
+      }
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      const response = await fetch(
+        `/api/v1/tenants/${tenantId}/solution-templates`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch templates');
+        throw new Error("Failed to fetch templates");
       }
 
       const data = await response.json();
       setTemplates(data);
-      */
-
-      // TEMPORARY: Mock data for Iteration 2
-      const mockTemplates: SolutionTemplate[] = [
-        {
-          id: "1",
-          name: "Water Flow Monitoring",
-          identifier: "water_flow_monitoring",
-          category: "utilities",
-          description: "Real-time monitoring of water flow rate, velocity, and consumption totals for smart water meters.",
-          icon: "droplet",
-          color: "#0ea5e9",
-          target_device_types: ["water_flow_sensor"],
-          required_capabilities: ["flow_rate", "total_volume", "velocity"],
-          is_active: true,
-        },
-        {
-          id: "2",
-          name: "Energy Meter Monitoring",
-          identifier: "energy_meter_monitoring",
-          category: "utilities",
-          description: "Real-time monitoring of energy consumption, power demand, and power factor metrics for smart energy meters.",
-          icon: "zap",
-          color: "#f59e0b",
-          target_device_types: ["energy_meter", "smart_meter"],
-          required_capabilities: ["power", "voltage", "current", "energy_consumption"],
-          is_active: true,
-        },
-        {
-          id: "3",
-          name: "Environmental Monitoring",
-          identifier: "environmental_monitoring",
-          category: "environmental",
-          description: "Monitor temperature, humidity, air quality (CO2, PM2.5), and environmental conditions in real-time.",
-          icon: "cloud",
-          color: "#10b981",
-          target_device_types: ["environmental_sensor", "air_quality_sensor"],
-          required_capabilities: ["temperature", "humidity", "co2", "pm25"],
-          is_active: true,
-        },
-        {
-          id: "4",
-          name: "Fleet Tracking",
-          identifier: "fleet_tracking",
-          category: "fleet",
-          description: "Real-time vehicle tracking with location, speed, fuel consumption, and route monitoring for fleet management.",
-          icon: "truck",
-          color: "#8b5cf6",
-          target_device_types: ["gps_tracker", "vehicle_tracker"],
-          required_capabilities: ["latitude", "longitude", "speed", "fuel_level"],
-          is_active: true,
-        },
-        {
-          id: "5",
-          name: "Smart Factory",
-          identifier: "smart_factory",
-          category: "industry_4_0",
-          description: "Industry 4.0 dashboard for monitoring OEE, machine status, production rates, and downtime tracking.",
-          icon: "factory",
-          color: "#dc2626",
-          target_device_types: ["industrial_gateway", "plc", "machine_sensor"],
-          required_capabilities: ["machine_status", "production_count", "temperature", "vibration"],
-          is_active: true,
-        },
-      ];
-
-      setTemplates(mockTemplates);
       setError(null);
     } catch (err) {
       console.error("Error fetching templates:", err);
@@ -153,15 +97,27 @@ export default function TemplateGalleryPage() {
     try {
       setApplyingTemplate(templateId);
 
-      // TODO: Replace with actual API call when backend is connected
-      /* REAL IMPLEMENTATION (Uncomment when ready):
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        router.push("/auth/login");
+        return;
+      }
+
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const tenantId = payload.tenant_id;
+
+      const template = templates.find((t) => t.id === templateId);
+      if (!template) {
+        throw new Error("Template not found");
+      }
+
       const response = await fetch(
-        `/api/v1/tenants/{tenant_id}/solution-templates/${templateId}/apply`,
+        `/api/v1/tenants/${tenantId}/solution-templates/${templateId}/apply`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Authorization': `Bearer ${getToken()}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             dashboard_name: `${template.name} Dashboard`,
@@ -170,18 +126,11 @@ export default function TemplateGalleryPage() {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to apply template');
+        throw new Error("Failed to apply template");
       }
 
       const data = await response.json();
       router.push(`/dashboard/builder?id=${data.dashboard_id}`);
-      */
-
-      // TEMPORARY: Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Redirect to builder
-      router.push("/dashboard/builder");
     } catch (err) {
       console.error("Error applying template:", err);
       alert("Failed to apply template");
@@ -328,12 +277,21 @@ export default function TemplateGalleryPage() {
                     </p>
 
                     <div className="space-y-2 mb-4">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-xs text-gray-600">
-                          {template.target_device_types.length} compatible device types
-                        </span>
-                      </div>
+                      {template.compatible_device_count !== undefined && template.compatible_device_count > 0 ? (
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs text-gray-600">
+                            {template.compatible_device_count} compatible {template.compatible_device_count === 1 ? 'device' : 'devices'} found
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs text-gray-600">
+                            No compatible devices yet
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
                         <span className="text-xs text-gray-600">

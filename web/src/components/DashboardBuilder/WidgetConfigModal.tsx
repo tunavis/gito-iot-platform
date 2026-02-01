@@ -1,63 +1,62 @@
 "use client";
 
-import { X, Save } from "lucide-react";
+import { X, Save, Link as LinkIcon } from "lucide-react";
 import { useState, useEffect } from "react";
+import DeviceBindingModal from "./DeviceBindingModal";
 
 interface WidgetConfigModalProps {
   isOpen: boolean;
   widgetType: string;
   currentConfig: any;
+  currentTitle?: string;
+  currentDataSources?: any[];
   onClose: () => void;
-  onSave: (config: any) => void;
+  onSave: (config: any, title?: string, dataSources?: any[]) => void;
 }
 
 export default function WidgetConfigModal({
   isOpen,
   widgetType,
   currentConfig,
+  currentTitle,
+  currentDataSources,
   onClose,
   onSave,
 }: WidgetConfigModalProps) {
   const [config, setConfig] = useState(currentConfig || {});
+  const [title, setTitle] = useState(currentTitle || "");
+  const [dataSources, setDataSources] = useState(currentDataSources || []);
+  const [showDeviceBinding, setShowDeviceBinding] = useState(false);
 
   useEffect(() => {
     setConfig(currentConfig || {});
-  }, [currentConfig]);
+    setTitle(currentTitle || "");
+    setDataSources(currentDataSources || []);
+  }, [currentConfig, currentTitle, currentDataSources]);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    onSave(config);
+    onSave(config, title, dataSources);
     onClose();
+  };
+
+  const handleSaveBindings = (bindings: any[]) => {
+    setDataSources(bindings);
+    setShowDeviceBinding(false);
   };
 
   const renderKPICardConfig = () => (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Metric Name
-        </label>
-        <input
-          type="text"
-          value={config.metric || ""}
-          onChange={(e) => setConfig({ ...config, metric: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          placeholder="e.g., temperature, flow_rate"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Unit
-        </label>
-        <input
-          type="text"
-          value={config.unit || ""}
-          onChange={(e) => setConfig({ ...config, unit: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          placeholder="e.g., °C, m³/hr, %"
-        />
-      </div>
+      {/* Metric info display (read-only) */}
+      {dataSources && dataSources.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="text-sm text-blue-900">
+            <span className="font-medium">Data Source:</span>{" "}
+            {dataSources[0].alias || dataSources[0].metric}
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -180,6 +179,22 @@ export default function WidgetConfigModal({
 
   const renderChartConfig = () => (
     <div className="space-y-4">
+      {/* Data sources display (read-only) */}
+      {dataSources && dataSources.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="text-sm font-medium text-blue-900 mb-2">
+            Data Sources ({dataSources.length}):
+          </div>
+          <div className="space-y-1">
+            {dataSources.map((ds, index) => (
+              <div key={index} className="text-sm text-blue-800">
+                • {ds.alias || ds.metric}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Chart Type
@@ -193,27 +208,6 @@ export default function WidgetConfigModal({
           <option value="area">Area Chart</option>
           <option value="bar">Bar Chart</option>
         </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Metrics
-        </label>
-        <input
-          type="text"
-          value={(config.metrics || []).join(", ")}
-          onChange={(e) =>
-            setConfig({
-              ...config,
-              metrics: e.target.value.split(",").map((m) => m.trim()).filter(Boolean),
-            })
-          }
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          placeholder="e.g., temperature, humidity"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Separate multiple metrics with commas
-        </p>
       </div>
 
       <div>
@@ -236,25 +230,26 @@ export default function WidgetConfigModal({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Colors
+          Primary Color
         </label>
-        <div className="space-y-2">
-          {(config.metrics || ["metric1"]).map((metric: string, index: number) => (
-            <div key={index} className="flex items-center gap-2">
-              <input
-                type="color"
-                value={(config.colors || ["#3b82f6"])[index] || "#3b82f6"}
-                onChange={(e) => {
-                  const newColors = [...(config.colors || ["#3b82f6"])];
-                  newColors[index] = e.target.value;
-                  setConfig({ ...config, colors: newColors });
-                }}
-                className="h-10 w-16 rounded-lg border border-gray-300 cursor-pointer"
-              />
-              <span className="text-sm text-gray-700">{metric}</span>
-            </div>
-          ))}
+        <div className="flex gap-2">
+          <input
+            type="color"
+            value={config.color || "#3b82f6"}
+            onChange={(e) => setConfig({ ...config, color: e.target.value })}
+            className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer"
+          />
+          <input
+            type="text"
+            value={config.color || "#3b82f6"}
+            onChange={(e) => setConfig({ ...config, color: e.target.value })}
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="#3b82f6"
+          />
         </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Multiple series will use color variations
+        </p>
       </div>
     </div>
   );
@@ -303,6 +298,62 @@ export default function WidgetConfigModal({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {/* Widget Title - Common for all widget types */}
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Widget Title
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter widget title"
+            />
+          </div>
+
+          {/* Device Binding Section */}
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Data Sources
+              </label>
+              <button
+                onClick={() => setShowDeviceBinding(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                <LinkIcon className="w-4 h-4" />
+                Bind Device
+              </button>
+            </div>
+            {dataSources && dataSources.length > 0 ? (
+              <div className="space-y-2">
+                {dataSources.map((source, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded text-sm"
+                  >
+                    <span className="text-gray-900">
+                      {source.alias || source.metric} ({source.metric})
+                    </span>
+                    <button
+                      onClick={() =>
+                        setDataSources(dataSources.filter((_, i) => i !== index))
+                      }
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                No devices bound. Click &quot;Bind Device&quot; to add data sources.
+              </p>
+            )}
+          </div>
+
           {renderConfigForm()}
         </div>
 
@@ -323,6 +374,15 @@ export default function WidgetConfigModal({
           </button>
         </div>
       </div>
+
+      {/* Device Binding Modal */}
+      <DeviceBindingModal
+        isOpen={showDeviceBinding}
+        widgetType={widgetType}
+        currentBindings={dataSources}
+        onClose={() => setShowDeviceBinding(false)}
+        onSave={handleSaveBindings}
+      />
     </div>
   );
 }

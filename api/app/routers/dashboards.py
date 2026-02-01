@@ -68,7 +68,7 @@ async def list_dashboards(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get dashboards with widget counts
     query = select(
@@ -120,7 +120,7 @@ async def create_dashboard(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # If setting as default, unset other defaults
     if dashboard_data.is_default:
@@ -168,7 +168,7 @@ async def get_dashboard(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get dashboard
     result = await session.execute(
@@ -231,7 +231,7 @@ async def update_dashboard(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get dashboard
     result = await session.execute(
@@ -290,7 +290,7 @@ async def delete_dashboard(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Check dashboard exists
     result = await session.execute(
@@ -316,10 +316,7 @@ async def delete_dashboard(
 
     logger.info(f"Dashboard deleted: {dashboard_id}")
 
-    return SuccessResponse(
-        success=True,
-        message="Dashboard deleted successfully"
-    )
+    return SuccessResponse(data={"message": "Dashboard deleted successfully"})
 
 
 @router.put("/{dashboard_id}/layout", response_model=SuccessResponse)
@@ -339,7 +336,7 @@ async def update_dashboard_layout(
             detail="Tenant mismatch",
         )
 
-    await session.set_tenant_context(tenant_id)
+    await session.set_tenant_context(tenant_id, current_user_id)
 
     # Verify dashboard ownership
     result = await session.execute(
@@ -389,7 +386,4 @@ async def update_dashboard_layout(
 
     logger.info(f"Dashboard layout updated: {dashboard_id}, {updated_count} widgets")
 
-    return SuccessResponse(
-        success=True,
-        message=f"Layout updated: {updated_count} widgets repositioned"
-    )
+    return SuccessResponse(data={"message": f"Layout updated: {updated_count} widgets repositioned", "updated_count": updated_count})
