@@ -94,7 +94,9 @@ export default function KPICard({
         if (!response.ok) throw new Error("Failed to fetch telemetry");
 
         const data = await response.json();
-        const latestValue = data.data?.[0]?.[metricName];
+        const dataPoint = data.data?.[0];
+        // Check both direct field and payload JSONB
+        const latestValue = dataPoint?.[metricName] ?? dataPoint?.payload?.[metricName];
 
         setValue(latestValue ?? null);
 
@@ -118,7 +120,11 @@ export default function KPICard({
             const trendData = await trendResponse.json();
             if (trendData.data && trendData.data.length > 0) {
               const sum = trendData.data.reduce(
-                (acc: number, item: any) => acc + (item[metricName] || 0),
+                (acc: number, item: any) => {
+                  // Check both direct field and payload JSONB
+                  const val = item[metricName] ?? item.payload?.[metricName] ?? 0;
+                  return acc + val;
+                },
                 0
               );
               const avgPrevious = sum / trendData.data.length;

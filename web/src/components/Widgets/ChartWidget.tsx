@@ -112,7 +112,9 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
                 timestamp,
               };
             }
-            mergedData[timestamp][result.alias] = point[result.metric];
+            // Check both direct field and payload JSONB
+            const value = point[result.metric] ?? point.payload?.[result.metric];
+            mergedData[timestamp][result.alias] = value;
           });
         });
 
