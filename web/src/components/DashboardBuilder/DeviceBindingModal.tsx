@@ -149,9 +149,9 @@ export default function DeviceBindingModal({
       const payload = JSON.parse(atob(token.split(".")[1]));
       const tenantId = payload.tenant_id;
 
-      // Get last 1 hour of data
+      // Get last 24 hours of data (increased window to find seeded data)
       const endTime = new Date();
-      const startTime = new Date(endTime.getTime() - 60 * 60 * 1000); // 1 hour ago
+      const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
 
       const params = new URLSearchParams({
         start_time: startTime.toISOString(),
