@@ -130,7 +130,7 @@ export default function TemplateGalleryPage() {
       }
 
       const data = await response.json();
-      router.push(`/dashboard/builder?id=${data.dashboard_id}`);
+      router.push(`/dashboard`);
     } catch (err) {
       console.error("Error applying template:", err);
       alert("Failed to apply template");
