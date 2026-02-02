@@ -587,9 +587,12 @@ export default function DashboardPage() {
               </button>
             )}
 
+            {/* Visual separator */}
+            <div className="h-6 w-px bg-gray-300"></div>
+
             <Link
               href="/dashboard/templates"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"
@@ -607,13 +610,16 @@ export default function DashboardPage() {
               Templates
             </Link>
 
+            {/* Visual separator */}
+            <div className="h-6 w-px bg-gray-300"></div>
+
             <button
               onClick={() => {
                 localStorage.removeItem("auth_token");
                 document.cookie = "auth_token=; path=/; max-age=0";
                 window.location.href = "/auth/login";
               }}
-              className="px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               Logout
             </button>
