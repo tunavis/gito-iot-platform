@@ -58,7 +58,10 @@ export default function KPICard({
     // Fetch latest value from device
     const fetchData = async () => {
       try {
+        console.log("[KPICard] data_sources:", data_sources);
+
         if (!data_sources || data_sources.length === 0) {
+          console.log("[KPICard] No data sources configured");
           setValue(null);
           setLoading(false);
           return;
@@ -76,9 +79,9 @@ export default function KPICard({
         const deviceId = source.device_id;
         const metricName = source.metric || metric;
 
-        // Get latest value (last 1 hour)
+        // Get latest value (last 24 hours)
         const endTime = new Date();
-        const startTime = new Date(endTime.getTime() - 60 * 60 * 1000);
+        const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
 
         const params = new URLSearchParams({
           start_time: startTime.toISOString(),
@@ -97,6 +100,14 @@ export default function KPICard({
         const dataPoint = data.data?.[0];
         // Check both direct field and payload JSONB
         const latestValue = dataPoint?.[metricName] ?? dataPoint?.payload?.[metricName];
+
+        console.log("[KPICard] Fetched data:", {
+          deviceId,
+          metricName,
+          dataPointCount: data.data?.length || 0,
+          latestValue,
+          dataPoint
+        });
 
         setValue(latestValue ?? null);
 
@@ -139,7 +150,11 @@ export default function KPICard({
 
         setLoading(false);
       } catch (error) {
-        console.error("Error fetching KPI data:", error);
+        console.error("[KPICard] Error fetching data:", error);
+        console.error("[KPICard] Context:", {
+          data_sources,
+          configuration
+        });
         setLoading(false);
       }
     };

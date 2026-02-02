@@ -8,6 +8,10 @@ import type { Layout } from "react-grid-layout";
 import { useState, useCallback } from "react";
 import KPICard from "../Widgets/KPICard";
 import ChartWidget from "../Widgets/ChartWidget";
+import GaugeWidget from "../Widgets/GaugeWidget";
+import DeviceInfoWidget from "../Widgets/DeviceInfoWidget";
+import MapWidget from "../Widgets/MapWidget";
+import TableWidget from "../Widgets/TableWidget";
 import WidgetWrapper from "../Widgets/WidgetWrapper";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -112,7 +116,69 @@ export default function DashboardGrid({
           </WidgetWrapper>
         );
 
-      // TODO: Add more widget types in Iteration 3 (gauge, map, table, etc.)
+      case "gauge":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Gauge"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <GaugeWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "device_info":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Device Info"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <DeviceInfoWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "map":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Map"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <MapWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "table":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Data Table"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <TableWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
 
       default:
         return (

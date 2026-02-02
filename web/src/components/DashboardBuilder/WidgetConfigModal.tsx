@@ -254,12 +254,184 @@ export default function WidgetConfigModal({
     </div>
   );
 
+  const renderGaugeConfig = () => (
+    <div className="space-y-4">
+      {/* Metric info display (read-only) */}
+      {dataSources && dataSources.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="text-sm text-blue-900">
+            <span className="font-medium">Data Source:</span>{" "}
+            {dataSources[0].alias || dataSources[0].metric}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Minimum Value
+          </label>
+          <input
+            type="number"
+            value={config.min ?? 0}
+            onChange={(e) =>
+              setConfig({ ...config, min: parseFloat(e.target.value) })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Maximum Value
+          </label>
+          <input
+            type="number"
+            value={config.max ?? 100}
+            onChange={(e) =>
+              setConfig({ ...config, max: parseFloat(e.target.value) })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Unit
+          </label>
+          <input
+            type="text"
+            value={config.unit ?? "%"}
+            onChange={(e) => setConfig({ ...config, unit: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="%"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Decimal Places
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="6"
+            value={config.decimal_places ?? 1}
+            onChange={(e) =>
+              setConfig({ ...config, decimal_places: parseInt(e.target.value) })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Warning Threshold (%)
+          </label>
+          <input
+            type="number"
+            value={config.threshold_warning ?? 70}
+            onChange={(e) =>
+              setConfig({
+                ...config,
+                threshold_warning: parseFloat(e.target.value),
+              })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Critical Threshold (%)
+          </label>
+          <input
+            type="number"
+            value={config.threshold_critical ?? 90}
+            onChange={(e) =>
+              setConfig({
+                ...config,
+                threshold_critical: parseFloat(e.target.value),
+              })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Color Zones
+        </label>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Safe</label>
+            <input
+              type="color"
+              value={config.color_safe || "#10b981"}
+              onChange={(e) =>
+                setConfig({ ...config, color_safe: e.target.value })
+              }
+              className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Warning</label>
+            <input
+              type="color"
+              value={config.color_warning || "#f59e0b"}
+              onChange={(e) =>
+                setConfig({ ...config, color_warning: e.target.value })
+              }
+              className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Critical</label>
+            <input
+              type="color"
+              value={config.color_critical || "#ef4444"}
+              onChange={(e) =>
+                setConfig({ ...config, color_critical: e.target.value })
+              }
+              className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="show_value"
+          checked={config.show_value ?? true}
+          onChange={(e) =>
+            setConfig({ ...config, show_value: e.target.checked })
+          }
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+        />
+        <label
+          htmlFor="show_value"
+          className="text-sm font-medium text-gray-700"
+        >
+          Show Value in Center
+        </label>
+      </div>
+    </div>
+  );
+
   const renderConfigForm = () => {
     switch (widgetType) {
       case "kpi_card":
         return renderKPICardConfig();
       case "chart":
         return renderChartConfig();
+      case "gauge":
+        return renderGaugeConfig();
       default:
         return (
           <div className="text-center py-8 text-gray-500">
