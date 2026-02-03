@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 
 interface DeviceGroup {
@@ -36,11 +36,7 @@ export default function DeviceGroupsPage() {
   const [editingGroup, setEditingGroup] = useState<DeviceGroup | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<string>('all');
 
-  useEffect(() => {
-    loadData();
-  }, [selectedOrg]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
@@ -77,7 +73,11 @@ export default function DeviceGroupsPage() {
       setGroups(json.data || []);
     }
     setLoading(false);
-  };
+  }, [selectedOrg]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const deleteGroup = async (id: string) => {
     if (!confirm('Are you sure you want to delete this device group?')) return;

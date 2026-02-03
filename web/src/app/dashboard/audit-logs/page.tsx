@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { User, Clock, Search, Download, Eye, Activity } from 'lucide-react';
 
@@ -41,13 +41,38 @@ export default function AuditLogsPage() {
   const [totalLogs, setTotalLogs] = useState(0);
   const perPage = 50;
 
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+
+    let url = `/api/v1/tenants/${tenant}/audit-logs?page=${currentPage}&per_page=${perPage}`;
+    if (filterAction) url += `&action=${filterAction}`;
+    if (filterResourceType) url += `&resource_type=${filterResourceType}`;
+    if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      setLogs(json.data || []);
+      setTotalLogs(json.meta?.total || 0);
+    } else if (res.status === 403) {
+      alert('You do not have permission to view audit logs. Contact your administrator.');
+    }
+    setLoading(false);
+  }, [currentPage, filterAction, filterResourceType, searchTerm, perPage]);
+
   useEffect(() => {
     loadStats();
   }, []);
 
   useEffect(() => {
     loadLogs();
-  }, [filterAction, filterResourceType, searchTerm, currentPage]);
+  }, [loadLogs]);
 
   const loadStats = async () => {
     const token = localStorage.getItem('auth_token');
