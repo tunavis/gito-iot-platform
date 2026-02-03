@@ -75,11 +75,9 @@ export default function DevicesPage() {
         setDevices(data.data || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load devices');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load devices');
-    } finally {
-      setLoading(false);
-    }
+      } finally {
+        setLoading(false);
+      }
   }, [router]);
 
   useEffect(() => {
