@@ -7,7 +7,7 @@ interface Device {
   id: string;
   name: string;
   device_type_id: string;
-  device_type?: {
+  device_type: string | {
     id: string;
     name: string;
     telemetry_schema: Record<string, TelemetryField>;
@@ -108,15 +108,14 @@ export default function DeviceBindingModal({
                 const deviceType = typeData.data || typeData;
                 return {
                   ...device,
-                  device_type: deviceType,
-                  device_type_name: deviceType.name
+                  device_type: deviceType
                 };
               }
             } catch (error) {
               console.error(`Failed to fetch type for device ${device.name}:`, error);
             }
           }
-          return { ...device, device_type_name: device.device_type || 'No Type' };
+          return { ...device, device_type: device.device_type || 'No Type' };
         })
       );
 
@@ -129,7 +128,9 @@ export default function DeviceBindingModal({
   };
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
-  const availableMetrics = selectedDevice?.device_type?.telemetry_schema || {};
+  const availableMetrics = typeof selectedDevice?.device_type === 'object' 
+    ? selectedDevice.device_type.telemetry_schema 
+    : {};
 
   // Fetch recent telemetry to discover actual metrics
   useEffect(() => {
@@ -302,7 +303,8 @@ export default function DeviceBindingModal({
                       {devices.map((device) => (
                         <option key={device.id} value={device.id}>
                           {device.name}
-                          {device.device_type_name && device.device_type_name !== 'No Type' && ` (${device.device_type_name})`}
+                          {typeof device.device_type === 'string' && device.device_type !== 'No Type' && ` (${device.device_type})`}
+                          {typeof device.device_type === 'object' && device.device_type.name !== 'No Type' && ` (${device.device_type.name})`}
                         </option>
                       ))}
                     </select>

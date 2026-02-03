@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { Shield, Mail, User as UserIcon, Edit2, Trash2, UserPlus } from 'lucide-react';
+import { Mail, Edit2, Trash2, UserPlus } from 'lucide-react';
 
 interface User {
   id: string;

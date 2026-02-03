@@ -5,10 +5,11 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 
-interface Device {
+interface MapDevice {
   id: string;
   name: string;
   device_type: string;
+  device_type_id?: string;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -21,9 +22,9 @@ interface Device {
 }
 
 interface DeviceMapViewProps {
-  devices: Device[];
-  selectedDevice: Device | null;
-  onSelectDevice: (device: Device | null) => void;
+  devices: MapDevice[];
+  selectedDevice: MapDevice | null;
+  onSelectDevice: (device: MapDevice | null) => void;
 }
 
 // Custom marker icons
@@ -62,7 +63,7 @@ const createMarkerIcon = (status: 'online' | 'offline' | 'idle') => {
 };
 
 // Map bounds adjuster component
-function MapBoundsAdjuster({ devices }: { devices: Device[] }) {
+function MapBoundsAdjuster({ devices }: { devices: MapDevice[] }) {
   const map = useMap();
 
   useEffect(() => {

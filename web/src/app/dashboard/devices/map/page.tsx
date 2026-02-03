@@ -37,6 +37,7 @@ interface Device {
   id: string;
   name: string;
   device_type: string;
+  device_type_id?: string;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -321,9 +322,9 @@ export default function DeviceMapPage() {
             </div>
           ) : (
             <MapView
-              devices={filteredDevices}
-              selectedDevice={selectedDevice}
-              onSelectDevice={setSelectedDevice}
+              devices={filteredDevices as any}
+              selectedDevice={selectedDevice as any}
+              onSelectDevice={setSelectedDevice as any}
             />
           )}
         </div>

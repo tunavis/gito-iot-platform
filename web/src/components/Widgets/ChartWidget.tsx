@@ -109,15 +109,16 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         const results = await Promise.all(promises);
 
         // Merge telemetry data by timestamp
-        const mergedData: Record<number, any> = {};
+        const mergedData: Record<string, any> = {};
 
         results.forEach((result) => {
           if (!result.data) return;
 
           result.data.forEach((point: any) => {
             const timestamp = new Date(point.timestamp).getTime();
-            if (!mergedData[timestamp]) {
-              mergedData[timestamp] = {
+            const timestampKey = String(timestamp);
+            if (!mergedData[timestampKey]) {
+              mergedData[timestampKey] = {
                 time: new Date(point.timestamp).toLocaleTimeString("en-US", {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -127,7 +128,9 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
             }
             // Check both direct field and payload JSONB
             const value = point[result.metric] ?? point.payload?.[result.metric];
-            mergedData[timestamp][result.alias] = value;
+            if (timestampKey && result.alias) {
+              mergedData[timestampKey][result.alias] = value;
+            }
           });
         });
 

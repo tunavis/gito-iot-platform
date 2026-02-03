@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardGrid from "@/components/DashboardBuilder/DashboardGrid";
 import WidgetLibrary from "@/components/DashboardBuilder/WidgetLibrary";
 import WidgetConfigModal from "@/components/DashboardBuilder/WidgetConfigModal";
-import { Droplet, Zap, Cloud, Truck, Factory, Gauge } from "lucide-react";
+import { Droplet, Zap, Cloud, Truck, Factory } from "lucide-react";
 
 interface Widget {
   id: string;
@@ -26,6 +26,7 @@ interface Dashboard {
   name: string;
   description?: string;
   is_default: boolean;
+  solution_type?: string;
   widgets: Widget[];
 }
 
