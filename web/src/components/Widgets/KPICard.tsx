@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Minus, LucideIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import WidgetWrapper from "./WidgetWrapper";
 import { useEffect, useState, useCallback } from "react";
 
@@ -31,7 +31,6 @@ interface KPICardProps {
 }
 
 export default function KPICard({
-  id,
   title,
   configuration,
   data_sources,

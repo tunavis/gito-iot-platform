@@ -89,31 +89,6 @@ export default function AuditLogsPage() {
     }
   };
 
-  const loadLogs = async () => {
-    setLoading(true);
-    const token = localStorage.getItem('auth_token');
-    if (!token) return;
-    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
-
-    let url = `/api/v1/tenants/${tenant}/audit-logs?page=${currentPage}&per_page=${perPage}`;
-    if (filterAction) url += `&action=${filterAction}`;
-    if (filterResourceType) url += `&resource_type=${filterResourceType}`;
-    if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
-
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      setLogs(json.data || []);
-      setTotalLogs(json.meta?.total || 0);
-    } else if (res.status === 403) {
-      alert('You do not have permission to view audit logs. Contact your administrator.');
-    }
-    setLoading(false);
-  };
-
   const exportToCsv = () => {
     const headers = ['Date/Time', 'User ID', 'Action', 'Resource Type', 'Resource ID', 'IP Address'];
     const rows = logs.map(log => [
