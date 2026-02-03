@@ -45,7 +45,10 @@ services:
 
   # Backend API
   api:
-    image: ghcr.io/tunavis/gito-iot-api:staging
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: gito-iot-api:staging
     container_name: gito-api-staging
     restart: unless-stopped
     env_file:
@@ -68,7 +71,10 @@ services:
 
   # Frontend Web
   web:
-    image: ghcr.io/tunavis/gito-iot-web:staging
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: gito-iot-web:staging
     container_name: gito-web-staging
     restart: unless-stopped
     environment:
