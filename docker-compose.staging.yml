@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: gito-postgres-staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gito_iot_staging
+      POSTGRES_USER: gito_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    networks:
+      - gito-staging-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gito_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: gito-redis-staging
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6380:6379"
+    networks:
+      - gito-staging-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend API
+  api:
+    image: ghcr.io/tunavis/gito-iot-api:staging
+    container_name: gito-api-staging
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+    networks:
+      - gito-staging-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web
+  web:
+    image: ghcr.io/tunavis/gito-iot-web:staging
+    container_name: gito-web-staging
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8000
+      NODE_ENV: production
+    depends_on:
+      - api
+    ports:
+      - "3001:3000"
+    networks:
+      - gito-staging-network
+
+networks:
+  gito-staging-network:
+    driver: bridge
+
+volumes:
+  postgres_staging_data:
