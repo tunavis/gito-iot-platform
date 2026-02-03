@@ -12,7 +12,9 @@
     "type-check": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "validate": "npm run type-check && npm run lint",
+    "pre-commit": "npm run validate"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.28.0",

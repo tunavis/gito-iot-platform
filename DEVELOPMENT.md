@@ -1,5 +1,36 @@
 # Development Workflow
 
+## 🚀 Recommended Daily Workflow
+
+### **Frontend Development** (Fastest - Use This!)
+```powershell
+# 1. Start backend infrastructure (once per session)
+docker compose up -d postgres api mosquitto processor keydb
+
+# 2. Run frontend in dev mode with hot reload
+cd web
+npm run dev
+# Access: http://localhost:3000
+# Changes auto-reload instantly!
+```
+
+### **Before Every Commit** ⚠️ IMPORTANT
+```powershell
+# Run validation from project root
+.\validate-before-commit.ps1
+
+# This catches TypeScript/ESLint errors BEFORE pushing to CI/CD
+# Saves time by not triggering failed builds!
+```
+
+### **Full Docker Build** (Optional - for major changes)
+```powershell
+# Test the production build locally
+docker build -t gito-web-test -f web/Dockerfile web/
+```
+
+---
+
 ## Quick Start
 
 ### Development Mode (Hot Reload - RECOMMENDED)
