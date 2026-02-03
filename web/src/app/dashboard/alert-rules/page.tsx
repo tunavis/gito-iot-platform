@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 
@@ -86,14 +86,7 @@ export default function AlertRulesPage() {
     setTenant(t);
   }, []);
 
-  useEffect(() => {
-    if (tenant) {
-      loadRules();
-      loadDevices();
-    }
-  }, [tenant, filterType, filterSeverity, filterEnabled, filterDevice]);
-
-  const loadRules = async () => {
+  const loadRules = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token || !tenant) return;
 
@@ -116,9 +109,9 @@ export default function AlertRulesPage() {
     }
 
     setLoading(false);
-  };
+  }, [tenant, filterType, filterSeverity, filterEnabled, filterDevice]);
 
-  const loadDevices = async () => {
+  const loadDevices = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token || !tenant) return;
 
@@ -130,7 +123,14 @@ export default function AlertRulesPage() {
       const json = await res.json();
       setDevices(json.data || []);
     }
-  };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (tenant) {
+      loadRules();
+      loadDevices();
+    }
+  }, [tenant, loadRules, loadDevices]);
 
   const deleteRule = async () => {
     if (!deleteConfirm || !tenant) return;
