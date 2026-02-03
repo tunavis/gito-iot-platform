@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Clean install dependencies (faster and more reliable than npm install)
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -26,8 +26,8 @@ RUN apk add --no-cache dumb-init
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm install --only=production
+# Install production dependencies only (clean install)
+RUN npm ci --only=production --legacy-peer-deps
 
 # Copy built app from builder
 COPY --from=builder /app/.next ./.next
