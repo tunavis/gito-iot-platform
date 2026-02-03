@@ -14,7 +14,7 @@ env:
 jobs:
   build-and-push:
     name: Build and Push Docker Images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # Use self-hosted runner
     permissions:
       contents: read
       packages: write
