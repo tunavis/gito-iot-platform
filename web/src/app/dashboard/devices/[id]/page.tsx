@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Settings,
   Edit2,
   Trash2,
   Bell,
