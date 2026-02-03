@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardGrid from "@/components/DashboardBuilder/DashboardGrid";
 import WidgetLibrary from "@/components/DashboardBuilder/WidgetLibrary";
 import WidgetConfigModal from "@/components/DashboardBuilder/WidgetConfigModal";
+import { Droplet, Zap, Cloud, Truck, Factory, Gauge } from "lucide-react";
 
 interface Widget {
   id: string;
@@ -387,6 +388,42 @@ export default function DashboardPage() {
     (w) => w.id === selectedWidgetId
   );
 
+  const getTemplateLogo = (solutionType?: string) => {
+    if (!solutionType) return null;
+
+    const config: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
+      water_flow_monitoring: {
+        icon: <Droplet className="w-8 h-8" />,
+        color: "#0ea5e9",
+        bg: "from-cyan-500 to-blue-600",
+      },
+      energy_meter_monitoring: {
+        icon: <Zap className="w-8 h-8" />,
+        color: "#f59e0b",
+        bg: "from-amber-500 to-orange-600",
+      },
+      environmental_monitoring: {
+        icon: <Cloud className="w-8 h-8" />,
+        color: "#10b981",
+        bg: "from-green-500 to-emerald-600",
+      },
+      fleet_tracking: {
+        icon: <Truck className="w-8 h-8" />,
+        color: "#8b5cf6",
+        bg: "from-purple-500 to-indigo-600",
+      },
+      smart_factory: {
+        icon: <Factory className="w-8 h-8" />,
+        color: "#ef4444",
+        bg: "from-red-500 to-pink-600",
+      },
+    };
+
+    return config[solutionType] || null;
+  };
+
+  const templateLogo = getTemplateLogo(dashboard?.solution_type);
+
   if (loading) {
     return (
       <div className="flex min-h-screen bg-gray-50">
@@ -489,36 +526,48 @@ export default function DashboardPage() {
         {/* Top Bar */}
         <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-[60] shadow-sm">
           <div className="flex items-center gap-3">
-            <button className="p-1 text-gray-600 hover:text-gray-900">
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            {/* Template Logo */}
+            {templateLogo && (
+              <div
+                className={`p-3 rounded-xl bg-gradient-to-br ${templateLogo.bg} text-white shadow-lg`}
+                title={dashboard.solution_type?.replace(/_/g, " ")}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-            {editMode ? (
-              <input
-                type="text"
-                value={dashboard.name}
-                onChange={(e) =>
-                  setDashboard({ ...dashboard, name: e.target.value })
-                }
-                className="text-xl font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
-                placeholder="Dashboard Name"
-              />
-            ) : (
-              <h1 className="text-xl font-semibold text-gray-900">
-                {dashboard.name}
-              </h1>
+                {templateLogo.icon}
+              </div>
             )}
+
+            <div className="flex items-center gap-3">
+              <button className="p-1 text-gray-600 hover:text-gray-900">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              </button>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={dashboard.name}
+                  onChange={(e) =>
+                    setDashboard({ ...dashboard, name: e.target.value })
+                  }
+                  className="text-xl font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                  placeholder="Dashboard Name"
+                />
+              ) : (
+                <h1 className="text-xl font-semibold text-gray-900">
+                  {dashboard.name}
+                </h1>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-4">

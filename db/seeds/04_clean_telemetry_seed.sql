@@ -19,7 +19,7 @@ SELECT
         'satellites', (8 + random() * 4)::int
     )
 FROM devices d
-CROSS JOIN generate_series(0, 23) as hour
+CROSS JOIN generate_series(0, 167) as hour  -- 7 days * 24 hours = 168 hours
 WHERE d.name ILIKE '%GPS%' OR d.name ILIKE '%TRACKER%';
 
 -- Step 3: Temperature Sensors ONLY (environmental metrics)
@@ -33,7 +33,7 @@ SELECT
     1000 + (random() * 50)::numeric(6,2),
     85 + (random() * 10)::numeric(5,2)
 FROM devices d
-CROSS JOIN generate_series(0, 23) as hour
+CROSS JOIN generate_series(0, 167) as hour  -- 7 days * 24 hours = 168 hours
 WHERE (d.name ILIKE '%TEMP%' OR d.name ILIKE '%THERMO%' OR d.name ILIKE '%SENSOR%')
   AND d.name NOT ILIKE '%GPS%'
   AND d.name NOT ILIKE '%TRACKER%'
@@ -55,7 +55,7 @@ SELECT
         'pressure', (2 + random() * 3)::numeric(4,2)
     )
 FROM devices d
-CROSS JOIN generate_series(0, 23) as hour
+CROSS JOIN generate_series(0, 167) as hour  -- 7 days * 24 hours = 168 hours
 WHERE d.name ILIKE '%WATER%' OR d.name ILIKE '%FLOW%';
 
 -- Step 5: Energy Meters ONLY (power metrics)
@@ -73,7 +73,7 @@ SELECT
         'power_factor', (0.85 + random() * 0.1)::numeric(4,2)
     )
 FROM devices d
-CROSS JOIN generate_series(0, 23) as hour
+CROSS JOIN generate_series(0, 167) as hour  -- 7 days * 24 hours = 168 hours
 WHERE (d.name ILIKE '%ENERGY%' OR d.name ILIKE '%METER%')
   AND d.name NOT ILIKE '%WATER%'
   AND d.name NOT ILIKE '%FLOW%';

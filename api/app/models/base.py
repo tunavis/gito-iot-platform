@@ -220,3 +220,32 @@ class AuditLog(BaseModel):
         Index("idx_audit_user", "user_id"),
         Index("idx_audit_resource", "resource_type", "resource_id"),
     )
+
+
+class TelemetryHot(BaseModel):
+    """Telemetry time-series data - hot storage for recent data."""
+    __tablename__ = "telemetry_hot"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Common telemetry fields
+    temperature = Column(Float, nullable=True)
+    humidity = Column(Float, nullable=True)
+    pressure = Column(Float, nullable=True)
+    battery = Column(Float, nullable=True)
+    rssi = Column(Integer, nullable=True)
+
+    # Device-specific metrics in JSONB
+    payload = Column(JSONB, default={}, nullable=False)
+
+    # Timestamps
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_telemetry_device_time", "device_id", "timestamp"),
+        Index("idx_telemetry_tenant_device", "tenant_id", "device_id"),
+        Index("idx_telemetry_timestamp", "timestamp"),
+    )

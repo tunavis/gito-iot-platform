@@ -10,7 +10,7 @@ T = TypeVar("T")
 class PaginationMeta(BaseModel):
     """Pagination metadata for list responses."""
     page: int = Field(ge=1, description="Page number (1-indexed)")
-    per_page: int = Field(ge=1, le=100, description="Items per page")
+    per_page: int = Field(ge=1, le=1000, description="Items per page (max 1000 for telemetry)")
     total: int = Field(ge=0, description="Total number of items")
 
 

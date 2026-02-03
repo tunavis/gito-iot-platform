@@ -31,6 +31,19 @@ interface ChartWidgetProps {
   }>;
 }
 
+/**
+ * Parse time range string to hours
+ * @param timeRange - Format: "24h" or "7d"
+ * @returns Number of hours
+ */
+function parseTimeRangeToHours(timeRange: string): number {
+  if (timeRange.includes('d')) {
+    const days = parseInt(timeRange.replace(/[^0-9]/g, "")) || 1;
+    return days * 24;
+  }
+  return parseInt(timeRange.replace(/[^0-9]/g, "")) || 24;
+}
+
 export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
   const {
     chart_type = "line",
@@ -61,8 +74,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         const payload = JSON.parse(atob(token.split(".")[1]));
         const tenantId = payload.tenant_id;
 
-        // Parse time range (e.g., "24h" -> 24 hours)
-        const rangeHours = parseInt(time_range.replace(/[^0-9]/g, "")) || 24;
+        const rangeHours = parseTimeRangeToHours(time_range);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - rangeHours * 60 * 60 * 1000);
 
@@ -71,7 +83,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
           const params = new URLSearchParams({
             start_time: startTime.toISOString(),
             end_time: endTime.toISOString(),
-            per_page: "100",
+            per_page: "500",
           });
 
           const response = await fetch(
@@ -80,7 +92,8 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
           );
 
           if (!response.ok) {
-            console.error(`Failed to fetch data for ${ds.device_id}`);
+            const errorText = await response.text();
+            console.error(`[ChartWidget] API Error ${response.status} for device ${ds.device_id}:`, errorText);
             return { device_id: ds.device_id, metric: ds.metric, alias: ds.alias, data: [] };
           }
 

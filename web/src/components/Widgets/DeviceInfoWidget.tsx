@@ -98,18 +98,23 @@ export default function DeviceInfoWidget({
           throw new Error("Failed to fetch device");
         }
 
-        const data = await response.json();
+        let data = await response.json();
         console.log("[DeviceInfoWidget] Device data:", data);
 
+        // Handle wrapped response (some endpoints return {data: {...}})
+        const deviceData = data.data || data;
+
+        console.log("[DeviceInfoWidget] Unwrapped device:", deviceData);
+
         // Validate essential fields
-        if (!data || !data.id) {
-          console.error("[DeviceInfoWidget] Invalid device data:", data);
+        if (!deviceData || !deviceData.id) {
+          console.error("[DeviceInfoWidget] Invalid device data:", deviceData);
           setDevice(null);
           setLoading(false);
           return;
         }
 
-        setDevice(data);
+        setDevice(deviceData);
         setLoading(false);
       } catch (error) {
         console.error("[DeviceInfoWidget] Error:", error);
@@ -149,9 +154,55 @@ export default function DeviceInfoWidget({
     if (!deviceType) return <Activity className="w-8 h-8" />;
 
     const type = deviceType.toLowerCase();
+
+    // Water meter - custom SVG illustration
     if (type.includes("water") || type.includes("flow")) {
-      return <Droplet className="w-8 h-8" />;
+      return (
+        <svg viewBox="0 0 120 120" className="w-full h-full">
+          {/* Meter body */}
+          <circle cx="60" cy="60" r="50" fill="#0ea5e9" opacity="0.2" />
+          <circle cx="60" cy="60" r="45" fill="white" stroke="#0ea5e9" strokeWidth="3" />
+
+          {/* Gauge face */}
+          <circle cx="60" cy="60" r="35" fill="#f0f9ff" />
+
+          {/* Tick marks */}
+          {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((angle) => {
+            const rad = (angle - 90) * Math.PI / 180;
+            const x1 = 60 + Math.cos(rad) * 30;
+            const y1 = 60 + Math.sin(rad) * 30;
+            const x2 = 60 + Math.cos(rad) * 35;
+            const y2 = 60 + Math.sin(rad) * 35;
+            return (
+              <line
+                key={angle}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="#0ea5e9"
+                strokeWidth="2"
+              />
+            );
+          })}
+
+          {/* Needle */}
+          <line x1="60" y1="60" x2="60" y2="30" stroke="#0ea5e9" strokeWidth="2" />
+          <circle cx="60" cy="60" r="4" fill="#0ea5e9" />
+
+          {/* Water droplet icon */}
+          <path
+            d="M60 75 C 55 75, 50 70, 50 65 C 50 60, 60 50, 60 50 C 60 50, 70 60, 70 65 C 70 70, 65 75, 60 75 Z"
+            fill="#0ea5e9"
+          />
+
+          {/* Flow arrows */}
+          <path d="M 25 60 L 35 60 L 30 55 M 35 60 L 30 65" stroke="#0ea5e9" strokeWidth="2" fill="none" />
+          <path d="M 85 60 L 95 60 L 90 55 M 95 60 L 90 65" stroke="#0ea5e9" strokeWidth="2" fill="none" />
+        </svg>
+      );
     }
+
     if (type.includes("energy") || type.includes("electric") || type.includes("power")) {
       return <Zap className="w-8 h-8" />;
     }
@@ -198,6 +249,39 @@ export default function DeviceInfoWidget({
     return "from-blue-500 to-blue-600";
   };
 
+  const getDeviceImageUrl = (deviceType?: string) => {
+    if (!deviceType) return null;
+
+    const type = deviceType.toLowerCase();
+
+    // Water meter images
+    if (type.includes("water") || type.includes("flow")) {
+      return "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=300&fit=crop";
+    }
+
+    // Energy/Electric meter images
+    if (type.includes("energy") || type.includes("electric") || type.includes("power") || type.includes("meter")) {
+      return "https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=400&h=300&fit=crop";
+    }
+
+    // Temperature sensor images
+    if (type.includes("temperature") || type.includes("thermometer")) {
+      return "https://images.unsplash.com/photo-1607400201889-565b1ee75f8e?w=400&h=300&fit=crop";
+    }
+
+    // GPS tracker / Vehicle images
+    if (type.includes("gps") || type.includes("tracker") || type.includes("vehicle")) {
+      return "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=400&h=300&fit=crop";
+    }
+
+    // Gas/Air sensor images
+    if (type.includes("gas") || type.includes("air") || type.includes("environmental")) {
+      return "https://images.unsplash.com/photo-1534237710431-e2fc698436d0?w=400&h=300&fit=crop";
+    }
+
+    return null; // Fallback to icon
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -220,29 +304,21 @@ export default function DeviceInfoWidget({
   const online = isOnline();
 
   return (
-    <div className="h-full p-4 flex flex-col">
-      {/* Device Header */}
-      <div className="flex items-start gap-3 mb-4">
-        {show_image && (
-          <div className="flex-shrink-0">
-            {device.metadata?.image_url ? (
-              <img
-                src={device.metadata.image_url}
-                alt={device.name || "Device"}
-                className="w-24 h-24 rounded-lg object-cover shadow-lg border-2 border-gray-200"
-              />
-            ) : (
-              <div
-                className={`w-16 h-16 bg-gradient-to-br ${getDeviceColor(
-                  device.device_type
-                )} rounded-lg flex items-center justify-center text-white shadow-lg`}
-              >
-                {getDeviceIcon(device.device_type)}
-              </div>
-            )}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
+    <div className="h-full p-4 flex gap-4 bg-white rounded-lg">
+      {/* Left Side - Device Image */}
+      <div className="w-32 flex-shrink-0 flex items-center justify-center">
+        <div
+          className={`w-28 h-28 bg-gradient-to-br ${getDeviceColor(
+            device.device_type
+          )} rounded-xl flex items-center justify-center text-white shadow-lg`}
+        >
+          {getDeviceIcon(device.device_type)}
+        </div>
+      </div>
+
+      {/* Right Side - Device Details */}
+      <div className="flex-1 flex flex-col">
+        <div className="mb-4">
           <h3 className="text-lg font-semibold text-gray-900 truncate">
             {device.name || "Unknown Device"}
           </h3>
@@ -252,10 +328,9 @@ export default function DeviceInfoWidget({
             </p>
           )}
         </div>
-      </div>
 
-      {/* Device Details */}
-      <div className="space-y-3 flex-1">
+        {/* Device Details */}
+        <div className="space-y-3 flex-1">
         {/* Status */}
         {show_status && (
           <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
@@ -321,23 +396,24 @@ export default function DeviceInfoWidget({
             </div>
           </div>
         )}
-      </div>
+        </div>
 
-      {/* Status Badge at Bottom */}
-      <div className="mt-4 pt-3 border-t border-gray-200">
-        <div
-          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-            online
-              ? "bg-green-100 text-green-700"
-              : "bg-gray-100 text-gray-600"
-          }`}
-        >
+        {/* Status Badge at Bottom */}
+        <div className="mt-auto pt-3 border-t border-gray-200">
           <div
-            className={`w-2 h-2 rounded-full mr-1.5 ${
-              online ? "bg-green-500 animate-pulse" : "bg-gray-400"
+            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+              online
+                ? "bg-green-100 text-green-700"
+                : "bg-gray-100 text-gray-600"
             }`}
-          ></div>
-          {online ? "Active" : "Inactive"}
+          >
+            <div
+              className={`w-2 h-2 rounded-full mr-1.5 ${
+                online ? "bg-green-500 animate-pulse" : "bg-gray-400"
+              }`}
+            ></div>
+            {online ? "Active" : "Inactive"}
+          </div>
         </div>
       </div>
     </div>
