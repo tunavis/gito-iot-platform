@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 
 interface DeviceGroup {
