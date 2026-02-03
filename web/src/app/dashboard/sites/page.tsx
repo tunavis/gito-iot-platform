@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 
@@ -32,11 +32,7 @@ export default function SitesPage() {
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<string>('all');
 
-  useEffect(() => {
-    loadData();
-  }, [selectedOrg]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
@@ -64,7 +60,11 @@ export default function SitesPage() {
       setSites(json.data || []);
     }
     setLoading(false);
-  };
+  }, [selectedOrg]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const deleteSite = async (id: string) => {
     if (!confirm('Are you sure you want to delete this site? This will affect all associated devices.')) return;

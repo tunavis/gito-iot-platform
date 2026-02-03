@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { Shield, Mail, User as UserIcon, Edit2, Trash2, UserPlus } from 'lucide-react';
 
@@ -25,11 +25,7 @@ export default function UsersPage() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    loadUsers();
-  }, [filterRole, filterStatus, searchTerm]);
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
@@ -48,7 +44,11 @@ export default function UsersPage() {
       setUsers(json.data || []);
     }
     setLoading(false);
-  };
+  }, [filterRole, filterStatus, searchTerm]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   const deleteUser = async (id: string) => {
     if (!confirm('Are you sure you want to suspend this user? They will no longer be able to access the system.')) return;

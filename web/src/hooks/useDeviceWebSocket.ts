@@ -169,7 +169,7 @@ export function useDeviceWebSocket({
     return () => {
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [connect]);
 
   return {
     isConnected,

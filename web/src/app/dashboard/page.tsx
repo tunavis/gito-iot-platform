@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
@@ -41,11 +41,7 @@ export default function DashboardPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadDefaultDashboard();
-  }, []);
-
-  const loadDefaultDashboard = async () => {
+  const loadDefaultDashboard = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("auth_token");
@@ -115,7 +111,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    loadDefaultDashboard();
+  }, [loadDefaultDashboard]);
 
   const createDefaultDashboard = async (tenantId: string, token: string) => {
     try {

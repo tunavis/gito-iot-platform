@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
@@ -52,8 +52,7 @@ export default function DevicesPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
 
-  useEffect(() => {
-    const loadDevices = async () => {
+  const loadDevices = useCallback(async () => {
       try {
         const token = localStorage.getItem('auth_token');
         if (!token) {
@@ -76,13 +75,16 @@ export default function DevicesPage() {
         setDevices(data.data || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load devices');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDevices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load devices');
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
+
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
 
   // Bulk delete devices
   const handleBulkDelete = async () => {

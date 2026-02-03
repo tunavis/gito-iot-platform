@@ -2,7 +2,7 @@
 
 import { TrendingUp, TrendingDown, Minus, LucideIcon } from "lucide-react";
 import WidgetWrapper from "./WidgetWrapper";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 interface KPICardConfig {
   metric?: string;
@@ -54,9 +54,7 @@ export default function KPICard({
     threshold_critical,
   } = configuration;
 
-  useEffect(() => {
-    // Fetch latest value from device
-    const fetchData = async () => {
+  const fetchData = useCallback(async () => {
       try {
         console.log("[KPICard] data_sources:", data_sources);
 
@@ -157,15 +155,16 @@ export default function KPICard({
         });
         setLoading(false);
       }
-    };
+    }, [data_sources, metric, show_trend, trend_period]);
 
+  useEffect(() => {
     fetchData();
 
     // Set up auto-refresh
     const interval = setInterval(fetchData, 30000); // 30 seconds
 
     return () => clearInterval(interval);
-  }, [data_sources, metric, show_trend, trend_period]);
+  }, [fetchData]);
 
   // Determine color based on thresholds
   const getValueColor = () => {

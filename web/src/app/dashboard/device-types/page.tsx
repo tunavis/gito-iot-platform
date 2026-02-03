@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import {
@@ -111,11 +111,7 @@ export default function DeviceTypesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   // Fetch device types
-  useEffect(() => {
-    fetchDeviceTypes();
-  }, [searchQuery, categoryFilter, activeFilter]);
-
-  const fetchDeviceTypes = async () => {
+  const fetchDeviceTypes = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('auth_token');
@@ -148,6 +144,12 @@ export default function DeviceTypesPage() {
       setError(err instanceof Error ? err.message : 'Failed to load device types');
     } finally {
       setLoading(false);
+    }
+  }, [searchQuery, categoryFilter, activeFilter, router]);
+
+  useEffect(() => {
+    fetchDeviceTypes();
+  }, [fetchDeviceTypes]);
     }
   };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import {
@@ -152,13 +152,7 @@ export default function DeviceTypeFormPage() {
   });
 
   // Load existing device type if editing
-  useEffect(() => {
-    if (isEditMode) {
-      loadDeviceType();
-    }
-  }, [isEditMode]);
-
-  const loadDeviceType = async () => {
+  const loadDeviceType = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('auth_token');
@@ -208,7 +202,13 @@ export default function DeviceTypeFormPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isEditMode, params.id, router]);
+
+  useEffect(() => {
+    if (isEditMode) {
+      loadDeviceType();
+    }
+  }, [isEditMode, loadDeviceType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

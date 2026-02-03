@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import {
@@ -52,11 +52,7 @@ export default function TemplateGalleryPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
-
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -91,7 +87,11 @@ export default function TemplateGalleryPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
 
   const handleApplyTemplate = async (templateId: string) => {
     try {
