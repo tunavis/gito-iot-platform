@@ -9,15 +9,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install
-COPY pyproject.toml .
+COPY api/pyproject.toml .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir fastapi uvicorn sqlalchemy asyncpg psycopg pydantic pydantic-settings pyjwt passlib python-multipart python-dotenv redis tenacity paho-mqtt httpx aiohttp pydantic-extra-types python-jose email-validator apscheduler jinja2
 
 # Copy application code
-COPY app ./app
+COPY api/app ./app
 
 # Copy database migrations
-COPY ../db ./db
+COPY db ./db
 
 # Create non-root user
 RUN useradd -m -u 1000 gito && chown -R gito:gito /app
