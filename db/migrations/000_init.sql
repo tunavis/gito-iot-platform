@@ -488,20 +488,8 @@ INSERT INTO devices (
 -- ============================================================================
 -- SECTION 9: GRANT PERMISSIONS
 -- ============================================================================
-
--- Application user (read/write to tables)
-CREATE USER gito_app WITH PASSWORD 'app_password_change_in_production';
-GRANT CONNECT ON DATABASE gito TO gito_app;
-GRANT USAGE ON SCHEMA public TO gito_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gito_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gito_app;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO gito_app;
-
--- Read-only user (optional, for analytics)
-CREATE USER gito_readonly WITH PASSWORD 'readonly_password_change_in_production';
-GRANT CONNECT ON DATABASE gito TO gito_readonly;
-GRANT USAGE ON SCHEMA public TO gito_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO gito_readonly;
+-- Note: Application users are created via environment variables in Docker/k8s
+-- No need to create them here
 
 -- ============================================================================
 -- SECTION 10: FUNCTIONS & TRIGGERS
