@@ -10,6 +10,8 @@ from app.models.base import (
     AlertRuleCondition,
     AuditLog,
 )
+from app.models.organization import Organization
+from app.models.site import Site
 from app.models.device_group import DeviceGroup, GroupDevice, BulkOperation
 from app.models.notification import (
     NotificationChannel,
@@ -31,6 +33,8 @@ __all__ = [
     "AlertRule",
     "AlertRuleCondition",
     "AuditLog",
+    "Organization",
+    "Site",
     "DeviceGroup",
     "GroupDevice",
     "BulkOperation",

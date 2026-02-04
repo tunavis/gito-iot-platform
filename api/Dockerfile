@@ -10,14 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements and install
 COPY api/pyproject.toml .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir fastapi uvicorn sqlalchemy asyncpg psycopg pydantic pydantic-settings pyjwt passlib python-multipart python-dotenv redis tenacity paho-mqtt httpx aiohttp pydantic-extra-types python-jose email-validator apscheduler jinja2
-
-# Copy application code
 COPY api/app ./app
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e .
 
-# Copy database migrations
+# Copy database initialization
 COPY db ./db
+
+# Copy entrypoint script
+COPY api/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Create non-root user
 RUN useradd -m -u 1000 gito && chown -R gito:gito /app
@@ -29,6 +31,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-# Start application
-# Use 4 workers for production (adjust based on server CPU cores)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--log-level", "info"]
+# Start application with migration entrypoint
+CMD ["./entrypoint.sh"]

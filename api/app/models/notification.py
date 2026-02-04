@@ -113,7 +113,7 @@ class NotificationQueue(BaseModel):
     __table_args__ = (
         Index("idx_notification_queue_status", "status"),
         Index("idx_notification_queue_tenant", "tenant_id"),
-        Index("idx_notification_queue_created", "created_at", postgresql_using="DESC"),
+        Index("idx_notification_queue_created", "created_at", postgresql_ops={"created_at": "DESC"}),
         Index("idx_notification_queue_retry", "status", "created_at", postgresql_where="status = 'pending'"),
         CheckConstraint(
             "status IN ('pending', 'processing', 'completed', 'failed')",

@@ -22,7 +22,7 @@ class CompositeAlertRule(BaseModel):
     
     __tablename__ = "composite_alert_rules"
     
-    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    id = Column(PGUUID(as_uuid=True), primary_key=True)
     tenant_id = Column(PGUUID(as_uuid=True), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(String, nullable=True)
