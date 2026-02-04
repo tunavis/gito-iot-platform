@@ -86,10 +86,10 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           
           # Pull latest images
-          docker-compose -f docker-compose.staging.yml pull
+          docker-compose -f docker-compose.staging.yml --env-file .env.staging pull
           
           # Restart services
-          docker-compose -f docker-compose.staging.yml up -d
+          docker-compose -f docker-compose.staging.yml --env-file .env.staging up -d
           
           # Clean up old images
           docker image prune -af
