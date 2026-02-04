@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+      # Migrations are now handled by the API migration runner on startup
     ports:
       - "5433:5432"  # Different port to avoid conflicts
     networks:
