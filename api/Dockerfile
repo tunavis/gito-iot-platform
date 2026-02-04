@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY app ./app
 
+# Copy database migrations
+COPY ../db ./db
+
 # Create non-root user
 RUN useradd -m -u 1000 gito && chown -R gito:gito /app
 USER gito

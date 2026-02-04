@@ -17,6 +17,13 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     print(f"Starting {settings.APP_NAME} in {settings.APP_ENV} mode")
     
+    # Run database migrations BEFORE initializing
+    try:
+        from app.migrate import run_migrations
+        await run_migrations()
+    except Exception as e:
+        print(f"⚠️ Migration warning: {e}")
+    
     try:
         await init_db()
         print("✅ Database initialized")
