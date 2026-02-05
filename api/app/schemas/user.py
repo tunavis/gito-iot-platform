@@ -27,6 +27,7 @@ class UserUpdate(BaseModel):
     """Schema for updating an existing user."""
     email: Optional[EmailStr] = Field(None, description="User email address")
     full_name: Optional[str] = Field(None, min_length=1, max_length=255, description="User full name")
+    password: Optional[str] = Field(None, min_length=8, description="New password (min 8 chars) - only for admin password reset")
     role: Optional[str] = Field(
         None,
         pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$",

@@ -5,7 +5,9 @@ const nextConfig = {
 
   // API proxy for development
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // Use FASTAPI_URL for server-side rewrites (Docker service name)
+    // Falls back to localhost for local development
+    const apiUrl = process.env.FASTAPI_URL || 'http://localhost:8000';
     return {
       beforeFiles: [
         {

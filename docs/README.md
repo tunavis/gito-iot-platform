@@ -1,10 +1,19 @@
 # Gito IoT Platform - Documentation
 
-**Last Updated: 2026-01-31**
+**Last Updated: 2026-02-05**
 
 ## Overview
 
-This directory contains architectural documentation following the **C4 Model** (Context, Containers, Components, Code) with diagrams rendered using **Mermaid**.
+This directory contains architectural documentation following the **C4 Model** (Context, Containers, Components, Code) with diagrams rendered using **Mermaid**, plus operational guides for development and deployment.
+
+---
+
+## 🚀 Quick Start Guides
+
+**For developers, start here:**
+
+- **[Development Workflow](./DEVELOPMENT_WORKFLOW.md)** - Complete guide from local dev to staging deployment
+- **[Database Migrations](./MIGRATIONS.md)** - Alembic migration guide and troubleshooting
 
 ---
 
@@ -12,6 +21,12 @@ This directory contains architectural documentation following the **C4 Model** (
 
 ```
 /docs
+├── DEVELOPMENT_WORKFLOW.md  # 📘 Complete dev & deployment guide
+├── MIGRATIONS.md            # 📘 Alembic migrations guide
+├── GRAFANA.md               # Grafana dashboard setup
+├── UNIFIED_ALARMS_ARCHITECTURE.md
+├── ALARM_SYSTEM_IMPLEMENTATION.md
+│
 ├── architecture/     # C4 Model documentation
 │   ├── 01-context.md         # System Context (Level 1)
 │   ├── 02-containers.md      # Container diagram (Level 2)
@@ -131,11 +146,18 @@ See `adr/template.md` for the standard format.
 
 ## 🔍 Finding Documentation
 
-### By Topic:
+### Operational Guides (Day-to-Day Development):
+- **How do I develop locally?** → [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md)
+- **How do I create database migrations?** → [MIGRATIONS.md](./MIGRATIONS.md)
+- **How do I deploy to staging?** → [DEVELOPMENT_WORKFLOW.md#staging-deployment-automated](./DEVELOPMENT_WORKFLOW.md#staging-deployment-automated)
+- **Alembic troubleshooting?** → [MIGRATIONS.md#troubleshooting](./MIGRATIONS.md#troubleshooting)
+
+### Architecture Documentation:
 - **Architecture Overview:** `architecture/01-context.md`
 - **Database Design:** `diagrams/database-schema.md`
 - **API Structure:** `architecture/03-components/api-server.md`
 - **Auth Flow:** `diagrams/authentication-flow.md`
+- **Alarm System:** [UNIFIED_ALARMS_ARCHITECTURE.md](./UNIFIED_ALARMS_ARCHITECTURE.md)
 
 ### By Date:
 Check "Last Updated" field at top of each file.

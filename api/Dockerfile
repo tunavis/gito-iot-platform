@@ -14,8 +14,9 @@ COPY api/app ./app
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
 
-# Copy database initialization
-COPY db ./db
+# Copy Alembic migrations
+COPY api/alembic ./alembic
+COPY api/alembic.ini ./alembic.ini
 
 # Copy entrypoint script
 COPY api/entrypoint.sh ./entrypoint.sh

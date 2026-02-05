@@ -45,8 +45,7 @@ export default function Sidebar() {
         { label: 'Registration', href: '/dashboard/devices/new' },
         { label: 'All devices', href: '/dashboard/devices' },
         { label: 'Map', href: '/dashboard/devices/map' },
-        { label: 'Simulators', href: '/dashboard/devices/simulators' },
-        { label: 'Availability', href: '/dashboard/devices/availability' }
+        { label: 'Simulators', href: '/dashboard/devices/simulators' }
       ]
     },
     {

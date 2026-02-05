@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { Mail, Edit2, Trash2, UserPlus } from 'lucide-react';
+import { Mail, Edit2, Trash2, UserPlus, Key } from 'lucide-react';
 
 interface User {
   id: string;
@@ -21,6 +21,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [filterRole, setFilterRole] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,6 +69,36 @@ export default function UsersPage() {
     } else {
       const error = await res.json();
       alert(error.detail || 'Failed to suspend user');
+    }
+  };
+
+  const changePassword = async () => {
+    if (!changingPasswordUser || !newPassword) return;
+    if (newPassword.length < 8) {
+      alert('Password must be at least 8 characters');
+      return;
+    }
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+
+    const res = await fetch(`/api/v1/tenants/${tenant}/users/${changingPasswordUser.id}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password: newPassword })
+    });
+
+    if (res.ok) {
+      alert('Password changed successfully');
+      setChangingPasswordUser(null);
+      setNewPassword('');
+    } else {
+      const error = await res.json();
+      alert(error.detail || 'Failed to change password');
     }
   };
 
@@ -259,6 +291,13 @@ export default function UsersPage() {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => setChangingPasswordUser(user)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Change password"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => deleteUser(user.id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Suspend user"
@@ -273,6 +312,48 @@ export default function UsersPage() {
           </div>
         </div>
       </main>
+
+      {/* Change Password Modal */}
+      {changingPasswordUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Change Password</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Change password for <span className="font-semibold">{changingPasswordUser.email}</span>
+            </p>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Min 8 characters"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && changePassword()}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setChangingPasswordUser(null);
+                  setNewPassword('');
+                }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={changePassword}
+                disabled={newPassword.length < 8}
+                className="flex-1 px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              >
+                Change Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

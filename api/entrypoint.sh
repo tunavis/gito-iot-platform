@@ -3,11 +3,9 @@ set -e
 
 echo "🚀 Starting Gito IoT API..."
 
-# Run migrations from SQL on first start
-if [ -f "/app/db/init.sql" ]; then
-    echo "🔧 Initializing database..."
-    python /app/db/init_db.py || echo "Database already initialized"
-fi
+# Run Alembic migrations
+echo "🔧 Running database migrations..."
+alembic upgrade head
 
 # Start API
 echo "🌐 Starting API server..."

@@ -375,6 +375,10 @@ async def update_user(
             )
         update_data["email"] = update_data["email"].lower()
 
+    # Hash password if provided (admin password reset)
+    if "password" in update_data:
+        update_data["password_hash"] = hash_password(update_data.pop("password"))
+
     for key, value in update_data.items():
         setattr(user, key, value)
 

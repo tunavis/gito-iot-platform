@@ -88,8 +88,8 @@ services:
   # FastAPI Backend (REST API + WebSocket)
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./api/Dockerfile
     container_name: gito-api
     environment:
       DATABASE_URL: postgresql+asyncpg://gito:${DB_PASSWORD:-dev-password}@postgres:5432/gito
