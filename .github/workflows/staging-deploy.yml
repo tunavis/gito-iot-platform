@@ -79,22 +79,25 @@ jobs:
       - name: Deploy to Staging Server
         run: |
           cd /opt/gito-iot
-          
+
           # Pull latest code
           git pull origin staging
-          
+
           # Login to GitHub Container Registry
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          
+
           # Pull latest images
           docker-compose -f docker-compose.staging.yml --env-file .env.staging pull
-          
-          # Restart services
+
+          # Stop and remove old containers (prevents volume conflicts)
+          docker-compose -f docker-compose.staging.yml --env-file .env.staging down
+
+          # Start services with new images
           docker-compose -f docker-compose.staging.yml --env-file .env.staging up -d
-          
+
           # Clean up old images
           docker image prune -af
-          
+
           echo "✅ Staging deployment complete!"
 
       - name: Health Check
