@@ -20,24 +20,47 @@ Complete guide for developing locally and deploying to staging with GitHub Actio
 
 ## Local Development Setup
 
-### Starting the Stack
+### Port Usage (IMPORTANT)
+
+**⚠️ Always access via nginx on port 80:**
+- **Web UI**: http://localhost (via nginx) ✅
+- **API**: http://localhost/api (via nginx) ✅
+- **Direct ports 3000/8000**: ❌ Will NOT work correctly (no routing)
+
+**Why nginx is required:**
+- Frontend expects API at `/api/*` (relative URL)
+- nginx routes `/api/*` → FastAPI backend
+- nginx routes `/*` → Next.js frontend
+- Matches staging/production architecture exactly
+
+### Starting Development Environment
 
 ```bash
-# Start all services
-docker-compose up -d
+# Start all services (includes hot reload!)
+docker compose up -d
 
 # Check status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f api web
+docker compose logs -f          # All services
+docker compose logs -f web      # Frontend only
+docker compose logs -f api      # Backend only
 ```
 
-### Services Running Locally
+### Development Features
 
-- **Web UI**: http://localhost:3000
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+✅ **Hot Reload Enabled** - Changes appear in seconds:
+- **Frontend**: Edit `web/src/` → Save → Auto-refresh (< 2s)
+- **Backend**: Edit `api/app/` → Save → Auto-reload (< 5s)
+- **Processor**: Edit `processor/` → Save → Auto-reload
+
+✅ **Production Parity** - nginx routing matches staging exactly
+
+### Access Points
+
+- **Web UI**: http://localhost (nginx gateway)
+- **API Docs**: http://localhost:8000/docs (direct, for debugging)
 - **PostgreSQL**: localhost:5432
 - **MQTT**: localhost:1883
 - **KeyDB**: localhost:6379
@@ -71,30 +94,34 @@ docker-compose restart api
 
 **Location**: `web/src/`
 
-**Current Setup**: Production mode (requires rebuild)
+**Hot reload is ALWAYS enabled** - just edit and save:
 
 ```bash
-# Edit files in web/src/
-# After changes, rebuild:
-docker-compose build web && docker-compose up -d web
+# Edit any file in web/src/
+# Example: web/src/app/dashboard/page.tsx
+
+# Save the file → Changes appear instantly!
+# No rebuild needed, no restart needed
+# Access at: http://localhost
 ```
 
-**Recommended for faster development:**
+**How it works:**
+- Uses `Dockerfile.dev` (development mode)
+- Runs `npm run dev` (Next.js dev server)
+- Volume mounts `./web/` into container
+- Hot module replacement (HMR) enabled
 
-Create `docker-compose.dev.yml`:
-```yaml
-version: '3.8'
-services:
-  web:
-    command: npm run dev
-    environment:
-      NODE_ENV: development
-```
+**When restart IS needed:**
+- Dependency changes in `package.json`
+- Environment variable changes
+- `next.config.js` modifications
 
-Use dev mode:
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-# Now changes hot-reload instantly!
+# Restart frontend
+docker compose restart web
+
+# Or rebuild if dependencies changed
+docker compose build web && docker compose up -d web
 ```
 
 ---
@@ -455,28 +482,33 @@ docker exec gito-postgres psql -U gito -d gito -c "SELECT * FROM alembic_version
 
 ### Local Development
 
+**⚠️ ALWAYS use nginx on port 80** - Direct ports won't work correctly
+
 ```bash
-# Start stack
-docker-compose up -d
+# Start development environment (with hot reload)
+docker compose up -d
+# Access: http://localhost
 
 # View logs (all services)
-docker-compose logs -f
+docker compose logs -f
 
 # View specific service logs
-docker-compose logs -f api
-docker-compose logs -f web
+docker compose logs -f web      # Frontend
+docker compose logs -f api      # Backend
+docker compose logs -f nginx    # Reverse proxy
 
-# Restart service
-docker-compose restart api
+# Restart service (if needed after config changes)
+docker compose restart web
+docker compose restart api
 
-# Rebuild and restart
-docker-compose build web && docker-compose up -d web
+# Rebuild service (if dependencies changed)
+docker compose build web && docker compose up -d web
 
 # Stop everything
-docker-compose down
+docker compose down
 
-# Stop and remove volumes (DANGER!)
-docker-compose down -v
+# Stop and remove volumes (⚠️ DELETES ALL DATA!)
+docker compose down -v
 ```
 
 ### Alembic (Migrations)

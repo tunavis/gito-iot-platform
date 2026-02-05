@@ -1,267 +1,210 @@
 # Gito IoT Platform
 
-**A production-grade, multi-tenant IoT monitoring platform - Built as a Cumulocity competitor.**
+Multi-tenant SaaS IoT monitoring platform with real-time telemetry, alerting, and dashboard builder.
 
-## Quick Start (Phase 1)
-
-### Prerequisites
-- Docker & Docker Compose
-- Python 3.11+
-- Node.js 20+
-- Git
-
-### Setup
-
-1. **Clone and navigate**
-   ```bash
-   cd gito-iot-platform
-   ```
-
-2. **Create environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your values (for dev, defaults are fine)
-   ```
-
-3. **Start services**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Initialize database** (runs automatically on first startup)
-   - Database: http://localhost:5432
-   - Demo credentials: `admin@demo.gito.local` / `admin123` (in init.sql)
-
-5. **Access services**
-   - API Docs: http://localhost:8000/api/docs
-   - API Health: http://localhost:8000/api/health
-   - Frontend: http://localhost:3000 (coming next)
-
-## Architecture
-
-```
-Browser/Client
-    │
-    ├─ Next.js (Port 3000)
-    │   ├─ Server-side rendering
-    │   ├─ API routes (proxy to FastAPI)
-    │   └─ JWT middleware
-    │
-    ├─ FastAPI Backend (Port 8000)
-    │   ├─ REST API
-    │   ├─ JWT authentication
-    │   └─ RLS enforcement
-    │
-    ├─ PostgreSQL + TimescaleDB (Port 5432)
-    │   ├─ Multi-tenancy
-    │   ├─ Row-Level Security
-    │   └─ Time-series telemetry
-    │
-    ├─ Mosquitto MQTT (Port 1883)
-    │   └─ Device communication
-    │
-    ├─ KeyDB Cache (Port 6379)
-    │   └─ Rate limiting, sessions
-    │
-    └─ Nginx Reverse Proxy (Port 80/443)
-        └─ Request routing
-```
-
-## Project Structure
-
-```
-gito-iot-platform/
-├── api/                       # FastAPI backend
-│   ├── app/
-│   │   ├── main.py           # App factory
-│   │   ├── config.py         # Settings
-│   │   ├── security.py       # JWT & password
-│   │   ├── database.py       # SQLAlchemy setup
-│   │   ├── models/           # ORM models
-│   │   ├── schemas/          # Pydantic validation
-│   │   └── routers/          # API endpoints
-│   ├── Dockerfile
-│   └── pyproject.toml
-│
-├── web/                       # Next.js frontend (Phase 1.5)
-│   ├── src/
-│   │   ├── app/              # Pages & routes
-│   │   ├── components/       # React components
-│   │   ├── lib/              # Utilities
-│   │   └── styles/
-│   └── package.json
-│
-├── processor/                 # MQTT → Database worker (Phase 1.5)
-│   └── app/
-│
-├── db/                        # Database setup
-│   ├── init.sql              # Schema + RLS
-│   └── migrations/           # Alembic (future)
-│
-├── docker-compose.yml        # All services
-├── .env                      # Configuration (gitignored)
-└── .env.example              # Template
-```
-
-## API Endpoints (Phase 1)
-
-### Authentication
-```
-POST   /api/v1/auth/login      # Login with email/password
-POST   /api/v1/auth/refresh    # Refresh JWT token
-POST   /api/v1/auth/logout     # Logout
-```
-
-### Devices
-```
-GET    /api/v1/tenants/{tenant_id}/devices              # List devices
-POST   /api/v1/tenants/{tenant_id}/devices              # Create device
-GET    /api/v1/tenants/{tenant_id}/devices/{device_id}  # Get device
-PUT    /api/v1/tenants/{tenant_id}/devices/{device_id}  # Update device
-DELETE /api/v1/tenants/{tenant_id}/devices/{device_id}  # Delete device
-```
-
-## Development
-
-### Backend (FastAPI)
+## 🚀 Quick Start (Development)
 
 ```bash
-# Install dependencies
-cd api
-pip install -e ".[dev]"
+# Start all services
+docker compose up -d
 
-# Run tests
-pytest
-
-# Lint & format
-black app/
-ruff check app/
-mypy app/
+# Access application
+http://localhost
 ```
 
-### Frontend (Next.js - Phase 1.5)
-
-```bash
-# Install dependencies
-cd web
-npm install
-
-# Run dev server
-npm run dev
-
-# Build
-npm run build
-```
-
-## Database
-
-### Reset Database (Development Only)
-```bash
-docker-compose down -v  # Remove volumes
-docker-compose up       # Recreates from init.sql
-```
-
-### Connect to Database
-```bash
-psql postgresql://gito:dev-password@localhost:5432/gito
-```
-
-## Configuration
-
-Edit `.env` for:
-- Database credentials
-- JWT secret key (change in production!)
-- MQTT broker settings
-- ChirpStack integration (Phase 3)
-- Email SMTP (Phase 2)
-
-## Security Checklist
-
-- ✅ All dependencies MIT/Apache/BSD licensed
-- ✅ JWT tokens in HTTP-only cookies (client-side: Next.js)
-- ✅ Database RLS enforced on all tenant data
-- ✅ Password hashing with bcrypt (12 rounds)
-- ✅ Tenant validation on every API request
-- ✅ No secrets in code (use .env)
-- ⚠️ Generate strong JWT_SECRET_KEY for production
-- ⚠️ Use HTTPS in production
-- ⚠️ Configure CORS correctly in production
-
-## Phase Progress
-
-### ✅ Phase 1: Foundation (Current)
-- [x] Monorepo structure
-- [x] Docker Compose setup
-- [x] PostgreSQL schema with RLS
-- [x] FastAPI app factory
-- [x] JWT authentication
-- [x] Device CRUD API
-- [ ] Next.js frontend (Phase 1.5)
-- [ ] MQTT processor (Phase 1.5)
-
-### ⏳ Phase 2: Core Features (Weeks 3-4)
-- Real-time telemetry (WebSocket)
-- Time-series charts
-- Device health scoring
-- Email alerts
-
-### ⏳ Phase 3: Advanced (Weeks 5-6)
-- ChirpStack integration
-- OTA firmware updates
-- Alert rules engine
-- Tenant management UI
-
-### ⏳ Phase 4: Production (Weeks 7-8)
-- Monitoring dashboards (Grafana)
-- Backup/restore procedures
-- Docker Swarm deployment
-- Customer onboarding
-
-## Troubleshooting
-
-### Database Connection Error
-```
-docker-compose logs postgres
-# Check if postgres is healthy: docker-compose ps
-```
-
-### API Not Starting
-```
-docker-compose logs api
-# Check .env file has DATABASE_URL
-```
-
-### Port Already in Use
-```
-# Find what's using port
-lsof -i :8000  # macOS/Linux
-netstat -ano | findstr :8000  # Windows
-
-# Kill process
-kill -9 <PID>
-```
-
-## Contributing
-
-1. Create feature branch: `git checkout -b feature/xxx`
-2. Commit changes: `git commit -m "Add xxx"`
-3. Push: `git push origin feature/xxx`
-4. Create pull request
-
-## License
-
-Apache 2.0 - See LICENSE file
-
-## Support
-
-For issues, check:
-1. `.env` configuration
-2. Docker logs: `docker-compose logs <service>`
-3. Database health: `docker exec gito-postgres pg_isready -U gito`
-4. API docs: http://localhost:8000/api/docs
+**⚠️ IMPORTANT**: Always use **http://localhost** (port 80 via nginx)  
+Direct port access (3000, 8000) won't work correctly due to API routing.
 
 ---
 
-**Built with:** FastAPI, Next.js, PostgreSQL, TimescaleDB, Mosquitto, Docker
+## 📁 Project Structure
 
-**Status:** Phase 1 - Foundation Complete ✅
+```
+├── api/                # FastAPI backend
+├── web/                # Next.js frontend
+├── db/                 # PostgreSQL + TimescaleDB
+├── processor/          # MQTT telemetry processor
+├── nginx/              # Reverse proxy config
+├── docs/               # Detailed documentation
+└── docker-compose.yml  # Development environment
+```
+
+---
+
+## 🔥 Hot Reload (Enabled)
+
+All code changes auto-reload:
+- **Frontend** (`web/src/`): Save → Reload in < 2s
+- **Backend** (`api/app/`): Save → Reload in < 5s
+- **Processor** (`processor/`): Save → Auto-reload
+
+---
+
+## 📋 Common Commands
+
+```bash
+# Start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+docker compose logs -f web      # Frontend only
+docker compose logs -f api      # Backend only
+
+# Restart after config changes
+docker compose restart web
+docker compose restart api
+
+# Rebuild after dependency changes
+docker compose build web && docker compose up -d web
+
+# Stop
+docker compose down
+```
+
+---
+
+## 🚢 Deployment
+
+**Staging deployment is automated:**
+
+```bash
+# Push to staging branch
+git push origin staging
+
+# GitHub Actions automatically:
+# 1. Builds production images
+# 2. Pushes to ghcr.io
+# 3. Deploys to staging server
+```
+
+---
+
+## 📚 Documentation
+
+- **[Development Workflow](docs/DEVELOPMENT_WORKFLOW.md)** - Complete dev guide
+- **[CI/CD Setup](docs/setup/CI-CD-SETUP.md)** - Automated deployment
+- **[Migrations](docs/MIGRATIONS.md)** - Database migrations (Alembic)
+- **[Dashboard Implementation](docs/implementation/DASHBOARD_README.md)** - Dashboard builder
+
+---
+
+## 🏗️ Architecture
+
+```
+http://localhost (nginx:80)
+ ├─ /api/*  →  api:8000     (FastAPI + PostgreSQL)
+ └─ /*      →  web:3000     (Next.js)
+```
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **nginx** | 80 | Reverse proxy (gateway) |
+| **web** | 3000 | Next.js frontend (dev mode) |
+| **api** | 8000 | FastAPI backend |
+| **postgres** | 5432 | PostgreSQL + TimescaleDB |
+| **keydb** | 6379 | Redis-compatible cache |
+| **mosquitto** | 1883 | MQTT broker |
+| **processor** | - | Telemetry processor |
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend
+- FastAPI (Python 3.11)
+- PostgreSQL 15 + TimescaleDB
+- SQLAlchemy + Alembic
+- KeyDB (Redis)
+- MQTT (Mosquitto)
+
+### Frontend
+- Next.js 14 (App Router)
+- React 18
+- TypeScript
+- Tailwind CSS
+- React Grid Layout
+
+### DevOps
+- Docker + Docker Compose
+- GitHub Actions
+- nginx
+- Self-hosted runner
+
+---
+
+## ⚙️ Environment Configuration
+
+Create `.env` for development:
+
+```bash
+DB_PASSWORD=your-db-password
+JWT_SECRET_KEY=your-secret-key-min-32-chars
+MQTT_USERNAME=admin
+MQTT_PASSWORD=mqtt-password
+```
+
+**⚠️ Never commit `.env` or `.env.staging` files!**
+
+---
+
+## 🔍 Troubleshooting
+
+### "API calls failing"
+→ Use **http://localhost** (port 80), not direct ports
+
+### "Changes not reflecting"
+→ Check logs: `docker compose logs -f web`
+
+### "Database connection failed"
+→ Check postgres: `docker compose logs postgres`
+
+### "Port 80 already in use"
+→ Find conflicting process: `netstat -ano | findstr :80` (Windows)
+
+---
+
+## 📊 Current Status
+
+✅ **Production-Ready Features:**
+- Authentication & Authorization (RBAC)
+- Multi-tenancy (Row-level security)
+- Device Management
+- Alert Rules & Alarms
+- Notifications (Email)
+- Dashboard Builder (KPI Cards, Charts)
+- Solution Templates
+
+⏳ **Planned:**
+- Gauge/Map/Table widgets
+- Grafana integration
+- OTA firmware updates
+
+---
+
+## 🤝 Contributing
+
+1. Work on `main` branch
+2. Test locally: `docker compose up`
+3. Commit with conventional commits: `feat:`, `fix:`, `docs:`
+4. Deploy to staging: `git push origin staging`
+
+---
+
+## 📝 License
+
+Proprietary - All Rights Reserved
+
+---
+
+## 🆘 Help
+
+- [Development Workflow Guide](docs/DEVELOPMENT_WORKFLOW.md)
+- [Troubleshooting](docs/DEVELOPMENT_WORKFLOW.md#troubleshooting)
+- GitHub Issues: Report bugs/features
+
+---
+
+**Last Updated**: 2025-02-05

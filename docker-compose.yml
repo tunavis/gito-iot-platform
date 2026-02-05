@@ -74,6 +74,9 @@ services:
       MQTT_PORT: 1883
       MQTT_USERNAME: ${MQTT_USERNAME:-admin}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-admin-password}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+    volumes:  # Development mode - live code sync
+      - ./processor:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,7 +88,7 @@ services:
       - gito-network
     restart: unless-stopped
 
-  # FastAPI Backend (REST API + WebSocket)
+  # FastAPI Backend (REST API + WebSocket) - DEVELOPMENT MODE
   api:
     build:
       context: .
@@ -100,10 +103,10 @@ services:
       MQTT_BROKER_PORT: 1883
       MQTT_USERNAME: ${MQTT_USERNAME:-admin}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-admin-password}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: DEBUG
+      ENVIRONMENT: development
     ports:
-      - "8000:8000"
+      - "8000:8000"  # Direct access for debugging (also routed via nginx)
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,8 +114,9 @@ services:
         condition: service_healthy
       mosquitto:
         condition: service_started
-    volumes:
+    volumes:  # Hot reload - live code sync
       - ./api:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # Auto-reload on code changes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 10s
@@ -123,28 +127,27 @@ services:
       - gito-network
     restart: unless-stopped
 
-  # Next.js Frontend (Gateway + UI)
+  # Next.js Frontend (Gateway + UI) - DEVELOPMENT MODE
   web:
     build:
       context: ./web
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev  # Use dev Dockerfile for hot reload
     container_name: gito-web
     environment:
       FASTAPI_URL: http://api:8000
-      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_API_URL: /api  # Routes through nginx
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-min-32-chars-xxxxx}
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: development
     ports:
-      - "3000:3000"
+      - "3000:3000"  # Only nginx (port 80) should be accessed directly
     depends_on:
       api:
         condition: service_healthy
-    volumes:  # Development mode - live code sync
-      - ./web/src:/app/src
-      - ./web/public:/app/public
-      - ./web/next.config.js:/app/next.config.js
+    volumes:  # Hot reload - live code sync
+      - ./web:/app
       - /app/node_modules
       - /app/.next
+    command: npm run dev  # Development server with hot reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s
