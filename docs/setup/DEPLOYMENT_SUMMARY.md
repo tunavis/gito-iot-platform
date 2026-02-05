@@ -66,9 +66,11 @@ docker-compose up -d
 ```
 
 ### Step 3: Access
-- **Frontend**: http://localhost:3000
-- **API Docs**: http://localhost:8000/api/docs
+- **Frontend**: http://localhost (via nginx)
+- **API Docs**: http://localhost:8000/docs (direct access for debugging)
 - **Cadence**: http://localhost:8088
+
+⚠️ **IMPORTANT**: Always use http://localhost (port 80) - Direct port access won't work correctly.
 
 **Total time**: ~2 minutes
 
@@ -392,6 +394,64 @@ Expected performance on development machine:
 15. Configure log aggregation
 16. Set up monitoring & alerting
 17. Load test with real devices
+
+---
+
+## Staging/Production Deployment
+
+### Architecture with External Reverse Proxy
+
+Both staging and production use internal nginx + external reverse proxy:
+
+```
+External Reverse Proxy (Nginx Proxy Manager/Caddy/Traefik)
+  └─ your-domain.com:443 (SSL) → nginx:80 (internal)
+
+Internal nginx:80
+  ├─ /api/* → api:8000 (FastAPI)
+  └─ /*     → web:3000 (Next.js)
+```
+
+### Configuring External Reverse Proxy Manager
+
+**Single Proxy Host Entry:**
+```
+Domain: staging.example.com
+Scheme: https
+Forward Hostname/IP: nginx  (or gito-nginx-staging)
+Forward Port: 80
+SSL Certificate: (Let's Encrypt or custom)
+```
+
+**That's it!** Internal nginx handles all routing to api and web.
+
+### Deployment Commands
+
+```bash
+# Push to staging branch (auto-deploys via GitHub Actions)
+git checkout staging
+git merge main
+git push origin staging
+
+# Or manually on server
+cd /opt/gito-iot
+git pull origin staging
+docker compose -f docker-compose.staging.yml pull
+docker compose -f docker-compose.staging.yml up -d
+```
+
+### Verify Deployment
+
+```bash
+# Check containers
+docker compose -f docker-compose.staging.yml ps
+
+# Test internal routing
+curl http://localhost/api/health
+
+# Test external access
+curl https://staging.example.com
+```
 
 ---
 
