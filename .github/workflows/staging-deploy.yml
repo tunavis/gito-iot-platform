@@ -89,8 +89,11 @@ jobs:
           # Pull latest images (using Docker Compose V2 - no hyphen)
           docker compose -f docker-compose.staging.yml --env-file .env.staging pull
 
-          # Stop and remove old containers (prevents volume conflicts)
-          docker compose -f docker-compose.staging.yml --env-file .env.staging down
+          # Force stop and remove old containers
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans
+
+          # Force remove any remaining containers by name (in case down failed)
+          docker rm -f gito-api-staging gito-web-staging 2>/dev/null || true
 
           # Start services with new images
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
