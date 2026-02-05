@@ -86,14 +86,14 @@ jobs:
           # Login to GitHub Container Registry
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-          # Pull latest images
-          docker-compose -f docker-compose.staging.yml --env-file .env.staging pull
+          # Pull latest images (using Docker Compose V2 - no hyphen)
+          docker compose -f docker-compose.staging.yml --env-file .env.staging pull
 
           # Stop and remove old containers (prevents volume conflicts)
-          docker-compose -f docker-compose.staging.yml --env-file .env.staging down
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down
 
           # Start services with new images
-          docker-compose -f docker-compose.staging.yml --env-file .env.staging up -d
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
 
           # Clean up old images
           docker image prune -af
