@@ -43,10 +43,12 @@ interface ProtocolConfigFormProps {
 
 export default function ProtocolConfigForm({ protocol, config, onChange }: ProtocolConfigFormProps) {
   const updateConfig = (protocolKey: string, updates: any) => {
+    const currentConfig = config[protocolKey as keyof ProtocolConfig];
+    const baseConfig = typeof currentConfig === 'object' && currentConfig !== null ? currentConfig : {};
     onChange({
       ...config,
       [protocolKey]: {
-        ...config[protocolKey as keyof ProtocolConfig],
+        ...baseConfig,
         ...updates
       }
     });
