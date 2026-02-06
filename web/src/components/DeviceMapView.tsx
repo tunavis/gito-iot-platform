@@ -5,11 +5,19 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  color: string;
+}
+
 interface MapDevice {
   id: string;
   name: string;
-  device_type: string;
-  device_type_id?: string;
+  device_type_id: string;
+  device_type?: DeviceType;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -129,8 +137,14 @@ export default function DeviceMapView({ devices, selectedDevice, onSelectDevice 
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Type:</span>
-                    <span className="text-gray-900 text-xs">
-                      {device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded"
+                      style={{
+                        backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f1f5f9',
+                        color: device.device_type?.color || '#111827'
+                      }}
+                    >
+                      {device.device_type?.name || 'Unknown Type'}
                     </span>
                   </div>
                   {device.battery_level !== null && (

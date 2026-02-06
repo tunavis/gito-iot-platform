@@ -26,10 +26,21 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  color: string;
+  manufacturer?: string;
+  model?: string;
+}
+
 interface Device {
   id: string;
   name: string;
-  device_type: string;
+  device_type_id: string;
+  device_type?: DeviceType;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -307,7 +318,7 @@ export default function DeviceDetailPage() {
               <div className="flex items-center gap-3 text-sm text-gray-600">
                 <span className="font-mono bg-gray-100 px-2 py-1 rounded">{deviceId}</span>
                 <span>•</span>
-                <span>{device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                <span>{device.device_type?.name || 'Unknown Type'}</span>
                 {device.location && (
                   <>
                     <span>•</span>
@@ -486,8 +497,15 @@ export default function DeviceDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Device Type</p>
-                  <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">
-                    {device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  <p
+                    className="text-sm font-medium px-3 py-2 rounded border"
+                    style={{
+                      backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f9fafb',
+                      borderColor: device.device_type?.color ? `${device.device_type.color}40` : '#e5e7eb',
+                      color: device.device_type?.color || '#111827'
+                    }}
+                  >
+                    {device.device_type?.name || 'Unknown Type'}
                   </p>
                 </div>
                 <div>
@@ -1149,7 +1167,7 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [formData, setFormData] = useState({ name: device.name, device_type: device.device_type });
+  const [formData, setFormData] = useState({ name: device.name });
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [showNewRule, setShowNewRule] = useState(false);
 
@@ -1236,7 +1254,7 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => { setEditing(false); setFormData({ name: device.name }); }} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={saveDevice} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">Save Changes</button>
             </div>
           )}
@@ -1252,11 +1270,17 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Device Type</label>
-            {editing ? (
-              <input value={formData.device_type} onChange={e => setFormData(prev => ({ ...prev, device_type: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            ) : (
-              <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-200">{device.device_type}</p>
-            )}
+            <p
+              className="text-sm font-medium px-3 py-2.5 rounded-lg border"
+              style={{
+                backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f9fafb',
+                borderColor: device.device_type?.color ? `${device.device_type.color}40` : '#e5e7eb',
+                color: device.device_type?.color || '#111827'
+              }}
+            >
+              {device.device_type?.name || 'Unknown Type'}
+            </p>
+            {editing && <p className="text-xs text-gray-500 mt-1">Device type cannot be changed after creation</p>}
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Device ID</label>

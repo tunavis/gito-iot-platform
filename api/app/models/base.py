@@ -5,7 +5,7 @@ from sqlalchemy import (
     Text, Integer, Float, Index, Boolean
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 import uuid
 
@@ -59,14 +59,15 @@ class Device(BaseModel):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+
     # Hierarchy: Organization → Site → Device Group → Device
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
     device_group_id = Column(UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="SET NULL"), nullable=True, index=True)
-    
+
     name = Column(String(255), nullable=False)
-    device_type = Column(String(100), nullable=False)
+    device_type_id = Column(UUID(as_uuid=True), ForeignKey("device_types.id", ondelete="RESTRICT"), nullable=False, index=True)
+    device_type = Column(String(100), nullable=True)  # DEPRECATED: Legacy string field, use device_type_id
     dev_eui = Column(String(16), nullable=True)  # For LoRaWAN (alias for lorawan_dev_eui)
     status = Column(String(50), default="offline", nullable=False)
     last_seen = Column(DateTime(timezone=True))
@@ -78,6 +79,14 @@ class Device(BaseModel):
     ttn_synced = Column(Boolean, default=False, nullable=False)  # Whether device is synced to TTN server
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    device_type_rel = relationship(
+        "DeviceType",
+        foreign_keys=[device_type_id],
+        lazy="select",  # Can be eager-loaded with joinedload()
+        viewonly=True  # Read-only relationship (device_count maintained by triggers)
+    )
 
     __table_args__ = (
         Index("idx_devices_status", "status"),

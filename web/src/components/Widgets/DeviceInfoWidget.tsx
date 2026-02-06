@@ -33,10 +33,19 @@ interface DeviceInfoWidgetProps {
   }>;
 }
 
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  color: string;
+}
+
 interface DeviceData {
   id: string;
   name: string;
-  device_type?: string;
+  device_type_id?: string;
+  device_type?: DeviceType;
   status?: string;
   last_seen?: string;
   latitude?: number;
@@ -150,10 +159,10 @@ export default function DeviceInfoWidget({
     return `${diffDays}d ago`;
   };
 
-  const getDeviceIcon = (deviceType?: string) => {
+  const getDeviceIcon = (deviceType?: DeviceType) => {
     if (!deviceType) return <Activity className="w-8 h-8" />;
 
-    const type = deviceType.toLowerCase();
+    const type = (deviceType.name || deviceType.category || '').toLowerCase();
 
     // Water meter - custom SVG illustration
     if (type.includes("water") || type.includes("flow")) {
@@ -227,10 +236,10 @@ export default function DeviceInfoWidget({
     return <Activity className="w-8 h-8" />;
   };
 
-  const getDeviceColor = (deviceType?: string) => {
+  const getDeviceColor = (deviceType?: DeviceType) => {
     if (!deviceType) return "from-blue-500 to-blue-600";
 
-    const type = deviceType.toLowerCase();
+    const type = (deviceType.name || deviceType.category || '').toLowerCase();
     if (type.includes("water") || type.includes("flow")) {
       return "from-cyan-500 to-blue-600";
     }
@@ -323,8 +332,14 @@ export default function DeviceInfoWidget({
             {device.name || "Unknown Device"}
           </h3>
           {device.device_type && (
-            <p className="text-sm text-gray-500 capitalize">
-              {device.device_type.replace(/_/g, " ")}
+            <p
+              className="text-sm font-medium px-2 py-0.5 rounded inline-block"
+              style={{
+                backgroundColor: device.device_type.color ? `${device.device_type.color}20` : '#f3f4f6',
+                color: device.device_type.color || '#6b7280'
+              }}
+            >
+              {device.device_type.name}
             </p>
           )}
         </div>

@@ -3,23 +3,28 @@
 import { X, Check, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-interface Device {
-  id: string;
-  name: string;
-  device_type_id: string;
-  device_type: string | {
-    id: string;
-    name: string;
-    telemetry_schema: Record<string, TelemetryField>;
-  };
-}
-
 interface TelemetryField {
   type: string;
   unit?: string;
   min?: number;
   max?: number;
   description?: string;
+}
+
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  color: string;
+  data_model?: Record<string, TelemetryField>;
+}
+
+interface Device {
+  id: string;
+  name: string;
+  device_type_id: string;
+  device_type?: DeviceType;
 }
 
 interface DeviceBindingModalProps {
@@ -88,38 +93,8 @@ export default function DeviceBindingModal({
       const result = await response.json();
       const deviceList = result.data || [];
 
-      // Fetch device types for devices that have them
-      const devicesWithTypes = await Promise.all(
-        deviceList.map(async (device: any) => {
-          if (device.device_type_id) {
-            try {
-              const typeResponse = await fetch(
-                `/api/v1/tenants/${tenantId}/device-types/${device.device_type_id}`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
-              );
-
-              if (typeResponse.ok) {
-                const typeData = await typeResponse.json();
-                // Handle both wrapped and unwrapped responses
-                const deviceType = typeData.data || typeData;
-                return {
-                  ...device,
-                  device_type: deviceType
-                };
-              }
-            } catch (error) {
-              console.error(`Failed to fetch type for device ${device.name}:`, error);
-            }
-          }
-          return { ...device, device_type: device.device_type || 'No Type' };
-        })
-      );
-
-      setDevices(devicesWithTypes);
+      // API now returns nested device_type via joinedload - no need to fetch separately
+      setDevices(deviceList);
     } catch (error) {
       console.error("Error fetching devices:", error);
     } finally {
@@ -128,9 +103,7 @@ export default function DeviceBindingModal({
   };
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
-  const availableMetrics = typeof selectedDevice?.device_type === 'object' 
-    ? selectedDevice.device_type.telemetry_schema 
-    : {};
+  const availableMetrics = selectedDevice?.device_type?.data_model || {};
 
   // Fetch recent telemetry to discover actual metrics
   useEffect(() => {
@@ -303,8 +276,7 @@ export default function DeviceBindingModal({
                       {devices.map((device) => (
                         <option key={device.id} value={device.id}>
                           {device.name}
-                          {typeof device.device_type === 'string' && device.device_type !== 'No Type' && ` (${device.device_type})`}
-                          {typeof device.device_type === 'object' && device.device_type.name !== 'No Type' && ` (${device.device_type.name})`}
+                          {device.device_type?.name && ` (${device.device_type.name})`}
                         </option>
                       ))}
                     </select>

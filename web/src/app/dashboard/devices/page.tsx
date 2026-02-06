@@ -19,17 +19,28 @@ import {
   BatteryWarning
 } from 'lucide-react';
 
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  color: string;
+  manufacturer?: string;
+  model?: string;
+}
+
 interface Device {
   id: string;
   tenant_id: string;
   name: string;
-  device_type: string;
+  device_type_id: string;
+  device_type?: DeviceType;  // Nested device type info from API
   status: 'online' | 'offline' | 'idle' | 'error';
   last_seen: string | null;
   battery_level: number | null;
   dev_eui?: string;
   ttn_app_id?: string;
-  metadata: Record<string, any>;
+  attributes: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
@@ -125,8 +136,17 @@ export default function DevicesPage() {
   // Sort devices
   const sortDevices = (devices: Device[]) => {
     return [...devices].sort((a, b) => {
-      let aVal: any = a[sortField];
-      let bVal: any = b[sortField];
+      let aVal: any;
+      let bVal: any;
+
+      // Handle nested device_type field
+      if (sortField === 'device_type') {
+        aVal = a.device_type?.name;
+        bVal = b.device_type?.name;
+      } else {
+        aVal = a[sortField];
+        bVal = b[sortField];
+      }
 
       // Handle null values
       if (aVal === null || aVal === undefined) return 1;
@@ -149,11 +169,12 @@ export default function DevicesPage() {
   // Filter and search devices
   const filteredDevices = useMemo(() => {
     let filtered = devices.filter(device => {
-      const matchesSearch = searchQuery === '' || 
+      const deviceTypeName = device.device_type?.name || '';
+      const matchesSearch = searchQuery === '' ||
         device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        device.device_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        deviceTypeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         device.id.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchesStatus = statusFilter === 'all' || device.status === statusFilter;
       
       return matchesSearch && matchesStatus;
@@ -488,8 +509,14 @@ export default function DevicesPage() {
                       <span className={`w-2 h-2 rounded-full ${getStatusDotColor(device.status)} ${device.status === 'online' ? 'animate-pulse' : ''}`}></span>
                       {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
                     </span>
-                    <span className="text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
-                      {device.device_type}
+                    <span
+                      className="text-xs font-medium px-2.5 py-1 rounded"
+                      style={{
+                        backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f1f5f9',
+                        color: device.device_type?.color || '#64748b'
+                      }}
+                    >
+                      {device.device_type?.name || 'Unknown Type'}
                     </span>
                   </div>
                 </div>
@@ -634,8 +661,14 @@ export default function DevicesPage() {
                         </Link>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700">
-                          {device.device_type}
+                        <span
+                          className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium"
+                          style={{
+                            backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f1f5f9',
+                            color: device.device_type?.color || '#64748b'
+                          }}
+                        >
+                          {device.device_type?.name || 'Unknown Type'}
                         </span>
                       </td>
                       <td className="px-6 py-4">

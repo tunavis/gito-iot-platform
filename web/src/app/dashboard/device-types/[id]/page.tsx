@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import ProtocolSelector, { ProtocolType } from '@/components/ProtocolSelector';
+import ProtocolConfigForm, { ProtocolConfig } from '@/components/ProtocolConfigForm';
 import {
   ArrowLeft,
   Save,
@@ -39,12 +41,6 @@ interface DefaultSettings {
   offline_threshold: number;
 }
 
-interface Connectivity {
-  protocol: string;
-  lorawan_class?: string;
-  mqtt_topic_template?: string;
-}
-
 interface DeviceTypeForm {
   name: string;
   description: string;
@@ -56,7 +52,7 @@ interface DeviceTypeForm {
   data_model: DataModelField[];
   capabilities: string[];
   default_settings: DefaultSettings;
-  connectivity: Connectivity;
+  connectivity: ProtocolConfig;
   is_active: boolean;
 }
 
@@ -93,15 +89,6 @@ const FIELD_TYPES = [
   { value: "array", label: "Array" },
 ];
 
-const PROTOCOLS = [
-  { value: "mqtt", label: "MQTT" },
-  { value: "lorawan", label: "LoRaWAN" },
-  { value: "http", label: "HTTP/REST" },
-  { value: "coap", label: "CoAP" },
-  { value: "websocket", label: "WebSocket" },
-  { value: "modbus", label: "Modbus" },
-];
-
 const COLORS = [
   "#10b981", // Green
   "#3b82f6", // Blue
@@ -129,7 +116,12 @@ const DEFAULT_FORM: DeviceTypeForm = {
     offline_threshold: 900,
   },
   connectivity: {
-    protocol: "mqtt",
+    protocol: "mqtt" as ProtocolType,
+    mqtt: {
+      topic_pattern: "{{tenant_id}}/devices/{{device_id}}/telemetry",
+      qos: 1,
+      retain: false,
+    },
   },
   is_active: true,
 };
@@ -797,85 +789,34 @@ export default function DeviceTypeFormPage() {
             </button>
 
             {expandedSections.connectivity && (
-              <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-4">
+              <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-6">
                 <p className="text-sm text-gray-600">
-                  Default connectivity settings for devices of this type.
+                  Configure the communication protocol and connection settings for devices of this type.
                 </p>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Protocol
-                    </label>
-                    <select
-                      value={form.connectivity.protocol}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          connectivity: {
-                            ...form.connectivity,
-                            protocol: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      {PROTOCOLS.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <ProtocolSelector
+                  value={form.connectivity.protocol}
+                  onChange={(protocol) => {
+                    setForm({
+                      ...form,
+                      connectivity: {
+                        ...form.connectivity,
+                        protocol,
+                      },
+                    });
+                  }}
+                />
 
-                  {form.connectivity.protocol === 'lorawan' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        LoRaWAN Class
-                      </label>
-                      <select
-                        value={form.connectivity.lorawan_class || 'A'}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            connectivity: {
-                              ...form.connectivity,
-                              lorawan_class: e.target.value,
-                            },
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="A">Class A</option>
-                        <option value="B">Class B</option>
-                        <option value="C">Class C</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {form.connectivity.protocol === 'mqtt' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        MQTT Topic Template
-                      </label>
-                      <input
-                        type="text"
-                        value={form.connectivity.mqtt_topic_template || ''}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            connectivity: {
-                              ...form.connectivity,
-                              mqtt_topic_template: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="devices/{device_id}/telemetry"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                  )}
-                </div>
+                <ProtocolConfigForm
+                  protocol={form.connectivity.protocol}
+                  config={form.connectivity}
+                  onChange={(connectivity) => {
+                    setForm({
+                      ...form,
+                      connectivity,
+                    });
+                  }}
+                />
               </div>
             )}
           </div>

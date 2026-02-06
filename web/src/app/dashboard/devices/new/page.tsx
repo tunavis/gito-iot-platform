@@ -222,14 +222,15 @@ export default function NewDevicePage() {
       const body: any = {
         name: deviceInfo.name,
         device_type_id: selectedType.id,
-        device_type: selectedType.category, // Legacy field
-        description: deviceInfo.description || undefined,
-        serial_number: deviceInfo.serial_number || undefined,
-        tags: deviceInfo.tags.length > 0 ? deviceInfo.tags : undefined,
+        attributes: {
+          description: deviceInfo.description || undefined,
+          serial_number: deviceInfo.serial_number || undefined,
+          tags: deviceInfo.tags.length > 0 ? deviceInfo.tags : undefined,
+          latitude: placement.latitude ? parseFloat(placement.latitude) : undefined,
+          longitude: placement.longitude ? parseFloat(placement.longitude) : undefined,
+        },
         site_id: placement.site_id || undefined,
         device_group_id: placement.device_group_id || undefined,
-        latitude: placement.latitude ? parseFloat(placement.latitude) : undefined,
-        longitude: placement.longitude ? parseFloat(placement.longitude) : undefined,
       };
 
       // Add connectivity based on protocol

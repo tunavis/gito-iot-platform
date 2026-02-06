@@ -3,12 +3,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from typing import Annotated, Optional
 from uuid import UUID
 import logging
 
 from app.database import get_session, RLSSession
 from app.models.base import Device
+from app.models.device_type import DeviceType
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.security import decode_token
@@ -64,12 +66,14 @@ async def list_devices(
         )
     
     await session.set_tenant_context(tenant_id)
-    
-    # Build query with optional filters
+
+    # Build query with optional filters - JOIN with device_types for nested info
     base_filter = Device.tenant_id == tenant_id
-    query = select(Device).where(base_filter)
+    query = select(Device).options(
+        joinedload(Device.device_type_rel)  # Eager load device type relationship
+    ).where(base_filter)
     count_query = select(func.count(Device.id)).where(base_filter)
-    
+
     if organization_id:
         query = query.where(Device.organization_id == organization_id)
         count_query = count_query.where(Device.organization_id == organization_id)
@@ -79,18 +83,18 @@ async def list_devices(
     if device_group_id:
         query = query.where(Device.device_group_id == device_group_id)
         count_query = count_query.where(Device.device_group_id == device_group_id)
-    
+
     count_result = await session.execute(count_query)
     total = count_result.scalar() or 0
-    
+
     offset = (page - 1) * per_page
     query = query.offset(offset).limit(per_page).order_by(Device.created_at.desc())
-    
+
     result = await session.execute(query)
-    devices = result.scalars().all()
-    
+    devices = result.scalars().unique().all()  # unique() required when using joinedload
+
     return SuccessResponse(
-        data=[DeviceResponse.from_orm(d) for d in devices],
+        data=[DeviceResponse.model_validate(d) for d in devices],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
 
@@ -103,7 +107,7 @@ async def create_device(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
 ):
     """Create new device for tenant.
-    
+
     Automatically syncs with ChirpStack if LoRaWAN fields provided.
     Sync happens asynchronously and doesn't block device creation.
     """
@@ -112,13 +116,28 @@ async def create_device(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant mismatch",
         )
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
+    # Validate device_type_id exists and belongs to tenant
+    device_type_result = await session.execute(
+        select(DeviceType).where(
+            DeviceType.id == device_data.device_type_id,
+            DeviceType.tenant_id == tenant_id
+        )
+    )
+    device_type = device_type_result.scalar_one_or_none()
+
+    if not device_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device type {device_data.device_type_id} not found for this tenant"
+        )
+
     device = Device(
         tenant_id=tenant_id,
         name=device_data.name,
-        device_type=device_data.device_type,
+        device_type_id=device_data.device_type_id,
         organization_id=device_data.organization_id,
         site_id=device_data.site_id,
         device_group_id=device_data.device_group_id,
@@ -168,21 +187,23 @@ async def get_device(
         )
     
     await session.set_tenant_context(tenant_id)
-    
-    query = select(Device).where(
+
+    query = select(Device).options(
+        joinedload(Device.device_type_rel)  # Eager load device type relationship
+    ).where(
         Device.tenant_id == tenant_id,
         Device.id == device_id,
     )
     result = await session.execute(query)
     device = result.scalar_one_or_none()
-    
+
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
         )
-    
-    return SuccessResponse(data=DeviceResponse.from_orm(device))
+
+    return SuccessResponse(data=DeviceResponse.model_validate(device))
 
 
 @router.put("/{device_id}", response_model=SuccessResponse)
