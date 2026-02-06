@@ -605,7 +605,8 @@ export default function NewDevicePage() {
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-4">
-              {selectedType?.connectivity?.protocol === "lorawan" ? (
+              {/* LoRaWAN Configuration */}
+              {selectedType?.connectivity?.protocol === "lorawan" && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -655,7 +656,10 @@ export default function NewDevicePage() {
                     />
                   </div>
                 </>
-              ) : (
+              )}
+
+              {/* MQTT Configuration */}
+              {selectedType?.connectivity?.protocol === "mqtt" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     MQTT Client ID
@@ -671,6 +675,86 @@ export default function NewDevicePage() {
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     If left empty, the device ID will be used as the MQTT client ID
+                  </p>
+                </div>
+              )}
+
+              {/* HTTP/REST Configuration */}
+              {selectedType?.connectivity?.protocol === "http" && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>HTTP REST API Device</strong><br />
+                      This device connects via HTTP REST API. The platform will provide an API endpoint and authentication token after device creation.
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    No additional configuration required at this step. API credentials will be generated automatically.
+                  </p>
+                </div>
+              )}
+
+              {/* Modbus Configuration */}
+              {selectedType?.connectivity?.protocol === "modbus" && (
+                <div className="space-y-4">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <p className="text-sm text-purple-800">
+                      <strong>Modbus RTU/TCP Device</strong><br />
+                      Industrial protocol for connecting sensors and meters. Requires a Modbus gateway or bridge for cloud connectivity.
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Configure Modbus registers and gateway settings after device creation.
+                  </p>
+                </div>
+              )}
+
+              {/* OPC-UA Configuration */}
+              {selectedType?.connectivity?.protocol === "opcua" && (
+                <div className="space-y-4">
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <p className="text-sm text-orange-800">
+                      <strong>OPC-UA Industrial Device</strong><br />
+                      Industrial automation standard for PLCs and SCADA systems. Requires OPC-UA server endpoint configuration.
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Configure OPC-UA node mappings and security settings in device settings after creation.
+                  </p>
+                </div>
+              )}
+
+              {/* CoAP Configuration */}
+              {selectedType?.connectivity?.protocol === "coap" && (
+                <div className="space-y-4">
+                  <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                    <p className="text-sm text-teal-800">
+                      <strong>CoAP Low-Power Device</strong><br />
+                      Constrained Application Protocol for battery-powered IoT devices. Optimized for low bandwidth and power consumption.
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    CoAP endpoint and observe settings can be configured after device creation.
+                  </p>
+                </div>
+              )}
+
+              {/* Default/Other Protocols */}
+              {selectedType?.connectivity?.protocol &&
+               !['lorawan', 'mqtt', 'http', 'modbus', 'opcua', 'coap'].includes(selectedType.connectivity.protocol) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-700">
+                    <strong>Custom Protocol: {selectedType.connectivity.protocol.toUpperCase()}</strong><br />
+                    This device type uses a custom connectivity protocol. Configuration options can be set after device creation.
+                  </p>
+                </div>
+              )}
+
+              {/* No Protocol Defined */}
+              {!selectedType?.connectivity?.protocol && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">
+                    No specific connectivity protocol configured for this device type. Standard platform connectivity will be used.
                   </p>
                 </div>
               )}
