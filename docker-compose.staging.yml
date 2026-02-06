@@ -69,6 +69,8 @@ services:
     image: ghcr.io/tunavis/gito-iot-platform-web:staging
     container_name: gito-web-staging
     restart: unless-stopped
+    env_file:
+      - .env.staging
     environment:
       NEXT_PUBLIC_API_URL: /api  # Relative URL - routed through nginx
       NODE_ENV: production
