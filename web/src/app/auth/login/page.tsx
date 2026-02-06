@@ -34,6 +34,7 @@ export default function LoginPage() {
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',  // ✅ Required to send/receive cookies
         body: JSON.stringify({ email, password }),
       });
 
@@ -49,17 +50,15 @@ export default function LoginPage() {
       if (data.data?.access_token) {
         console.log('Token received, storing...');
         const token = data.data.access_token;
-        
-        // Store in localStorage
+
+        // Store in localStorage as backup for client-side API calls
         localStorage.setItem('auth_token', token);
-        
-        // CRITICAL: Also store in cookie for middleware
-        document.cookie = `auth_token=${token}; path=/; max-age=86400; SameSite=Lax`;
-        
-        console.log('Token stored in localStorage and cookie');
+
+        // Cookie is set by backend as httpOnly (more secure, accessible to middleware)
+        console.log('Token stored in localStorage, httpOnly cookie set by backend');
         setIsRedirecting(true);
-        
-        // Use router.push for proper Next.js navigation
+
+        // Navigate to dashboard
         console.log('Navigating to dashboard...');
         window.location.href = '/dashboard';
       } else {

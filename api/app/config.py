@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1"]
 
+    # Cookie Security (for auth tokens)
+    COOKIE_SECURE: bool = False  # Set to True to force secure cookies (HTTPS only)
+    TRUST_PROXY: bool = True     # Trust X-Forwarded-Proto header from reverse proxy
+
     # Logging
     LOG_LEVEL: str = "INFO"
 

@@ -1,9 +1,10 @@
 """Authentication routes for user login and token management."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
+import logging
 
 from app.database import get_session
 from app.models.base import User
@@ -11,6 +12,8 @@ from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from app.schemas.common import SuccessResponse, ErrorDetail, ErrorResponse
 from app.security import verify_password, create_access_token, decode_token
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -20,6 +23,7 @@ async def login(
     request: LoginRequest,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
+    x_forwarded_proto: str | None = Header(None, alias="X-Forwarded-Proto"),
 ):
     """User login endpoint - returns JWT access token and sets httpOnly cookie.
 
@@ -56,12 +60,26 @@ async def login(
         user_role=user.role,
     )
 
+    # Determine cookie security based on environment and proxy headers
+    is_secure = _determine_cookie_security(
+        settings.APP_ENV,
+        settings.COOKIE_SECURE,
+        x_forwarded_proto,
+        settings.TRUST_PROXY,
+    )
+
+    # Log for observability
+    logger.info(
+        f"Setting auth cookie: user_id={user.id}, tenant_id={user.tenant_id}, "
+        f"secure={is_secure}, x_forwarded_proto={x_forwarded_proto}, env={settings.APP_ENV}"
+    )
+
     # Set httpOnly cookie for Next.js middleware
     response.set_cookie(
         key="auth_token",
         value=access_token,
         httponly=True,  # Prevents JavaScript access (XSS protection)
-        secure=settings.APP_ENV == "production",  # HTTPS only in production
+        secure=is_secure,  # HTTPS only - determined by environment and proxy
         samesite="lax",  # CSRF protection
         max_age=settings.JWT_EXPIRATION_HOURS * 3600,  # Cookie expiration
         path="/",  # Available across entire site
@@ -153,3 +171,43 @@ async def logout(response: Response):
     response.delete_cookie(key="auth_token", path="/")
 
     return SuccessResponse(data={"message": "Logged out successfully"})
+
+
+def _determine_cookie_security(
+    app_env: str,
+    force_secure: bool,
+    x_forwarded_proto: str | None,
+    trust_proxy: bool,
+) -> bool:
+    """
+    Determine if cookie should have secure flag.
+
+    Priority (highest to lowest):
+    1. Explicit COOKIE_SECURE override (force_secure=True)
+    2. X-Forwarded-Proto header (if trust_proxy=True and header present)
+    3. Environment default (production=True, dev/staging=False)
+
+    Args:
+        app_env: Application environment (development/staging/production)
+        force_secure: Explicit override to force secure cookies
+        x_forwarded_proto: X-Forwarded-Proto header from reverse proxy
+        trust_proxy: Whether to trust proxy headers
+
+    Returns:
+        bool: True if cookie should have secure flag (HTTPS only)
+    """
+    # Explicit override (for testing or special requirements)
+    if force_secure:
+        logger.debug("Cookie security: forced secure=True")
+        return True
+
+    # Check proxy headers (standard for reverse proxy deployments)
+    if trust_proxy and x_forwarded_proto:
+        is_https = x_forwarded_proto.lower() == "https"
+        logger.debug(f"Cookie security: from X-Forwarded-Proto={x_forwarded_proto}, secure={is_https}")
+        return is_https
+
+    # Environment default (fallback)
+    is_production = app_env == "production"
+    logger.debug(f"Cookie security: from environment={app_env}, secure={is_production}")
+    return is_production
