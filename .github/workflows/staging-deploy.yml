@@ -80,8 +80,9 @@ jobs:
         run: |
           cd /opt/gito-iot
 
-          # Pull latest code
-          git pull origin staging
+          # Pull latest code (handle divergent branches)
+          git fetch origin
+          git reset --hard origin/staging
 
           # Login to GitHub Container Registry
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
