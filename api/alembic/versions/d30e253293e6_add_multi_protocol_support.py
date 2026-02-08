@@ -1,7 +1,7 @@
 """add_multi_protocol_support
 
 Revision ID: d30e253293e6
-Revises: 559fa082f874
+Revises: fc1c13362cbc
 Create Date: 2026-02-06 16:54:38.118844
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'd30e253293e6'
-down_revision: Union[str, None] = '559fa082f874'
+down_revision: Union[str, None] = 'fc1c13362cbc'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
