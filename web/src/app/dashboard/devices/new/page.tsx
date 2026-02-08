@@ -213,7 +213,7 @@ export default function NewDevicePage() {
       const tenant = payload.tenant_id;
 
       const res = await fetch(
-        `/api/v1/tenants/${tenant}/sites/${siteId}/device-groups`,
+        `/api/v1/tenants/${tenant}/device-groups?site_id=${siteId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -281,7 +281,11 @@ export default function NewDevicePage() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Failed to create device");
+        const detail = err.detail;
+        if (Array.isArray(detail)) {
+          throw new Error(detail.map((e: any) => e.msg || JSON.stringify(e)).join('; '));
+        }
+        throw new Error(typeof detail === 'string' ? detail : "Failed to create device");
       }
 
       const result = await response.json();

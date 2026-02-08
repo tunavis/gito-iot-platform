@@ -185,7 +185,7 @@ export default function EditDevicePage() {
       // Load device groups if site is set
       if (deviceData.site_id) {
         const groupsRes = await fetch(
-          `/api/v1/tenants/${info.tenant}/sites/${deviceData.site_id}/device-groups`,
+          `/api/v1/tenants/${info.tenant}/device-groups?site_id=${deviceData.site_id}`,
           { headers: { Authorization: `Bearer ${info.token}` } }
         );
         if (groupsRes.ok) {
@@ -222,7 +222,7 @@ export default function EditDevicePage() {
     const info = getTenantInfo();
     if (!info) return;
 
-    fetch(`/api/v1/tenants/${info.tenant}/sites/${form.site_id}/device-groups`, {
+    fetch(`/api/v1/tenants/${info.tenant}/device-groups?site_id=${form.site_id}`, {
       headers: { Authorization: `Bearer ${info.token}` },
     })
       .then(res => res.ok ? res.json() : { data: [] })
@@ -281,7 +281,11 @@ export default function EditDevicePage() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || 'Failed to update device');
+        const detail = err.detail;
+        if (Array.isArray(detail)) {
+          throw new Error(detail.map((e: any) => e.msg || JSON.stringify(e)).join('; '));
+        }
+        throw new Error(typeof detail === 'string' ? detail : 'Failed to update device');
       }
 
       toast.success('Device Updated', `${form.name} has been updated successfully`);
