@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import {
   Activity,
   Battery,
@@ -71,6 +72,7 @@ export default function DeviceDetailPage() {
   const router = useRouter();
   const params = useParams();
   const deviceId = params?.id as string;
+  const toast = useToast();
 
   const [device, setDevice] = useState<Device | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1547,6 +1549,7 @@ function DeviceCredentials({ deviceId }: { deviceId: string }) {
 // Device Settings Component
 function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; deviceId: string; onUpdate: (d: Device) => void }) {
   const router = useRouter();
+  const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({ name: device.name });
@@ -1595,15 +1598,15 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
       });
 
       if (res.ok) {
-        addToast('Device deleted successfully', 'success');
+        toast.success('Device deleted successfully');
         router.push('/dashboard/devices');
       } else {
-        const error = await res.json();
-        addToast(error.detail || 'Failed to delete device', 'error');
+        const errorData = await res.json();
+        toast.error(errorData.detail || 'Failed to delete device');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      addToast('Failed to delete device', 'error');
+      toast.error('Failed to delete device');
     } finally {
       setDeleting(false);
     }
