@@ -134,7 +134,7 @@ export function useDeviceWebSocket({
       setIsConnecting(false);
       onError?.('Failed to create WebSocket connection');
     }
-  }, [deviceId, token, onTelemetry, onAlert, onError, onConnectionChange, autoReconnect, reconnectInterval, maxReconnectAttempts]);
+  }, [deviceId, token, onTelemetry, onAlert, onError, onConnectionChange, autoReconnect, reconnectInterval, maxReconnectAttempts, isConnecting]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -169,7 +169,7 @@ export function useDeviceWebSocket({
     return () => {
       disconnect();
     };
-  }, [connect]);
+  }, [connect, disconnect]);
 
   return {
     isConnected,

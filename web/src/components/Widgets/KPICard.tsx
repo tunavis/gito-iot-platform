@@ -154,7 +154,7 @@ export default function KPICard({
         });
         setLoading(false);
       }
-    }, [data_sources, metric, show_trend, trend_period]);
+    }, [data_sources, metric, show_trend, trend_period, configuration]);
 
   useEffect(() => {
     fetchData();

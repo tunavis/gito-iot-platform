@@ -416,7 +416,7 @@ mosquitto_pub -h ${mqttConfig.host} -p ${mqttConfig.port} \\
                   </li>
                   <li className="flex items-start gap-2">
                     <ChevronRight className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>Device status will change to "online" within 30 seconds</span>
+                    <span>Device status will change to &quot;online&quot; within 30 seconds</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <ChevronRight className="w-4 h-4 mt-0.5 flex-shrink-0" />
