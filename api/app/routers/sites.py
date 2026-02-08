@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel, Field
 
 from app.database import get_session, RLSSession
 from app.models.site import Site
 from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
+from app.schemas.site import SiteCreate, SiteUpdate, SiteResponse
 from app.security import decode_token
 
 router = APIRouter(prefix="/tenants/{tenant_id}/sites", tags=["sites"])
@@ -38,45 +38,6 @@ async def get_current_tenant(
         )
     
     return UUID(tenant_id)
-
-
-# Schemas
-class SiteCreate(BaseModel):
-    organization_id: UUID
-    parent_site_id: Optional[UUID] = None
-    name: str = Field(..., min_length=1, max_length=255)
-    site_type: Optional[str] = Field(None, max_length=50)
-    address: Optional[str] = None
-    coordinates: Optional[dict] = None  # {"lat": 51.5074, "lng": -0.1278}
-    timezone: str = Field(default="UTC", max_length=50)
-    attributes: dict = Field(default_factory=dict)
-
-
-class SiteUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    site_type: Optional[str] = Field(None, max_length=50)
-    address: Optional[str] = None
-    coordinates: Optional[dict] = None
-    timezone: Optional[str] = Field(None, max_length=50)
-    attributes: Optional[dict] = None
-
-
-class SiteResponse(BaseModel):
-    id: UUID
-    tenant_id: UUID
-    organization_id: UUID
-    parent_site_id: Optional[UUID]
-    name: str
-    site_type: Optional[str]
-    address: Optional[str]
-    coordinates: Optional[dict]
-    timezone: str
-    attributes: dict
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 @router.get("", response_model=SuccessResponse)
@@ -126,7 +87,7 @@ async def list_sites(
     sites = result.scalars().all()
     
     return SuccessResponse(
-        data=[SiteResponse.from_orm(site) for site in sites],
+        data=[SiteResponse.model_validate(site) for site in sites],
         meta=PaginationMeta(page=page, per_page=per_page, total=total)
     )
 
@@ -175,7 +136,7 @@ async def create_site(
     await session.commit()
     await session.refresh(site)
     
-    return SuccessResponse(data=SiteResponse.from_orm(site))
+    return SuccessResponse(data=SiteResponse.model_validate(site))
 
 
 @router.get("/{site_id}", response_model=SuccessResponse)
@@ -202,7 +163,7 @@ async def get_site(
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
     
-    return SuccessResponse(data=SiteResponse.from_orm(site))
+    return SuccessResponse(data=SiteResponse.model_validate(site))
 
 
 @router.put("/{site_id}", response_model=SuccessResponse)
@@ -240,7 +201,7 @@ async def update_site(
     await session.commit()
     await session.refresh(site)
     
-    return SuccessResponse(data=SiteResponse.from_orm(site))
+    return SuccessResponse(data=SiteResponse.model_validate(site))
 
 
 @router.delete("/{site_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -361,4 +322,4 @@ async def list_child_sites(
     )
     children = result.scalars().all()
     
-    return SuccessResponse(data=[SiteResponse.from_orm(site) for site in children])
+    return SuccessResponse(data=[SiteResponse.model_validate(site) for site in children])

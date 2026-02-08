@@ -60,10 +60,10 @@ class Device(BaseModel):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Hierarchy: Organization → Site → Device Group → Device
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
-    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
-    device_group_id = Column(UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Hierarchy: Organization → Site → Device Group → Device (STRICT — all required)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id", ondelete="RESTRICT"), nullable=False, index=True)
+    device_group_id = Column(UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)
     device_type_id = Column(UUID(as_uuid=True), ForeignKey("device_types.id", ondelete="RESTRICT"), nullable=False, index=True)

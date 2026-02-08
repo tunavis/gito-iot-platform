@@ -10,6 +10,9 @@ class DeviceGroupCreate(BaseModel):
     """Request schema for creating a device group."""
     name: str = Field(..., min_length=1, max_length=255, description="Group name")
     description: Optional[str] = Field(None, max_length=1000, description="Group description")
+    organization_id: UUID = Field(..., description="Organization ID (required)")
+    site_id: UUID = Field(..., description="Site ID (required)")
+    group_type: Optional[str] = Field(None, max_length=50, description="Group type (logical, physical, functional)")
     membership_rule: Optional[dict] = Field(default_factory=dict, description="Dynamic membership rules (tags, status filters, etc.)")
 
     class Config:

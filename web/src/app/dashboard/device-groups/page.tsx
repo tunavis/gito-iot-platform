@@ -6,8 +6,8 @@ import Sidebar from '@/components/Sidebar';
 interface DeviceGroup {
   id: string;
   tenant_id: string;
-  organization_id: string | null;
-  site_id: string | null;
+  organization_id: string;
+  site_id: string;
   name: string;
   description: string | null;
   group_type: string | null;
@@ -25,6 +25,7 @@ interface Organization {
 interface Site {
   id: string;
   name: string;
+  organization_id: string;
 }
 
 export default function DeviceGroupsPage() {
@@ -253,9 +254,19 @@ function DeviceGroupForm({
     group_type: group?.group_type || ''
   });
 
+  // Cascade: org → filter sites
+  const filteredSites = formData.organization_id
+    ? sites.filter(s => s.organization_id === formData.organization_id)
+    : [];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.organization_id || !formData.site_id) {
+      alert('Organization and Site are required.');
+      return;
+    }
+
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
@@ -263,8 +274,8 @@ function DeviceGroupForm({
     const payload = {
       name: formData.name,
       description: formData.description || null,
-      organization_id: formData.organization_id || null,
-      site_id: formData.site_id || null,
+      organization_id: formData.organization_id,
+      site_id: formData.site_id,
       group_type: formData.group_type || null
     };
     
@@ -327,27 +338,30 @@ function DeviceGroupForm({
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Organization</label>
+            <label className="block text-sm text-gray-600 mb-1">Organization <span className="text-red-500">*</span></label>
             <select
               value={formData.organization_id}
-              onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value }))}
+              onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value, site_id: '' }))}
               className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+              required
             >
-              <option value="">None</option>
+              <option value="">Select organization...</option>
               {organizations.map(org => (
                 <option key={org.id} value={org.id}>{org.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Site</label>
+            <label className="block text-sm text-gray-600 mb-1">Site <span className="text-red-500">*</span></label>
             <select
               value={formData.site_id}
               onChange={e => setFormData(prev => ({ ...prev, site_id: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+              disabled={!formData.organization_id}
+              required
             >
-              <option value="">None</option>
-              {sites.map(site => (
+              <option value="">{formData.organization_id ? 'Select site...' : 'Select organization first'}</option>
+              {filteredSites.map(site => (
                 <option key={site.id} value={site.id}>{site.name}</option>
               ))}
             </select>

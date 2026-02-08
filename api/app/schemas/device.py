@@ -34,10 +34,10 @@ class DeviceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255, description="Device name")
     device_type_id: UUID = Field(description="Device type ID (foreign key to device_types table)")
     attributes: dict = Field(default_factory=dict, description="Device attributes (JSON)")
-    # Hierarchy fields
-    organization_id: Optional[UUID] = Field(None, description="Organization ID")
-    site_id: Optional[UUID] = Field(None, description="Site ID")
-    device_group_id: Optional[UUID] = Field(None, description="Device group ID")
+    # Hierarchy fields (STRICT — all required)
+    organization_id: UUID = Field(..., description="Organization ID (required)")
+    site_id: UUID = Field(..., description="Site ID (required)")
+    device_group_id: UUID = Field(..., description="Device group ID (required)")
     # LoRaWAN fields (optional - for ChirpStack integration)
     lorawan_dev_eui: Optional[str] = Field(None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)")
     chirpstack_app_id: Optional[str] = Field(None, description="ChirpStack application ID")
@@ -79,10 +79,10 @@ class DeviceResponse(BaseModel):
     firmware_version: Optional[str] = None
     hardware_version: Optional[str] = None
     attributes: dict
-    # Hierarchy fields
-    organization_id: Optional[UUID] = None
-    site_id: Optional[UUID] = None
-    device_group_id: Optional[UUID] = None
+    # Hierarchy fields (strict — always present)
+    organization_id: UUID
+    site_id: UUID
+    device_group_id: UUID
     # LoRaWAN fields
     lorawan_dev_eui: Optional[str] = Field(None, validation_alias="dev_eui")
     chirpstack_app_id: Optional[str] = Field(None, validation_alias="ttn_app_id")

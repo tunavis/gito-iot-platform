@@ -139,6 +139,35 @@ async def create_device(
     # Generate secure device token for HTTP REST API authentication
     device_token = f"dev_{secrets.token_urlsafe(32)}"
 
+    # Validate strict hierarchy: org → site → group chain must be consistent
+    from app.models.organization import Organization
+    from app.models.site import Site
+    from app.models.device_group import DeviceGroup as DeviceGroupModel
+
+    org_result = await session.execute(
+        select(Organization).where(Organization.id == device_data.organization_id, Organization.tenant_id == tenant_id)
+    )
+    if not org_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found for this tenant")
+
+    site_result = await session.execute(
+        select(Site).where(Site.id == device_data.site_id, Site.tenant_id == tenant_id)
+    )
+    site = site_result.scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found for this tenant")
+    if str(site.organization_id) != str(device_data.organization_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Site does not belong to the specified organization")
+
+    group_result = await session.execute(
+        select(DeviceGroupModel).where(DeviceGroupModel.id == device_data.device_group_id, DeviceGroupModel.tenant_id == tenant_id)
+    )
+    group = group_result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found for this tenant")
+    if str(group.site_id) != str(device_data.site_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device group does not belong to the specified site")
+
     device = Device(
         tenant_id=tenant_id,
         name=device_data.name,

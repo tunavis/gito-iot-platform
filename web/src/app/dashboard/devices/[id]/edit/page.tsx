@@ -45,6 +45,12 @@ interface DeviceGroup {
   site_id: string;
 }
 
+interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 interface Device {
   id: string;
   name: string;
@@ -57,9 +63,9 @@ interface Device {
   lorawan_dev_eui?: string | null;
   chirpstack_app_id?: string | null;
   device_profile_id?: string | null;
-  organization_id?: string | null;
-  site_id?: string | null;
-  device_group_id?: string | null;
+  organization_id: string;
+  site_id: string;
+  device_group_id: string;
 }
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -85,6 +91,8 @@ export default function EditDevicePage() {
 
   const [device, setDevice] = useState<Device | null>(null);
   const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [allSites, setAllSites] = useState<Site[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [deviceGroups, setDeviceGroups] = useState<DeviceGroup[]>([]);
 
@@ -101,6 +109,7 @@ export default function EditDevicePage() {
     lorawan_dev_eui: '',
     chirpstack_app_id: '',
     device_profile_id: '',
+    organization_id: '',
     site_id: '',
     device_group_id: '',
     latitude: '',
@@ -123,7 +132,7 @@ export default function EditDevicePage() {
     if (!info) return;
 
     try {
-      const [deviceRes, typesRes, sitesRes] = await Promise.all([
+      const [deviceRes, typesRes, sitesRes, orgsRes] = await Promise.all([
         fetch(`/api/v1/tenants/${info.tenant}/devices/${deviceId}`, {
           headers: { Authorization: `Bearer ${info.token}` },
         }),
@@ -131,6 +140,9 @@ export default function EditDevicePage() {
           headers: { Authorization: `Bearer ${info.token}` },
         }),
         fetch(`/api/v1/tenants/${info.tenant}/sites`, {
+          headers: { Authorization: `Bearer ${info.token}` },
+        }),
+        fetch(`/api/v1/tenants/${info.tenant}/organizations`, {
           headers: { Authorization: `Bearer ${info.token}` },
         }),
       ]);
@@ -144,7 +156,10 @@ export default function EditDevicePage() {
         setDeviceTypes((await typesRes.json()).data || []);
       }
       if (sitesRes.ok) {
-        setSites((await sitesRes.json()).data || []);
+        setAllSites((await sitesRes.json()).data || []);
+      }
+      if (orgsRes.ok) {
+        setOrganizations((await orgsRes.json()).data || []);
       }
 
       // Populate form
@@ -160,6 +175,7 @@ export default function EditDevicePage() {
         lorawan_dev_eui: deviceData.lorawan_dev_eui || '',
         chirpstack_app_id: deviceData.chirpstack_app_id || '',
         device_profile_id: deviceData.device_profile_id || '',
+        organization_id: deviceData.organization_id || '',
         site_id: deviceData.site_id || '',
         device_group_id: deviceData.device_group_id || '',
         latitude: deviceData.attributes?.latitude?.toString() || '',
@@ -187,7 +203,17 @@ export default function EditDevicePage() {
     if (deviceId) loadDevice();
   }, [deviceId, loadDevice]);
 
-  // Fetch device groups when site changes
+  // Cascade: org → filter sites
+  useEffect(() => {
+    if (form.organization_id) {
+      const filtered = allSites.filter(s => s.organization_id === form.organization_id);
+      setSites(filtered);
+    } else {
+      setSites([]);
+    }
+  }, [form.organization_id, allSites]);
+
+  // Cascade: site → load device groups
   useEffect(() => {
     if (!form.site_id) {
       setDeviceGroups([]);
@@ -231,8 +257,9 @@ export default function EditDevicePage() {
         },
         firmware_version: form.firmware_version || undefined,
         hardware_version: form.hardware_version || undefined,
-        site_id: form.site_id || undefined,
-        device_group_id: form.device_group_id || undefined,
+        organization_id: form.organization_id,
+        site_id: form.site_id,
+        device_group_id: form.device_group_id,
       };
 
       // LoRaWAN fields
@@ -474,39 +501,61 @@ export default function EditDevicePage() {
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Placement</h2>
             <div className="space-y-4">
+              {/* Organization (required) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Building className="w-4 h-4 inline mr-1" /> Site
+                  <Building className="w-4 h-4 inline mr-1" /> Organization <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.organization_id}
+                  onChange={e => setForm(prev => ({ ...prev, organization_id: e.target.value, site_id: '', device_group_id: '' }))}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  required
+                >
+                  <option value="">Select organization...</option>
+                  {organizations.map(org => (
+                    <option key={org.id} value={org.id}>{org.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Site (required, filtered by org) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Building className="w-4 h-4 inline mr-1" /> Site <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.site_id}
                   onChange={e => setForm(prev => ({ ...prev, site_id: e.target.value, device_group_id: '' }))}
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  disabled={!form.organization_id}
+                  required
                 >
-                  <option value="">No site assigned</option>
+                  <option value="">{form.organization_id ? 'Select site...' : 'Select organization first'}</option>
                   {sites.map(site => (
                     <option key={site.id} value={site.id}>{site.name}</option>
                   ))}
                 </select>
               </div>
 
-              {form.site_id && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <Layers className="w-4 h-4 inline mr-1" /> Device Group
-                  </label>
-                  <select
-                    value={form.device_group_id}
-                    onChange={e => setForm(prev => ({ ...prev, device_group_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  >
-                    <option value="">No group assigned</option>
-                    {deviceGroups.map(group => (
-                      <option key={group.id} value={group.id}>{group.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Device Group (required, filtered by site) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Layers className="w-4 h-4 inline mr-1" /> Device Group <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.device_group_id}
+                  onChange={e => setForm(prev => ({ ...prev, device_group_id: e.target.value }))}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  disabled={!form.site_id}
+                  required
+                >
+                  <option value="">{form.site_id ? 'Select device group...' : 'Select site first'}</option>
+                  {deviceGroups.map(group => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+                </select>
+              </div>
 
               <div className="pt-4 border-t border-gray-200">
                 <label className="block text-sm font-medium text-gray-700 mb-2">

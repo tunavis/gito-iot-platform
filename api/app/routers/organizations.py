@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel, Field
 
 from app.database import get_session, RLSSession
 from app.models.organization import Organization
 from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
+from app.schemas.organization import OrganizationCreate, OrganizationUpdate, OrganizationResponse
 from app.security import decode_token
 
 router = APIRouter(prefix="/tenants/{tenant_id}/organizations", tags=["organizations"])
@@ -38,42 +38,6 @@ async def get_current_tenant(
         )
     
     return UUID(tenant_id)
-
-
-# Schemas
-class OrganizationCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
-    slug: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-    billing_contact: Optional[str] = None
-    chirpstack_app_id: Optional[str] = None
-    attributes: dict = Field(default_factory=dict)
-
-
-class OrganizationUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    billing_contact: Optional[str] = None
-    chirpstack_app_id: Optional[str] = None
-    status: Optional[str] = Field(None, pattern="^(active|inactive|suspended)$")
-    attributes: Optional[dict] = None
-
-
-class OrganizationResponse(BaseModel):
-    id: UUID
-    tenant_id: UUID
-    name: str
-    slug: str
-    description: Optional[str]
-    billing_contact: Optional[str]
-    chirpstack_app_id: Optional[str]
-    status: str
-    attributes: dict
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 @router.get("", response_model=SuccessResponse)
@@ -113,7 +77,7 @@ async def list_organizations(
     organizations = result.scalars().all()
     
     return SuccessResponse(
-        data=[OrganizationResponse.from_orm(org) for org in organizations],
+        data=[OrganizationResponse.model_validate(org) for org in organizations],
         meta=PaginationMeta(page=page, per_page=per_page, total=total)
     )
 
@@ -160,7 +124,7 @@ async def create_organization(
     await session.commit()
     await session.refresh(org)
     
-    return SuccessResponse(data=OrganizationResponse.from_orm(org))
+    return SuccessResponse(data=OrganizationResponse.model_validate(org))
 
 
 @router.get("/{org_id}", response_model=SuccessResponse)
@@ -187,7 +151,7 @@ async def get_organization(
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     
-    return SuccessResponse(data=OrganizationResponse.from_orm(org))
+    return SuccessResponse(data=OrganizationResponse.model_validate(org))
 
 
 @router.put("/{org_id}", response_model=SuccessResponse)
@@ -225,7 +189,7 @@ async def update_organization(
     await session.commit()
     await session.refresh(org)
     
-    return SuccessResponse(data=OrganizationResponse.from_orm(org))
+    return SuccessResponse(data=OrganizationResponse.model_validate(org))
 
 
 @router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT)

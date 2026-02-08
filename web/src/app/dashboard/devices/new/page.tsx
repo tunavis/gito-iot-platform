@@ -69,6 +69,12 @@ interface DeviceGroup {
   site_id: string;
 }
 
+interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 // Icon mapping
 const categoryIcons: Record<string, React.ReactNode> = {
   sensor: <Thermometer className="w-5 h-5" />,
@@ -103,7 +109,9 @@ export default function NewDevicePage() {
 
   // Data
   const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [allSites, setAllSites] = useState<Site[]>([]);
   const [deviceGroups, setDeviceGroups] = useState<DeviceGroup[]>([]);
 
   // Form State
@@ -122,6 +130,7 @@ export default function NewDevicePage() {
     mqtt_client_id: "",
   });
   const [placement, setPlacement] = useState({
+    organization_id: "",
     site_id: "",
     device_group_id: "",
     latitude: "",
@@ -140,11 +149,14 @@ export default function NewDevicePage() {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const tenant = payload.tenant_id;
 
-      const [typesRes, sitesRes] = await Promise.all([
+      const [typesRes, sitesRes, orgsRes] = await Promise.all([
         fetch(`/api/v1/tenants/${tenant}/device-types?is_active=true`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`/api/v1/tenants/${tenant}/sites`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/tenants/${tenant}/organizations`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -156,7 +168,12 @@ export default function NewDevicePage() {
 
       if (sitesRes.ok) {
         const sitesData = await sitesRes.json();
-        setSites(sitesData.data || []);
+        setAllSites(sitesData.data || []);
+      }
+
+      if (orgsRes.ok) {
+        const orgsData = await orgsRes.json();
+        setOrganizations(orgsData.data || []);
       }
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -169,7 +186,17 @@ export default function NewDevicePage() {
     fetchData();
   }, [fetchData]);
 
-  // Fetch device groups when site changes
+  // Cascade: org → filter sites
+  useEffect(() => {
+    if (placement.organization_id) {
+      const filtered = allSites.filter(s => s.organization_id === placement.organization_id);
+      setSites(filtered);
+    } else {
+      setSites([]);
+    }
+  }, [placement.organization_id, allSites]);
+
+  // Cascade: site → load device groups
   useEffect(() => {
     if (placement.site_id) {
       fetchDeviceGroups(placement.site_id);
@@ -232,8 +259,9 @@ export default function NewDevicePage() {
           latitude: placement.latitude ? parseFloat(placement.latitude) : undefined,
           longitude: placement.longitude ? parseFloat(placement.longitude) : undefined,
         },
-        site_id: placement.site_id || undefined,
-        device_group_id: placement.device_group_id || undefined,
+        organization_id: placement.organization_id,
+        site_id: placement.site_id,
+        device_group_id: placement.device_group_id,
       };
 
       // Add connectivity based on protocol
@@ -299,7 +327,7 @@ export default function NewDevicePage() {
       case "connectivity":
         return true; // Optional
       case "placement":
-        return true; // Optional
+        return placement.organization_id !== "" && placement.site_id !== "" && placement.device_group_id !== "";
       case "review":
         return true;
       default:
@@ -776,15 +804,39 @@ export default function NewDevicePage() {
             <div>
               <h2 className="text-lg font-medium text-gray-900 mb-2">Device Placement</h2>
               <p className="text-sm text-gray-600">
-                Assign the device to a site and group for organization.
+                Assign the device to an organization, site, and group. All three are required.
               </p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-4">
+              {/* Organization (required) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Building className="w-4 h-4 inline mr-1" />
-                  Site
+                  Organization <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={placement.organization_id}
+                  onChange={(e) =>
+                    setPlacement({ ...placement, organization_id: e.target.value, site_id: "", device_group_id: "" })
+                  }
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  required
+                >
+                  <option value="">Select organization...</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Site (required, filtered by org) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Building className="w-4 h-4 inline mr-1" />
+                  Site <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={placement.site_id}
@@ -792,8 +844,10 @@ export default function NewDevicePage() {
                     setPlacement({ ...placement, site_id: e.target.value, device_group_id: "" })
                   }
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  disabled={!placement.organization_id}
+                  required
                 >
-                  <option value="">No site assigned</option>
+                  <option value="">{placement.organization_id ? 'Select site...' : 'Select organization first'}</option>
                   {sites.map((site) => (
                     <option key={site.id} value={site.id}>
                       {site.name}
@@ -802,28 +856,29 @@ export default function NewDevicePage() {
                 </select>
               </div>
 
-              {placement.site_id && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <Layers className="w-4 h-4 inline mr-1" />
-                    Device Group
-                  </label>
-                  <select
-                    value={placement.device_group_id}
-                    onChange={(e) =>
-                      setPlacement({ ...placement, device_group_id: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  >
-                    <option value="">No group assigned</option>
-                    {deviceGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Device Group (required, filtered by site) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Layers className="w-4 h-4 inline mr-1" />
+                  Device Group <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={placement.device_group_id}
+                  onChange={(e) =>
+                    setPlacement({ ...placement, device_group_id: e.target.value })
+                  }
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  disabled={!placement.site_id}
+                  required
+                >
+                  <option value="">{placement.site_id ? 'Select device group...' : 'Select site first'}</option>
+                  {deviceGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="pt-4 border-t border-gray-200">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -967,6 +1022,12 @@ export default function NewDevicePage() {
               <div className="p-4">
                 <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">Placement</h3>
                 <dl className="space-y-2">
+                  <div className="flex justify-between">
+                    <dt className="text-gray-600">Organization</dt>
+                    <dd className="text-gray-900">
+                      {organizations.find((o) => o.id === placement.organization_id)?.name || "Not assigned"}
+                    </dd>
+                  </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-600">Site</dt>
                     <dd className="text-gray-900">

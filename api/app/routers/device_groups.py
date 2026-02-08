@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel, Field
 
 from app.database import get_session, RLSSession
 from app.models.device_group import DeviceGroup
 from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
+from app.schemas.device_group import DeviceGroupResponse as DedicatedDeviceGroupResponse
 from app.security import decode_token
 
 router = APIRouter(prefix="/tenants/{tenant_id}/device-groups", tags=["device-groups"])
@@ -40,12 +40,14 @@ async def get_current_tenant(
     return UUID(tenant_id)
 
 
-# Schemas
+# Inline schemas for strict hierarchy (org + site required)
+from pydantic import BaseModel, Field
+
 class DeviceGroupCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
-    organization_id: Optional[UUID] = None
-    site_id: Optional[UUID] = None
+    organization_id: UUID  # REQUIRED in strict hierarchy
+    site_id: UUID  # REQUIRED in strict hierarchy
     group_type: Optional[str] = Field(None, max_length=50)
     membership_rule: dict = Field(default_factory=dict)
     attributes: dict = Field(default_factory=dict)
@@ -62,11 +64,11 @@ class DeviceGroupUpdate(BaseModel):
 class DeviceGroupResponse(BaseModel):
     id: UUID
     tenant_id: UUID
-    organization_id: Optional[UUID]
-    site_id: Optional[UUID]
+    organization_id: UUID
+    site_id: UUID
     name: str
-    description: Optional[str]
-    group_type: Optional[str]
+    description: Optional[str] = None
+    group_type: Optional[str] = None
     membership_rule: dict
     attributes: dict
     created_at: datetime
@@ -123,7 +125,7 @@ async def list_device_groups(
     groups = result.scalars().all()
     
     return SuccessResponse(
-        data=[DeviceGroupResponse.from_orm(group) for group in groups],
+        data=[DeviceGroupResponse.model_validate(group) for group in groups],
         meta=PaginationMeta(page=page, per_page=per_page, total=total)
     )
 
@@ -157,7 +159,7 @@ async def create_device_group(
     await session.commit()
     await session.refresh(group)
     
-    return SuccessResponse(data=DeviceGroupResponse.from_orm(group))
+    return SuccessResponse(data=DeviceGroupResponse.model_validate(group))
 
 
 @router.get("/{group_id}", response_model=SuccessResponse)
@@ -184,7 +186,7 @@ async def get_device_group(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
     
-    return SuccessResponse(data=DeviceGroupResponse.from_orm(group))
+    return SuccessResponse(data=DeviceGroupResponse.model_validate(group))
 
 
 @router.put("/{group_id}", response_model=SuccessResponse)
@@ -222,7 +224,7 @@ async def update_device_group(
     await session.commit()
     await session.refresh(group)
     
-    return SuccessResponse(data=DeviceGroupResponse.from_orm(group))
+    return SuccessResponse(data=DeviceGroupResponse.model_validate(group))
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -299,7 +299,7 @@ function SiteForm({
             <select
               required
               value={formData.organization_id}
-              onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value }))}
+              onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value, parent_site_id: '' }))}
               className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
             >
               <option value="">Select organization...</option>
@@ -314,9 +314,10 @@ function SiteForm({
               value={formData.parent_site_id}
               onChange={e => setFormData(prev => ({ ...prev, parent_site_id: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+              disabled={!formData.organization_id}
             >
               <option value="">None (Top Level)</option>
-              {sites.filter(s => s.id !== site?.id).map(s => (
+              {sites.filter(s => s.id !== site?.id && s.organization_id === formData.organization_id).map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
