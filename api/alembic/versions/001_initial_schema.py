@@ -31,12 +31,12 @@ def upgrade() -> None:
 
         -- Create update_updated_at_column function
         CREATE OR REPLACE FUNCTION update_updated_at_column()
-        RETURNS TRIGGER AS $
+        RETURNS TRIGGER AS $$
         BEGIN
             NEW.updated_at = NOW();
             RETURN NEW;
         END;
-        $ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql;
     """)
 
     # Import and execute the complete init.sql
