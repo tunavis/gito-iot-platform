@@ -172,14 +172,16 @@ export default function DeviceDetailPage() {
             signal_strength: data.data.rssi ?? prev.signal_strength
           } : null);
 
-          // Add to telemetry data
+          // Add to telemetry data — include payload for all dynamic metrics
+          const wsPayload = data.data.payload || data.data;
           setTelemetryData(prev => [...prev, {
             timestamp: new Date().toISOString(),
-            temperature: data.data.temperature,
-            humidity: data.data.humidity,
-            battery: data.data.battery,
-            rssi: data.data.rssi,
-            pressure: data.data.pressure
+            temperature: data.data.temperature ?? wsPayload.temperature ?? null,
+            humidity: data.data.humidity ?? wsPayload.humidity ?? null,
+            battery: data.data.battery ?? wsPayload.battery ?? null,
+            rssi: data.data.rssi ?? wsPayload.rssi ?? null,
+            pressure: data.data.pressure ?? wsPayload.pressure ?? null,
+            payload: wsPayload
           }].slice(-100)); // Keep last 100 points
         }
       } catch (e) {
@@ -831,6 +833,37 @@ export default function DeviceDetailPage() {
                     color="#10b981"
                   />
                 )}
+
+                {/* Auto-discover remaining payload metrics not already charted above */}
+                {(() => {
+                  const knownKeys = new Set([
+                    'temperature', 'humidity', 'battery', 'rssi', 'pressure',
+                    'voltage', 'current', 'power', 'energy', 'flow_rate',
+                    'total_volume', 'speed', 'cpu_usage', 'memory_usage',
+                    'air_quality', 'target_temperature'
+                  ]);
+                  const dynamicColors = ['#0ea5e9', '#d946ef', '#84cc16', '#f97316', '#14b8a6', '#a855f7', '#e11d48', '#0891b2'];
+                  const discoveredKeys = new Set<string>();
+                  telemetryData.forEach(d => {
+                    if (d.payload && typeof d.payload === 'object') {
+                      Object.keys(d.payload).forEach(k => {
+                        if (!knownKeys.has(k) && typeof d.payload![k] === 'number') {
+                          discoveredKeys.add(k);
+                        }
+                      });
+                    }
+                  });
+                  return Array.from(discoveredKeys).map((key, i) => (
+                    <TelemetryChartCard
+                      key={key}
+                      title={key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      data={telemetryData}
+                      payloadKey={key}
+                      unit=""
+                      color={dynamicColors[i % dynamicColors.length]}
+                    />
+                  ));
+                })()}
               </div>
             )}
           </div>
@@ -876,6 +909,10 @@ function TelemetryChartCard({
         value = d.payload[payloadKey];
       } else if (dataKey && d[dataKey] !== null && d[dataKey] !== undefined) {
         value = d[dataKey] as number;
+      }
+      // Fallback: if dataKey was used but value is null, check payload too
+      if ((value === null || value === undefined) && dataKey && d.payload && typeof d.payload[dataKey as string] === 'number') {
+        value = d.payload[dataKey as string];
       }
 
       return {
@@ -1550,12 +1587,25 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
-    const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (res.ok) {
-      router.push('/dashboard/devices');
+
+    try {
+      const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        addToast('Device deleted successfully', 'success');
+        router.push('/dashboard/devices');
+      } else {
+        const error = await res.json();
+        addToast(error.detail || 'Failed to delete device', 'error');
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      addToast('Failed to delete device', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 

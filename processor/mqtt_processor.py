@@ -216,6 +216,15 @@ class DatabaseService:
             await self.conn_pool.close()
             logger.info("Database connection pool closed")
 
+    # Fixed columns in telemetry_hot that should be extracted from payload
+    FIXED_METRIC_COLUMNS = {
+        'temperature': float,
+        'humidity': float,
+        'battery': float,
+        'pressure': float,
+        'rssi': int,
+    }
+
     async def insert_telemetry(
         self,
         tenant_id: str,
@@ -225,9 +234,36 @@ class DatabaseService:
     ) -> bool:
         """
         Insert telemetry into TimescaleDB.
+        Extracts known metrics (temperature, humidity, battery, pressure, rssi)
+        into dedicated columns and stores the full payload in JSONB.
         Returns True on success, False on failure.
         """
         try:
+            # Extract known metrics into fixed columns
+            temperature = None
+            humidity = None
+            battery = None
+            pressure = None
+            rssi = None
+
+            for metric, cast_fn in self.FIXED_METRIC_COLUMNS.items():
+                val = payload.get(metric)
+                if val is not None:
+                    try:
+                        converted = cast_fn(val)
+                    except (ValueError, TypeError):
+                        converted = None
+                    if metric == 'temperature':
+                        temperature = converted
+                    elif metric == 'humidity':
+                        humidity = converted
+                    elif metric == 'battery':
+                        battery = converted
+                    elif metric == 'pressure':
+                        pressure = converted
+                    elif metric == 'rssi':
+                        rssi = converted
+
             async with self.conn_pool.connection() as conn:
                 # Set tenant context for RLS
                 await conn.execute(
@@ -235,13 +271,16 @@ class DatabaseService:
                     (tenant_id,)
                 )
                 
-                # Insert telemetry record
+                # Insert telemetry record with fixed columns + full payload
                 await conn.execute(
                     """
-                    INSERT INTO telemetry_hot (tenant_id, device_id, payload, timestamp)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO telemetry_hot
+                        (tenant_id, device_id, temperature, humidity, battery,
+                         pressure, rssi, payload, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (tenant_id, device_id, json.dumps(payload), timestamp)
+                    (tenant_id, device_id, temperature, humidity, battery,
+                     pressure, rssi, json.dumps(payload), timestamp)
                 )
                 
                 # Update device last_seen

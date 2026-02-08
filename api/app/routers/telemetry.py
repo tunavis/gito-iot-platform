@@ -171,22 +171,27 @@ async def _query_raw_telemetry(
 
         logger.debug(f"Retrieved {len(telemetry_records)} of {total} records for device {device_id}")
 
-        # Format response
-        data = [
-            {
+        # Format response — merge payload values into fixed fields when columns are NULL
+        data = []
+        for record in telemetry_records:
+            payload = record.payload if record.payload else {}
+            data.append({
                 "id": str(record.id),
                 "device_id": str(record.device_id),
-                "temperature": float(record.temperature) if record.temperature is not None else None,
-                "humidity": float(record.humidity) if record.humidity is not None else None,
-                "pressure": float(record.pressure) if record.pressure is not None else None,
-                "battery": float(record.battery) if record.battery is not None else None,
-                "rssi": int(record.rssi) if record.rssi is not None else None,
-                "payload": record.payload if record.payload else {},
+                "temperature": float(record.temperature) if record.temperature is not None
+                    else (float(payload["temperature"]) if "temperature" in payload and payload["temperature"] is not None else None),
+                "humidity": float(record.humidity) if record.humidity is not None
+                    else (float(payload["humidity"]) if "humidity" in payload and payload["humidity"] is not None else None),
+                "pressure": float(record.pressure) if record.pressure is not None
+                    else (float(payload["pressure"]) if "pressure" in payload and payload["pressure"] is not None else None),
+                "battery": float(record.battery) if record.battery is not None
+                    else (float(payload["battery"]) if "battery" in payload and payload["battery"] is not None else None),
+                "rssi": int(record.rssi) if record.rssi is not None
+                    else (int(payload["rssi"]) if "rssi" in payload and payload["rssi"] is not None else None),
+                "payload": payload,
                 "timestamp": record.timestamp.isoformat() if record.timestamp else None,
                 "created_at": record.created_at.isoformat() if record.created_at else None,
-            }
-            for record in telemetry_records
-        ]
+            })
 
         return SuccessResponse(
             data=data,
@@ -232,15 +237,15 @@ async def _query_aggregated_telemetry(
             agg_func = "AVG"
 
         # Use raw SQL for time bucketing (PostgreSQL-specific feature)
-        # SQLAlchemy doesn't have good support for DATE_TRUNC in ORM
+        # COALESCE with payload JSONB so data stored in either location is aggregated
         query_sql = f"""
         SELECT
             DATE_TRUNC('{bucket_size}', timestamp) as time_bucket,
-            {agg_func}(temperature) as temperature,
-            {agg_func}(humidity) as humidity,
-            {agg_func}(pressure) as pressure,
-            {agg_func}(battery) as battery,
-            {agg_func}(rssi) as rssi,
+            {agg_func}(COALESCE(temperature, (payload->>'temperature')::float)) as temperature,
+            {agg_func}(COALESCE(humidity, (payload->>'humidity')::float)) as humidity,
+            {agg_func}(COALESCE(pressure, (payload->>'pressure')::float)) as pressure,
+            {agg_func}(COALESCE(battery, (payload->>'battery')::float)) as battery,
+            {agg_func}(COALESCE(rssi, (payload->>'rssi')::float)) as rssi,
             COUNT(*) as sample_count
         FROM telemetry_hot
         WHERE tenant_id = :tenant_id
@@ -387,15 +392,21 @@ async def get_latest_telemetry(
                 detail=f"No telemetry data found in the last {minutes} minutes",
             )
 
+        payload = record.payload if record.payload else {}
         data = {
             "id": str(record.id),
             "device_id": str(record.device_id),
-            "temperature": float(record.temperature) if record.temperature is not None else None,
-            "humidity": float(record.humidity) if record.humidity is not None else None,
-            "pressure": float(record.pressure) if record.pressure is not None else None,
-            "battery": float(record.battery) if record.battery is not None else None,
-            "rssi": int(record.rssi) if record.rssi is not None else None,
-            "payload": record.payload if record.payload else {},
+            "temperature": float(record.temperature) if record.temperature is not None
+                else (float(payload["temperature"]) if "temperature" in payload and payload["temperature"] is not None else None),
+            "humidity": float(record.humidity) if record.humidity is not None
+                else (float(payload["humidity"]) if "humidity" in payload and payload["humidity"] is not None else None),
+            "pressure": float(record.pressure) if record.pressure is not None
+                else (float(payload["pressure"]) if "pressure" in payload and payload["pressure"] is not None else None),
+            "battery": float(record.battery) if record.battery is not None
+                else (float(payload["battery"]) if "battery" in payload and payload["battery"] is not None else None),
+            "rssi": int(record.rssi) if record.rssi is not None
+                else (int(payload["rssi"]) if "rssi" in payload and payload["rssi"] is not None else None),
+            "payload": payload,
             "timestamp": record.timestamp.isoformat() if record.timestamp else None,
             "created_at": record.created_at.isoformat() if record.created_at else None,
         }

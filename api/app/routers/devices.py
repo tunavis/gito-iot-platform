@@ -419,21 +419,21 @@ async def delete_device(
             detail="Device not found",
         )
     
-    # Trigger async ChirpStack delete if synced
-    if device.chirpstack_synced:
+    # Trigger async TTN delete if synced
+    if device.ttn_synced:
         device_mgmt = DeviceManagementService(session)
         try:
-            await device_mgmt.delete_from_chirpstack(device)
+            await device_mgmt.delete_from_ttn(device)
         except Exception as e:
             logger.error(
-                "chirpstack_delete_failed",
+                "ttn_delete_failed",
                 extra={
                     "tenant_id": str(tenant_id),
                     "device_id": str(device.id),
                     "error": str(e),
                 },
             )
-            # Continue with local deletion even if ChirpStack sync fails
+            # Continue with local deletion even if TTN sync fails
     
     device_type_id = device.device_type_id
     await session.delete(device)
