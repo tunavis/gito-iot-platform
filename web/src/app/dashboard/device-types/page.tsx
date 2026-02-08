@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import {
   Plus,
   Search,
@@ -101,6 +102,7 @@ const capabilityBadges: Record<string, { label: string; color: string }> = {
 
 export default function DeviceTypesPage() {
   const router = useRouter();
+  const toast = useToast();
   const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,9 +175,10 @@ export default function DeviceTypesPage() {
         throw new Error(error.detail || 'Failed to delete device type');
       }
 
+      toast.success('Deleted', `Device type "${name}" has been removed`);
       fetchDeviceTypes();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete');
+      toast.error('Delete Failed', err instanceof Error ? err.message : 'Failed to delete');
     }
   };
 
@@ -196,10 +199,11 @@ export default function DeviceTypesPage() {
 
       if (!response.ok) throw new Error('Failed to clone device type');
 
+      toast.success('Cloned', 'Device type cloned successfully');
       fetchDeviceTypes();
       setDropdownOpen(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to clone');
+      toast.error('Clone Failed', err instanceof Error ? err.message : 'Failed to clone');
     }
   };
 

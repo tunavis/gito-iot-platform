@@ -238,11 +238,8 @@ export default function NewDevicePage() {
 
       // Add connectivity based on protocol
       if (selectedType.connectivity?.protocol === 'lorawan') {
-        if (connectivity.dev_eui) body.dev_eui = connectivity.dev_eui;
-        if (connectivity.app_key) body.app_key = connectivity.app_key;
-        if (connectivity.ttn_app_id) body.ttn_app_id = connectivity.ttn_app_id;
-      } else if (selectedType.connectivity?.protocol === 'mqtt') {
-        if (connectivity.mqtt_client_id) body.mqtt_client_id = connectivity.mqtt_client_id;
+        if (connectivity.dev_eui) body.lorawan_dev_eui = connectivity.dev_eui;
+        if (connectivity.ttn_app_id) body.chirpstack_app_id = connectivity.ttn_app_id;
       }
 
       const response = await fetch(`/api/v1/tenants/${tenant}/devices`, {

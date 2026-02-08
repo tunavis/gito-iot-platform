@@ -50,6 +50,9 @@ interface Device {
   location?: { latitude: number; longitude: number } | null;
   firmware_version?: string | null;
   hardware_version?: string | null;
+  device_token?: string | null;
+  chirpstack_app_id?: string | null;
+  device_profile_id?: string | null;
 }
 
 interface TelemetryPoint {
@@ -332,6 +335,14 @@ export default function DeviceDetailPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push(`/dashboard/devices/${deviceId}/edit`)}
+                className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700 font-medium"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit
+              </button>
+
               <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-semibold ${
                 device.status === 'online'
                   ? 'bg-green-50 text-green-700 border-green-200'
@@ -468,7 +479,7 @@ export default function DeviceDetailPage() {
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-6">
           <nav className="flex gap-6">
-            {['overview', 'telemetry', 'alarms', 'settings'].map(tab => (
+            {['overview', 'telemetry', 'alarms', 'credentials', 'settings'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -828,6 +839,9 @@ export default function DeviceDetailPage() {
         {/* Alarms Tab */}
         {activeTab === 'alarms' && <DeviceAlarms deviceId={deviceId} />}
 
+        {/* Credentials Tab */}
+        {activeTab === 'credentials' && <DeviceCredentials deviceId={deviceId} />}
+
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} />
@@ -1157,6 +1171,337 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
             );
           })()
         )}
+      </div>
+    </div>
+  );
+}
+
+// Device Credentials Component
+function DeviceCredentials({ deviceId }: { deviceId: string }) {
+  const [token, setToken] = useState<string | null>(null);
+  const [masked, setMasked] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [device, setDevice] = useState<Device | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDevice();
+  }, [deviceId]);
+
+  const loadDevice = async () => {
+    try {
+      const res = await fetch(`/api/v1/tenants/me/devices/${deviceId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const d = data.data || data;
+        setDevice(d);
+        if (d.device_token) setToken(d.device_token);
+      }
+    } catch (err) {
+      console.error('Failed to load device:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/v1/tenants/me/devices/${deviceId}/regenerate-token`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const newToken = data.data?.device_token || data.device_token;
+        setToken(newToken);
+        setMasked(false);
+        setConfirmRegenerate(false);
+      }
+    } catch (err) {
+      console.error('Failed to regenerate token:', err);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const maskToken = (t: string) => {
+    if (t.length <= 8) return '•'.repeat(t.length);
+    return t.slice(0, 4) + '•'.repeat(t.length - 8) + t.slice(-4);
+  };
+
+  const mqttTopic = device ? `devices/${device.dev_eui || deviceId}/telemetry` : '';
+  const httpEndpoint = `/api/v1/devices/${deviceId}/telemetry`;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Device Token */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-2 bg-amber-50 rounded-lg">
+            <Activity className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Device Access Token</h3>
+            <p className="text-sm text-gray-500">Used for HTTP REST API authentication</p>
+          </div>
+        </div>
+
+        {token ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-gray-900 text-green-400 px-4 py-3 rounded-lg font-mono text-sm break-all">
+                {masked ? maskToken(token) : token}
+              </code>
+              <button
+                onClick={() => setMasked(!masked)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title={masked ? 'Show token' : 'Hide token'}
+              >
+                {masked ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                )}
+              </button>
+              <button
+                onClick={() => copyToClipboard(token, 'token')}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Copy to clipboard"
+              >
+                {copied === 'token' ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
+                )}
+              </button>
+            </div>
+
+            {!confirmRegenerate ? (
+              <button
+                onClick={() => setConfirmRegenerate(true)}
+                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+              >
+                Regenerate Token
+              </button>
+            ) : (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">Are you sure?</p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Regenerating the token will immediately invalidate the current one.
+                      Any devices using the old token will lose access.
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={handleRegenerate}
+                        disabled={regenerating}
+                        className="px-3 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                      >
+                        {regenerating ? 'Regenerating...' : 'Yes, Regenerate'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmRegenerate(false)}
+                        className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 italic">No token assigned. Token is generated when the device is created.</p>
+        )}
+      </div>
+
+      {/* Connection Details */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-2 bg-blue-50 rounded-lg">
+            <Wifi className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Connection Details</h3>
+            <p className="text-sm text-gray-500">Endpoints and topics for device communication</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* MQTT */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">MQTT Broker</label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
+                mqtt://localhost:1883
+              </code>
+              <button
+                onClick={() => copyToClipboard('mqtt://localhost:1883', 'mqtt')}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                {copied === 'mqtt' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* MQTT Topic */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">MQTT Publish Topic</label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
+                {mqttTopic}
+              </code>
+              <button
+                onClick={() => copyToClipboard(mqttTopic, 'topic')}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                {copied === 'topic' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* HTTP Endpoint */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">HTTP Telemetry Endpoint</label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
+                POST {httpEndpoint}
+              </code>
+              <button
+                onClick={() => copyToClipboard(httpEndpoint, 'http')}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                {copied === 'http' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* LoRaWAN DevEUI */}
+          {device?.dev_eui && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">LoRaWAN DevEUI</label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
+                  {device.dev_eui}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(device.dev_eui!, 'deveui')}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  {copied === 'deveui' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ChirpStack App ID */}
+          {device?.chirpstack_app_id && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">ChirpStack Application ID</label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
+                  {device.chirpstack_app_id}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(device.chirpstack_app_id!, 'appid')}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  {copied === 'appid' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
+                    )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Code Snippets */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-2 bg-purple-50 rounded-lg">
+            <BarChart3 className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Quick Start</h3>
+            <p className="text-sm text-gray-500">Example code to send telemetry from your device</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* cURL example */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">cURL</label>
+              <button
+                onClick={() => copyToClipboard(
+                  `curl -X POST ${httpEndpoint} \\\n  -H "Authorization: Bearer ${token || '<DEVICE_TOKEN>'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"temperature": 22.5, "humidity": 65}'`,
+                  'curl'
+                )}
+                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+              >
+                {copied === 'curl' ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre className="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-xs overflow-x-auto">
+{`curl -X POST ${httpEndpoint} \\
+  -H "Authorization: Bearer ${token ? maskToken(token) : '<DEVICE_TOKEN>'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"temperature": 22.5, "humidity": 65}'`}
+            </pre>
+          </div>
+
+          {/* MQTT example */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">MQTT (mosquitto_pub)</label>
+              <button
+                onClick={() => copyToClipboard(
+                  `mosquitto_pub -h localhost -p 1883 -t "${mqttTopic}" -m '{"temperature": 22.5, "humidity": 65}'`,
+                  'mqttpub'
+                )}
+                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+              >
+                {copied === 'mqttpub' ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre className="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-xs overflow-x-auto">
+{`mosquitto_pub -h localhost -p 1883 \\
+  -t "${mqttTopic}" \\
+  -m '{"temperature": 22.5, "humidity": 65}'`}
+            </pre>
+          </div>
+        </div>
       </div>
     </div>
   );

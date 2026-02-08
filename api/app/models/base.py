@@ -75,6 +75,8 @@ class Device(BaseModel):
     battery_level = Column(Float)
     signal_strength = Column(Integer)
     attributes = Column(JSONB, default={}, nullable=False)  # Device-specific attributes
+    firmware_version = Column(String(50), nullable=True)  # Current firmware version
+    hardware_version = Column(String(50), nullable=True)  # Hardware revision
     ttn_app_id = Column(String(100), nullable=True)  # TTN Server app ID (provider-agnostic)
     device_profile_id = Column(String(100), nullable=True)  # Device profile UUID
     ttn_synced = Column(Boolean, default=False, nullable=False)  # Whether device is synced to TTN server

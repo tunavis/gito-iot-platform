@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import { 
   Cpu, 
   CheckCircle2, 
@@ -14,9 +15,12 @@ import {
   List, 
   ChevronUp, 
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Battery,
   BatteryLow,
-  BatteryWarning
+  BatteryWarning,
+  Filter
 } from 'lucide-react';
 
 interface DeviceType {
@@ -52,16 +56,24 @@ type SortDirection = 'asc' | 'desc';
 
 export default function DevicesPage() {
   const router = useRouter();
+  const toast = useToast();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all');
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalDevices, setTotalDevices] = useState(0);
+  const perPage = 24;
+  // Available device types for filter
+  const [deviceTypeOptions, setDeviceTypeOptions] = useState<{id: string; name: string; color: string}[]>([]);
 
   const loadDevices = useCallback(async () => {
       try {
@@ -74,7 +86,12 @@ export default function DevicesPage() {
         const payload = JSON.parse(atob(token.split('.')[1]));
         const tenant = payload.tenant_id;
 
-        const response = await fetch(`/api/v1/tenants/${tenant}/devices`, {
+        const params = new URLSearchParams({
+          page: currentPage.toString(),
+          per_page: perPage.toString(),
+        });
+
+        const response = await fetch(`/api/v1/tenants/${tenant}/devices?${params}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -84,16 +101,38 @@ export default function DevicesPage() {
         }
 
         setDevices(data.data || []);
+        setTotalDevices(data.meta?.total ?? data.data?.length ?? 0);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load devices');
       } finally {
         setLoading(false);
       }
-  }, [router]);
+  }, [router, currentPage]);
+
+  // Load device types for filter
+  const loadDeviceTypes = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const tenant = payload.tenant_id;
+      const res = await fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDeviceTypeOptions((data.data || []).map((dt: any) => ({ id: dt.id, name: dt.name, color: dt.color })));
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     loadDevices();
   }, [loadDevices]);
+
+  useEffect(() => {
+    loadDeviceTypes();
+  }, [loadDeviceTypes]);
 
   // Bulk delete devices
   const handleBulkDelete = async () => {
@@ -123,13 +162,12 @@ export default function DevicesPage() {
         throw new Error(data.error?.message || 'Failed to delete devices');
       }
 
-      // Reload devices and clear selection
       const data = await response.json();
-      alert(data.data.message);
+      toast.success('Devices Deleted', data.data.message);
       setSelectedDevices(new Set());
-      window.location.reload();
+      loadDevices();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete devices');
+      toast.error('Delete Failed', err instanceof Error ? err.message : 'Failed to delete devices');
     }
   };
 
@@ -176,12 +214,13 @@ export default function DevicesPage() {
         device.id.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === 'all' || device.status === statusFilter;
+      const matchesType = deviceTypeFilter === 'all' || device.device_type_id === deviceTypeFilter;
       
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesType;
     });
 
     return sortDevices(filtered);
-  }, [devices, searchQuery, statusFilter, sortField, sortDirection]);
+  }, [devices, searchQuery, statusFilter, deviceTypeFilter, sortField, sortDirection]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -351,6 +390,18 @@ export default function DevicesPage() {
                 <option value="idle">Idle</option>
               </select>
 
+              {/* Device Type Filter */}
+              <select
+                value={deviceTypeFilter}
+                onChange={(e) => setDeviceTypeFilter(e.target.value)}
+                className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              >
+                <option value="all">All Types</option>
+                {deviceTypeOptions.map(dt => (
+                  <option key={dt.id} value={dt.id}>{dt.name}</option>
+                ))}
+              </select>
+
               {/* View Mode Toggle */}
               <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
                 <button
@@ -434,7 +485,7 @@ export default function DevicesPage() {
             <AlertTriangle className="w-12 h-12 text-red-600 mx-auto mb-4" />
             <p className="text-red-600 mb-4">{error}</p>
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => { setError(null); setLoading(true); loadDevices(); }}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
               Retry
@@ -726,6 +777,59 @@ export default function DevicesPage() {
           </div>
         )}
 
+        {/* Pagination */}
+        {!loading && !error && totalDevices > perPage && (
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm text-slate-600">
+              Page <span className="font-semibold">{currentPage}</span> of{' '}
+              <span className="font-semibold">{Math.ceil(totalDevices / perPage)}</span>
+              {' '}({totalDevices} total devices)
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {Array.from({ length: Math.min(5, Math.ceil(totalDevices / perPage)) }, (_, i) => {
+                const totalPages = Math.ceil(totalDevices / perPage);
+                let page: number;
+                if (totalPages <= 5) {
+                  page = i + 1;
+                } else if (currentPage <= 3) {
+                  page = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  page = totalPages - 4 + i;
+                } else {
+                  page = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? 'bg-primary-600 text-white'
+                        : 'border border-slate-300 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalDevices / perPage), p + 1))}
+                disabled={currentPage >= Math.ceil(totalDevices / perPage)}
+                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Bulk Assign Modal */}
         {showBulkAssignModal && (
           <BulkAssignModal
@@ -755,12 +859,12 @@ export default function DevicesPage() {
                 }
 
                 const data = await response.json();
-                alert(data.data.message);
+                toast.success('Group Assigned', data.data.message);
                 setShowBulkAssignModal(false);
                 setSelectedDevices(new Set());
-                window.location.reload();
+                loadDevices();
               } catch (err) {
-                alert(err instanceof Error ? err.message : 'Failed to assign devices');
+                toast.error('Assignment Failed', err instanceof Error ? err.message : 'Failed to assign devices');
               }
             }}
             onCancel={() => setShowBulkAssignModal(false)}
