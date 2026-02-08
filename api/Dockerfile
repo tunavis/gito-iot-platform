@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY api/alembic ./alembic
 COPY api/alembic.ini ./alembic.ini
 
+# Copy database init SQL
+COPY db/init.sql ./db/init.sql
+
 # Copy entrypoint script
 COPY api/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh

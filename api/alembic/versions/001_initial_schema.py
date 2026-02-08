@@ -40,19 +40,13 @@ def upgrade() -> None:
     """)
 
     # Import and execute the complete init.sql
-    # Read the file content
-    import os
-    init_sql_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'db', 'init.sql')
+    # Path in Docker container: /app/db/init.sql
+    init_sql_path = '/app/db/init.sql'
 
-    if os.path.exists(init_sql_path):
-        with open(init_sql_path, 'r') as f:
-            sql_content = f.read()
-            # Execute the SQL
-            op.execute(sql_content)
-    else:
-        # Fallback: Create tables manually if init.sql not found
-        # This ensures migration works even without init.sql
-        raise Exception(f"init.sql not found at {init_sql_path}. Cannot create schema.")
+    with open(init_sql_path, 'r') as f:
+        sql_content = f.read()
+        # Execute the SQL
+        op.execute(sql_content)
 
 
 def downgrade() -> None:
