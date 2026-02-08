@@ -69,6 +69,7 @@ class Device(BaseModel):
     device_type_id = Column(UUID(as_uuid=True), ForeignKey("device_types.id", ondelete="RESTRICT"), nullable=False, index=True)
     device_type = Column(String(100), nullable=True)  # DEPRECATED: Legacy string field, use device_type_id
     dev_eui = Column(String(16), nullable=True)  # For LoRaWAN (alias for lorawan_dev_eui)
+    device_token = Column(String(255), nullable=True)  # HTTP REST API authentication token
     status = Column(String(50), default="offline", nullable=False)
     last_seen = Column(DateTime(timezone=True))
     battery_level = Column(Float)

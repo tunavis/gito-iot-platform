@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import ConnectionInstructionsModal from '@/components/ConnectionInstructionsModal';
 import {
   ArrowLeft,
   Plus,
@@ -97,6 +98,8 @@ export default function NewDevicePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdDevice, setCreatedDevice] = useState<any | null>(null);
+  const [showConnectionInstructions, setShowConnectionInstructions] = useState(false);
 
   // Data
   const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
@@ -257,7 +260,15 @@ export default function NewDevicePage() {
       }
 
       const result = await response.json();
-      router.push(`/dashboard/devices/${result.data?.id || ""}`);
+
+      // Store created device and show connection instructions
+      const deviceData = {
+        id: result.id || result.data?.id,
+        name: deviceInfo.name,
+        device_type: selectedType
+      };
+      setCreatedDevice(deviceData);
+      setShowConnectionInstructions(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create device");
     } finally {
@@ -1018,6 +1029,17 @@ export default function NewDevicePage() {
         </div>
         </div>
       </main>
+
+      {/* Connection Instructions Modal */}
+      {showConnectionInstructions && createdDevice && (
+        <ConnectionInstructionsModal
+          device={createdDevice}
+          onClose={() => {
+            setShowConnectionInstructions(false);
+            router.push(`/dashboard/devices/${createdDevice.id}`);
+          }}
+        />
+      )}
     </div>
   );
 }

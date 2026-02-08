@@ -76,35 +76,137 @@ jobs:
     needs: build-and-push
 
     steps:
-      - name: Deploy to Staging Server
+      - name: Pull Latest Code
         run: |
           cd /opt/gito-iot
-
-          # Pull latest code (handle divergent branches)
+          echo "📥 Pulling latest code..."
           git fetch origin
           git reset --hard origin/staging
+          echo "✅ Code updated"
 
-          # Login to GitHub Container Registry
+      - name: Login to Container Registry
+        run: |
+          cd /opt/gito-iot
+          echo "🔐 Logging into GitHub Container Registry..."
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "✅ Logged in"
 
-          # Pull latest images (using Docker Compose V2 - no hyphen)
+      - name: Pull Docker Images
+        run: |
+          cd /opt/gito-iot
+          echo "📦 Pulling latest Docker images..."
           docker compose -f docker-compose.staging.yml --env-file .env.staging pull
+          echo "✅ Images pulled"
 
-          # Force stop and remove old containers
-          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans
+      - name: Stop Current Services
+        run: |
+          cd /opt/gito-iot
+          echo "🛑 Stopping current services..."
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans || true
+          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging 2>/dev/null || true
+          echo "✅ Services stopped"
 
-          # Force remove any remaining containers by name (in case down failed)
-          docker rm -f gito-api-staging gito-web-staging 2>/dev/null || true
+      - name: Run Database Migrations
+        run: |
+          cd /opt/gito-iot
+          echo "📋 Checking database migrations..."
 
-          # Start services with new images
+          # Start postgres and API temporarily for migrations
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d postgres
+          sleep 5
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d api
+          sleep 10
+
+          echo "Current migration status:"
+          docker exec gito-api-staging alembic current || echo "⚠️  Could not get current status"
+
+          echo ""
+          echo "⚡ Running migrations..."
+          docker exec gito-api-staging alembic upgrade head || {
+            echo "❌ MIGRATION FAILED!"
+            echo ""
+            echo "📋 API Logs:"
+            docker logs gito-api-staging --tail 100
+            echo ""
+            echo "⚠️  Database may be inconsistent. Run: ./scripts/reset_staging_database.sh"
+            exit 1
+          }
+
+          echo "✅ Migrations completed"
+
+      - name: Start All Services
+        run: |
+          cd /opt/gito-iot
+          echo "🚀 Starting all services..."
+
+          # Stop API (we'll restart everything together)
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down
+
+          # Start all services
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
 
-          # Clean up old images
-          docker image prune -af
-
-          echo "✅ Staging deployment complete!"
+          echo "⏳ Waiting for services to start..."
+          sleep 20
+          echo "✅ Services started"
 
       - name: Health Check
         run: |
-          sleep 30
-          curl -f http://localhost/api/health || exit 1
+          cd /opt/gito-iot
+          echo "🏥 Running health check..."
+
+          MAX_RETRIES=6
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "✅ Health check PASSED (HTTP $HTTP_CODE)"
+              exit 0
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "⏳ Attempt $RETRY_COUNT/$MAX_RETRIES (HTTP $HTTP_CODE)"
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                sleep 10
+              fi
+            fi
+          done
+
+          echo "❌ Health check FAILED after $MAX_RETRIES attempts"
+          echo ""
+          echo "📋 Service Status:"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging ps
+          echo ""
+          echo "📋 API Logs:"
+          docker logs gito-api-staging --tail 100
+          echo ""
+          echo "📋 Web Logs:"
+          docker logs gito-web-staging --tail 50
+          echo ""
+          echo "📋 Nginx Logs:"
+          docker logs gito-nginx-staging --tail 50
+          exit 1
+
+      - name: Cleanup
+        if: success()
+        run: |
+          cd /opt/gito-iot
+          echo "🧹 Cleaning up old images..."
+          docker image prune -af --filter "until=24h"
+          echo "✅ Cleanup complete"
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          cd /opt/gito-iot
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ DEPLOYMENT SUCCESSFUL!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📊 Service Status:"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging ps
+          echo ""
+          echo "🌐 Application: https://dev-iot.gito.co.za"
+          echo "🏥 Health: https://dev-iot.gito.co.za/api/health"
+          echo ""

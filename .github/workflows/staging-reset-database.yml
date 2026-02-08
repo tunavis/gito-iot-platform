@@ -1,0 +1,169 @@
+name: Reset Staging Database
+
+# MANUAL TRIGGER ONLY - Use this to reset staging database to clean state
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "RESET" to confirm database deletion'
+        required: true
+        type: string
+
+jobs:
+  reset-database:
+    name: Reset Staging Database
+    runs-on: self-hosted
+
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "RESET" ]; then
+            echo "❌ Confirmation failed. You must type 'RESET' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+      - name: Display Warning
+        run: |
+          echo "🚨 ═══════════════════════════════════════════════════"
+          echo "🚨   STAGING DATABASE RESET"
+          echo "🚨 ═══════════════════════════════════════════════════"
+          echo ""
+          echo "⚠️  This will:"
+          echo "    • Stop all services"
+          echo "    • Drop gito_iot_staging database"
+          echo "    • Recreate database from scratch"
+          echo "    • Run all Alembic migrations"
+          echo "    • Delete ALL existing data"
+          echo ""
+          echo "⏰ Starting in 5 seconds..."
+          sleep 5
+
+      - name: Stop All Services
+        run: |
+          cd /opt/gito-iot
+          echo "🛑 Stopping all services..."
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans || true
+          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging 2>/dev/null || true
+          echo "✅ Services stopped"
+
+      - name: Drop Database
+        run: |
+          cd /opt/gito-iot
+          echo "🗑️  Dropping existing database..."
+
+          # Start postgres
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d postgres
+          sleep 5
+
+          # Drop database
+          docker exec gito-postgres psql -U postgres -c "DROP DATABASE IF EXISTS gito_iot_staging;" || {
+            echo "⚠️  Warning: Could not drop database (might not exist)"
+          }
+
+          echo "✅ Database dropped"
+
+      - name: Create Fresh Database
+        run: |
+          cd /opt/gito-iot
+          echo "🆕 Creating fresh database..."
+          docker exec gito-postgres psql -U postgres -c "CREATE DATABASE gito_iot_staging OWNER gito;"
+          echo "✅ Database created"
+
+      - name: Run Alembic Migrations
+        run: |
+          cd /opt/gito-iot
+          echo "📦 Running Alembic migrations..."
+
+          # Start API temporarily
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d api
+          sleep 10
+
+          echo "📋 Current status:"
+          docker exec gito-api-staging alembic current || echo "No migrations applied yet"
+
+          echo ""
+          echo "⚡ Running alembic upgrade head..."
+          docker exec gito-api-staging alembic upgrade head
+
+          echo ""
+          echo "📋 Final status:"
+          docker exec gito-api-staging alembic current
+
+          echo "✅ Migrations completed"
+
+      - name: Restart All Services
+        run: |
+          cd /opt/gito-iot
+          echo "🚀 Restarting all services..."
+
+          # Stop API
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down
+
+          # Start all services
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
+
+          sleep 15
+          echo "✅ Services restarted"
+
+      - name: Health Check
+        run: |
+          cd /opt/gito-iot
+          echo "🏥 Running health check..."
+
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "✅ Health check PASSED (HTTP $HTTP_CODE)"
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "⏳ Attempt $RETRY_COUNT/$MAX_RETRIES (HTTP $HTTP_CODE)"
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                sleep 10
+              fi
+            fi
+          done
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Health check FAILED"
+            echo ""
+            echo "📋 API Logs:"
+            docker logs gito-api-staging --tail 100
+            exit 1
+          fi
+
+      - name: Verify Database Schema
+        run: |
+          cd /opt/gito-iot
+          echo "📊 Verifying database schema..."
+
+          echo ""
+          echo "Tables created:"
+          docker exec gito-postgres psql -U gito -d gito_iot_staging -c "\dt" | head -50
+
+          echo ""
+          echo "Migration history:"
+          docker exec gito-postgres psql -U gito -d gito_iot_staging -c "SELECT version_num, created_at FROM alembic_version ORDER BY created_at DESC LIMIT 5;" || echo "No migration history table"
+
+      - name: Summary
+        run: |
+          cd /opt/gito-iot
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ DATABASE RESET COMPLETE!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📊 Service Status:"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging ps
+          echo ""
+          echo "🎯 Next Steps:"
+          echo "  1. ✅ Database is clean with all migrations applied"
+          echo "  2. 🔐 Create admin user or import test data"
+          echo "  3. 🧪 Test login at https://dev-iot.gito.co.za"
+          echo "  4. 📊 Optional: Run ./scripts/import_to_staging.sh"
+          echo ""

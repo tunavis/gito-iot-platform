@@ -103,3 +103,4 @@ processor/.mypy_cache/
 # Keep example files
 !.env.example
 !.github/
+nul

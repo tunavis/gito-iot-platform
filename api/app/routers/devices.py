@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 from typing import Annotated, Optional
 from uuid import UUID
 import logging
+import secrets
 
 from app.database import get_session, RLSSession
 from app.models.base import Device
@@ -134,6 +135,9 @@ async def create_device(
             detail=f"Device type {device_data.device_type_id} not found for this tenant"
         )
 
+    # Generate secure device token for HTTP REST API authentication
+    device_token = f"dev_{secrets.token_urlsafe(32)}"
+
     device = Device(
         tenant_id=tenant_id,
         name=device_data.name,
@@ -142,6 +146,7 @@ async def create_device(
         site_id=device_data.site_id,
         device_group_id=device_data.device_group_id,
         dev_eui=device_data.lorawan_dev_eui if hasattr(device_data, 'lorawan_dev_eui') else None,
+        device_token=device_token,
         ttn_app_id=device_data.ttn_app_id if hasattr(device_data, 'ttn_app_id') else None,
         device_profile_id=device_data.device_profile_id if hasattr(device_data, 'device_profile_id') else None,
         attributes=device_data.attributes if device_data.attributes else {},

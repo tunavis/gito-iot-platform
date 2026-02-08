@@ -33,11 +33,19 @@ const MapView = dynamic(() => import('@/components/DeviceMapView'), {
   )
 });
 
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  color: string;
+}
+
 interface Device {
   id: string;
   name: string;
-  device_type: string;
-  device_type_id?: string;
+  device_type_id: string;
+  device_type?: DeviceType;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -123,7 +131,7 @@ export default function DeviceMapPage() {
         const term = searchTerm.toLowerCase();
         return (
           device.name.toLowerCase().includes(term) ||
-          device.device_type.toLowerCase().includes(term) ||
+          device.device_type?.name?.toLowerCase().includes(term) ||
           device.id.toLowerCase().includes(term)
         );
       }
@@ -336,7 +344,7 @@ export default function DeviceMapPage() {
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">{selectedDevice.name}</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  {selectedDevice.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {selectedDevice.device_type?.name || 'Unknown Type'}
                 </p>
               </div>
               <button
