@@ -19,7 +19,36 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add multi-protocol support with validation and indexing."""
+    """Add device_types table and multi-protocol support."""
+
+    # Create device_types table (was missing from initial schema)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS device_types (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            manufacturer VARCHAR(100),
+            model VARCHAR(100),
+            category VARCHAR(50) DEFAULT 'other',
+            icon VARCHAR(50) DEFAULT 'cpu',
+            color VARCHAR(20) DEFAULT '#6366f1',
+            data_model JSONB DEFAULT '[]'::jsonb,
+            capabilities JSONB DEFAULT '[]'::jsonb,
+            default_settings JSONB DEFAULT '{}'::jsonb,
+            connectivity JSONB DEFAULT '{}'::jsonb,
+            metadata JSONB DEFAULT '{}'::jsonb,
+            is_active BOOLEAN DEFAULT true,
+            device_count INTEGER DEFAULT 0,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            CONSTRAINT device_types_name_tenant_unique UNIQUE (tenant_id, name)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_device_types_tenant_id ON device_types(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_device_types_category ON device_types(category);
+        CREATE INDEX IF NOT EXISTS idx_device_types_is_active ON device_types(is_active);
+    """)
 
     # Add index on connectivity->protocol for faster protocol-based queries
     op.execute("""
