@@ -107,4 +107,4 @@ jobs:
       - name: Health Check
         run: |
           sleep 30
-          curl -f https://dev-iot.gito.co.za/api/health || exit 1
+          curl -f http://localhost/api/health || exit 1
