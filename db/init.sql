@@ -2960,41 +2960,43 @@ JOIN alert_rules ar ON ae.alert_rule_id = ar.id;
 
 -- Email template (insert for each tenant during provisioning)
 -- This is a placeholder - actual templates should be per-tenant
-INSERT INTO notification_templates (
-    tenant_id,
-    channel_type,
-    alert_type,
-    name,
-    subject,
-    body,
-    variables,
-    enabled
-) VALUES (
-    (SELECT id FROM tenants LIMIT 1),  -- For default tenant
-    'email',
-    NULL,
-    'Default Email Alert',
-    'Alert: {{ device_name }} - {{ alert_message }}',
-    '{{ device_name }} triggered an alert.\n\nDevice: {{ device_name }}\nRule: {{ rule_name }}\nValue: {{ metric_value }}\nThreshold: {{ threshold }}\nTime: {{ fired_at }}\n\nCheck your dashboard for more details.',
-    '["device_name", "rule_name", "metric_value", "threshold", "fired_at", "alert_message"]'::jsonb,
-    true
-) ON CONFLICT DO NOTHING;
+-- COMMENTED OUT: Requires tenant to exist first - add via API/admin panel instead
+-- INSERT INTO notification_templates (
+--     tenant_id,
+--     channel_type,
+--     alert_type,
+--     name,
+--     subject,
+--     body,
+--     variables,
+--     enabled
+-- ) VALUES (
+--     (SELECT id FROM tenants LIMIT 1),  -- For default tenant
+--     'email',
+--     NULL,
+--     'Default Email Alert',
+--     'Alert: {{ device_name }} - {{ alert_message }}',
+--     '{{ device_name }} triggered an alert.\n\nDevice: {{ device_name }}\nRule: {{ rule_name }}\nValue: {{ metric_value }}\nThreshold: {{ threshold }}\nTime: {{ fired_at }}\n\nCheck your dashboard for more details.',
+--     '["device_name", "rule_name", "metric_value", "threshold", "fired_at", "alert_message"]'::jsonb,
+--     true
+-- ) ON CONFLICT DO NOTHING;
 
 -- Slack template
-INSERT INTO notification_templates (
-    tenant_id,
-    channel_type,
-    alert_type,
-    name,
-    body,
-    variables,
-    enabled
-) VALUES (
-    (SELECT id FROM tenants LIMIT 1),
-    'slack',
-    NULL,
-    'Default Slack Alert',
-    '🚨 Alert: {{ device_name }}\n{{ rule_name }}\nValue: {{ metric_value }} (threshold: {{ threshold }})\n<{{ dashboard_url }}|View Dashboard>',
-    '["device_name", "rule_name", "metric_value", "threshold", "dashboard_url"]'::jsonb,
-    true
-) ON CONFLICT DO NOTHING;
+-- COMMENTED OUT: Requires tenant to exist first - add via API/admin panel instead
+-- INSERT INTO notification_templates (
+--     tenant_id,
+--     channel_type,
+--     alert_type,
+--     name,
+--     body,
+--     variables,
+--     enabled
+-- ) VALUES (
+--     (SELECT id FROM tenants LIMIT 1),
+--     'slack',
+--     NULL,
+--     'Default Slack Alert',
+--     '🚨 Alert: {{ device_name }}\n{{ rule_name }}\nValue: {{ metric_value }} (threshold: {{ threshold }})\n<{{ dashboard_url }}|View Dashboard>',
+--     '["device_name", "rule_name", "metric_value", "threshold", "dashboard_url"]'::jsonb,
+--     true
+-- ) ON CONFLICT DO NOTHING;
