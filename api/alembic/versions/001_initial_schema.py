@@ -4,13 +4,12 @@ Revision ID: 001_initial
 Revises:
 Create Date: 2026-02-08
 
-This is a clean initial migration that creates all tables with IF NOT EXISTS guards.
-Based on db/init.sql and SQLAlchemy models.
+This migration runs the idempotent init.sql file which creates all tables.
+The init.sql is 100% idempotent - safe to run on fresh or existing databases.
 """
 from typing import Sequence, Union
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+import os
 
 # revision identifiers, used by Alembic.
 revision: str = '001_initial'
@@ -20,58 +19,64 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Create all tables with idempotent guards."""
+    """Run the idempotent init.sql to create/update all tables."""
 
-    # Execute the complete schema from init.sql
-    # This is idempotent - safe to run multiple times
-    op.execute("""
-        -- Enable extensions
-        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
-        -- Create update_updated_at_column function
-        CREATE OR REPLACE FUNCTION update_updated_at_column()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            NEW.updated_at = NOW();
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-
-    # Import and execute the complete init.sql
-    # Path in Docker container: /app/db/init.sql
+    # Path to init.sql in Docker container
     init_sql_path = '/app/db/init.sql'
+
+    # Fallback for local development
+    if not os.path.exists(init_sql_path):
+        # Try relative path from project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        init_sql_path = os.path.join(project_root, 'db', 'init.sql')
+
+    if not os.path.exists(init_sql_path):
+        raise FileNotFoundError(f"Cannot find init.sql at {init_sql_path}")
 
     with open(init_sql_path, 'r') as f:
         sql_content = f.read()
-        # Execute the SQL
-        op.execute(sql_content)
+
+    # Execute the idempotent SQL
+    op.execute(sql_content)
 
 
 def downgrade() -> None:
-    """Drop all tables."""
+    """Drop all tables in reverse dependency order."""
     op.execute("""
+        -- Drop in reverse dependency order
         DROP TABLE IF EXISTS notification_queue CASCADE;
+        DROP TABLE IF EXISTS notifications CASCADE;
         DROP TABLE IF EXISTS notification_rules CASCADE;
-        DROP TABLE IF EXISTS alert_rule_conditions CASCADE;
-        DROP TABLE IF EXISTS alert_events CASCADE;
-        DROP TABLE IF EXISTS alarms CASCADE;
-        DROP TABLE IF EXISTS telemetry_hot CASCADE;
-        DROP TABLE IF EXISTS group_devices CASCADE;
-        DROP TABLE IF EXISTS device_credentials CASCADE;
-        DROP TABLE IF EXISTS alert_rules CASCADE;
+        DROP TABLE IF EXISTS notification_channels CASCADE;
+        DROP TABLE IF EXISTS notification_templates CASCADE;
+        DROP TABLE IF EXISTS notification_settings CASCADE;
+        DROP TABLE IF EXISTS dashboard_widgets CASCADE;
+        DROP TABLE IF EXISTS dashboards CASCADE;
+        DROP TABLE IF EXISTS solution_templates CASCADE;
+        DROP TABLE IF EXISTS device_availability_log CASCADE;
+        DROP TABLE IF EXISTS device_events CASCADE;
+        DROP TABLE IF EXISTS event_types CASCADE;
+        DROP TABLE IF EXISTS device_profiles CASCADE;
+        DROP TABLE IF EXISTS ota_campaign_devices CASCADE;
+        DROP TABLE IF EXISTS ota_campaigns CASCADE;
+        DROP TABLE IF EXISTS device_firmware_history CASCADE;
+        DROP TABLE IF EXISTS firmware_versions CASCADE;
         DROP TABLE IF EXISTS group_bulk_operations CASCADE;
+        DROP TABLE IF EXISTS group_devices CASCADE;
+        DROP TABLE IF EXISTS alarms CASCADE;
+        DROP TABLE IF EXISTS alert_events CASCADE;
+        DROP TABLE IF EXISTS alert_rule_conditions CASCADE;
+        DROP TABLE IF EXISTS composite_alert_rules CASCADE;
+        DROP TABLE IF EXISTS alert_rules CASCADE;
+        DROP TABLE IF EXISTS telemetry_hot CASCADE;
+        DROP TABLE IF EXISTS device_credentials CASCADE;
         DROP TABLE IF EXISTS devices CASCADE;
         DROP TABLE IF EXISTS device_groups CASCADE;
+        DROP TABLE IF EXISTS device_types CASCADE;
         DROP TABLE IF EXISTS sites CASCADE;
-        DROP TABLE IF EXISTS notification_channels CASCADE;
+        DROP TABLE IF EXISTS organizations CASCADE;
         DROP TABLE IF EXISTS audit_logs CASCADE;
         DROP TABLE IF EXISTS users CASCADE;
-        DROP TABLE IF EXISTS organizations CASCADE;
-        DROP TABLE IF EXISTS notification_templates CASCADE;
-        DROP TABLE IF EXISTS device_types CASCADE;
         DROP TABLE IF EXISTS tenants CASCADE;
-        DROP TABLE IF EXISTS composite_alert_rules CASCADE;
         DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
     """)

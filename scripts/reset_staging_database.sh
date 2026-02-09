@@ -43,7 +43,7 @@ echo "🛑 Step 1/5: Stopping all services..."
 docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans || true
 
 # Force remove containers if they still exist
-docker rm -f gito-api-staging gito-web-staging gito-nginx-staging 2>/dev/null || true
+docker rm -f gito-api-staging gito-web-staging gito-nginx-staging gito-postgres-staging gito-redis-staging 2>/dev/null || true
 
 echo "✅ Services stopped"
 echo ""
@@ -59,10 +59,10 @@ docker compose -f docker-compose.staging.yml --env-file .env.staging up -d postg
 
 # Wait for postgres to be ready
 echo "⏳ Waiting for PostgreSQL to start..."
-sleep 5
+sleep 10
 
-# Drop database (using postgres superuser)
-docker exec gito-postgres psql -U postgres -c "DROP DATABASE IF EXISTS gito_iot_staging;" || {
+# Drop database (need to connect to postgres database to drop gito_iot_staging)
+docker exec gito-postgres-staging psql -U gito_user -d postgres -c "DROP DATABASE IF EXISTS gito_iot_staging;" || {
     echo "⚠️  Warning: Could not drop database (might not exist yet)"
 }
 
@@ -75,7 +75,7 @@ echo ""
 
 echo "🆕 Step 3/5: Creating fresh database..."
 
-docker exec gito-postgres psql -U postgres -c "CREATE DATABASE gito_iot_staging OWNER gito;"
+docker exec gito-postgres-staging psql -U gito_user -d postgres -c "CREATE DATABASE gito_iot_staging OWNER gito_user;"
 
 echo "✅ Database created"
 echo ""
@@ -86,17 +86,19 @@ echo ""
 
 echo "📦 Step 4/5: Running Alembic migrations..."
 
-# Start API service temporarily to run migrations
+# Start redis and API service for migrations
+docker compose -f docker-compose.staging.yml --env-file .env.staging up -d redis
+sleep 5
 docker compose -f docker-compose.staging.yml --env-file .env.staging up -d api
 
 # Wait for API to initialize
 echo "⏳ Waiting for API container to start..."
-sleep 10
+sleep 15
 
 # Check migration status
 echo ""
 echo "📋 Current Alembic status:"
-docker exec gito-api-staging alembic current
+docker exec gito-api-staging alembic current || echo "No migrations applied yet"
 
 # Run migrations
 echo ""
@@ -125,7 +127,7 @@ docker compose -f docker-compose.staging.yml --env-file .env.staging down
 docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
 
 echo "⏳ Waiting for services to start..."
-sleep 15
+sleep 20
 
 # ============================================================================
 # HEALTH CHECK
@@ -134,15 +136,29 @@ sleep 15
 echo ""
 echo "🏥 Running health check..."
 
-HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+MAX_RETRIES=6
+RETRY_COUNT=0
 
-if [ "$HEALTH_CHECK" == "200" ]; then
-    echo "✅ Health check PASSED (HTTP $HEALTH_CHECK)"
-else
-    echo "❌ Health check FAILED (HTTP $HEALTH_CHECK)"
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+
+    if [ "$HEALTH_CHECK" == "200" ]; then
+        echo "✅ Health check PASSED (HTTP $HEALTH_CHECK)"
+        break
+    else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        echo "⏳ Attempt $RETRY_COUNT/$MAX_RETRIES (HTTP $HEALTH_CHECK)"
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            sleep 10
+        fi
+    fi
+done
+
+if [ "$HEALTH_CHECK" != "200" ]; then
+    echo "❌ Health check FAILED after $MAX_RETRIES attempts"
     echo ""
     echo "📋 API logs:"
-    docker logs gito-api-staging --tail 50
+    docker logs gito-api-staging --tail 100
     exit 1
 fi
 
@@ -160,7 +176,7 @@ docker compose -f docker-compose.staging.yml --env-file .env.staging ps
 
 echo ""
 echo "📋 Database Tables:"
-docker exec gito-postgres psql -U gito -d gito_iot_staging -c "\\dt"
+docker exec gito-postgres-staging psql -U gito_user -d gito_iot_staging -c "\\dt"
 
 echo ""
 echo "🎯 Next Steps:"

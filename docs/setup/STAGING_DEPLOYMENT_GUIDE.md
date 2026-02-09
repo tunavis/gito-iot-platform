@@ -205,7 +205,7 @@ docker logs gito-web-staging
 docker logs gito-nginx-staging
 
 # Check if postgres is running
-docker exec gito-postgres psql -U gito -d gito_iot_staging -c "SELECT 1;"
+docker exec gito-postgres-staging psql -U gito_user -d gito_iot_staging -c "SELECT 1;"
 ```
 
 ### Problem: Column order mismatch in exports
@@ -248,10 +248,10 @@ docker exec gito-postgres psql -U gito -d gito_iot_staging -c "SELECT 1;"
 - **Working Directory**: `/opt/gito-iot`
 
 ### Database
-- **Container**: gito-postgres
+- **Container**: gito-postgres-staging
 - **Database**: gito_iot_staging
-- **User**: gito
-- **Password**: (in .env.staging)
+- **User**: gito_user
+- **Password**: (in .env.staging as DB_PASSWORD)
 
 ### GitHub Container Registry
 - **Registry**: ghcr.io

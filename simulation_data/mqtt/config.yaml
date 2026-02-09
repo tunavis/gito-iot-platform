@@ -1,0 +1,62 @@
+# IoT Device Simulator Configuration
+
+# Database connection (read devices from here)
+database:
+  host: localhost
+  port: 5432
+  database: gito
+  user: gito
+  password: dev-password
+
+# MQTT brokers
+mqtt:
+  # Local mosquitto (publish simulated data here)
+  local:
+    host: localhost
+    port: 1883
+  
+  # Demo broker (test.mosquitto.org - for future use/inspiration)
+  demo:
+    host: test.mosquitto.org
+    port: 1883
+
+# Simulator settings
+simulator:
+  # How often to publish data (seconds)
+  publish_interval: 30
+  
+  # How often to check database for new devices (seconds)
+  device_check_interval: 10
+  
+  # Enable/disable specific simulation features
+  features:
+    realistic_trends: true      # Temperature/humidity follow natural patterns
+    battery_drain: true         # Battery slowly drains over time
+    network_fluctuations: true  # RSSI/SNR vary realistically
+
+# Telemetry ranges (for realistic data generation)
+telemetry:
+  temperature:
+    min: 15.0
+    max: 35.0
+    default: 22.0
+  
+  humidity:
+    min: 20.0
+    max: 90.0
+    default: 50.0
+  
+  battery:
+    min: 0.0
+    max: 100.0
+    default: 95.0
+  
+  rssi:
+    min: -120
+    max: -60
+    default: -85
+  
+  snr:
+    min: -10.0
+    max: 15.0
+    default: 5.0

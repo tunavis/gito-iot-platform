@@ -111,11 +111,13 @@ jobs:
           cd /opt/gito-iot
           echo "📋 Checking database migrations..."
 
-          # Start postgres and API temporarily for migrations
+          # Start postgres, redis, and API for migrations
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d postgres
           sleep 5
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d redis
+          sleep 3
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d api
-          sleep 10
+          sleep 15
 
           echo "Current migration status:"
           docker exec gito-api-staging alembic current || echo "⚠️  Could not get current status"

@@ -44,7 +44,7 @@ jobs:
           cd /opt/gito-iot
           echo "🛑 Stopping all services..."
           docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans || true
-          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging 2>/dev/null || true
+          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging gito-postgres-staging gito-redis-staging 2>/dev/null || true
           echo "✅ Services stopped"
 
       - name: Drop Database
@@ -54,10 +54,10 @@ jobs:
 
           # Start postgres
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d postgres
-          sleep 5
+          sleep 10
 
-          # Drop database
-          docker exec gito-postgres psql -U postgres -c "DROP DATABASE IF EXISTS gito_iot_staging;" || {
+          # Drop database (connect to postgres database to drop gito_iot_staging)
+          docker exec gito-postgres-staging psql -U gito_user -d postgres -c "DROP DATABASE IF EXISTS gito_iot_staging;" || {
             echo "⚠️  Warning: Could not drop database (might not exist)"
           }
 
@@ -67,7 +67,7 @@ jobs:
         run: |
           cd /opt/gito-iot
           echo "🆕 Creating fresh database..."
-          docker exec gito-postgres psql -U postgres -c "CREATE DATABASE gito_iot_staging OWNER gito;"
+          docker exec gito-postgres-staging psql -U gito_user -d postgres -c "CREATE DATABASE gito_iot_staging OWNER gito_user;"
           echo "✅ Database created"
 
       - name: Run Alembic Migrations
@@ -75,9 +75,11 @@ jobs:
           cd /opt/gito-iot
           echo "📦 Running Alembic migrations..."
 
-          # Start API temporarily
+          # Start redis and API
+          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d redis
+          sleep 5
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d api
-          sleep 10
+          sleep 15
 
           echo "📋 Current status:"
           docker exec gito-api-staging alembic current || echo "No migrations applied yet"
@@ -144,11 +146,11 @@ jobs:
 
           echo ""
           echo "Tables created:"
-          docker exec gito-postgres psql -U gito -d gito_iot_staging -c "\dt" | head -50
+          docker exec gito-postgres-staging psql -U gito_user -d gito_iot_staging -c "\dt" | head -50
 
           echo ""
           echo "Migration history:"
-          docker exec gito-postgres psql -U gito -d gito_iot_staging -c "SELECT version_num, created_at FROM alembic_version ORDER BY created_at DESC LIMIT 5;" || echo "No migration history table"
+          docker exec gito-postgres-staging psql -U gito_user -d gito_iot_staging -c "SELECT version_num FROM alembic_version;" || echo "No migration history table"
 
       - name: Summary
         run: |

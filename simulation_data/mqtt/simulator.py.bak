@@ -1,0 +1,327 @@
+"""
+IoT Device Simulator
+Watches database for devices and simulates realistic telemetry data.
+No changes to existing code - pure standalone simulator.
+"""
+
+import asyncio
+import json
+import random
+import time
+from datetime import datetime
+from typing import Dict, List, Optional
+import paho.mqtt.client as mqtt
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import yaml
+import logging
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+class DeviceSimulator:
+    """Simulates IoT devices by publishing realistic telemetry data"""
+    
+    def __init__(self, config_path: str = "config.yaml"):
+        """Initialize simulator with configuration"""
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+        
+        # MQTT clients
+        self.demo_client = None  # Connect to test.mosquitto.org for inspiration
+        self.local_client = None  # Publish to local mosquitto
+        
+        # Database connection
+        self.db_conn = None
+        
+        # Active devices being simulated
+        self.active_devices: Dict[str, dict] = {}
+        
+        # Device state (for realistic data trends)
+        self.device_states: Dict[str, dict] = {}
+    
+    def connect_database(self):
+        """Connect to PostgreSQL database"""
+        db_config = self.config['database']
+        self.db_conn = psycopg2.connect(
+            host=db_config['host'],
+            port=db_config['port'],
+            database=db_config['database'],
+            user=db_config['user'],
+            password=db_config['password']
+        )
+        logger.info("Connected to database")
+    
+    def connect_mqtt(self):
+        """Connect to local MQTT broker"""
+        mqtt_config = self.config['mqtt']['local']
+        
+        # Use unique client ID to avoid conflicts
+        import random
+        client_id = f"device_simulator_{random.randint(1000, 9999)}"
+        
+        self.local_client = mqtt.Client(client_id=client_id)
+        self.local_client.on_connect = self.on_local_connect
+        self.local_client.on_disconnect = self.on_local_disconnect
+        
+        try:
+            self.local_client.connect(
+                mqtt_config['host'],
+                mqtt_config['port'],
+                60
+            )
+            self.local_client.loop_start()
+            logger.info(f"Connected to local MQTT broker at {mqtt_config['host']}:{mqtt_config['port']}")
+        except Exception as e:
+            logger.error(f"Failed to connect to local MQTT: {e}")
+            raise
+    
+    def on_local_connect(self, client, userdata, flags, rc):
+        """Callback for local MQTT connection"""
+        if rc == 0:
+            logger.info("Successfully connected to local MQTT broker")
+        else:
+            logger.error(f"Failed to connect to local MQTT broker with code: {rc}")
+    
+    def on_local_disconnect(self, client, userdata, rc):
+        """Callback for local MQTT disconnection"""
+        if rc != 0:
+            logger.warning("Unexpected disconnection from local MQTT broker")
+    
+    def fetch_devices(self) -> List[dict]:
+        """Fetch all devices from database"""
+        try:
+            with self.db_conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        id,
+                        dev_eui,
+                        name,
+                        device_type_id,
+                        status,
+                        last_seen
+                    FROM devices
+                    WHERE status != 'error'
+                    ORDER BY created_at DESC
+                """)
+                devices = cursor.fetchall()
+                return [dict(device) for device in devices]
+        except Exception as e:
+            logger.error(f"Error fetching devices: {e}")
+            self.db_conn.rollback()  # Rollback failed transaction
+            return []
+    
+    def initialize_device_state(self, device: dict):
+        """Initialize realistic state for a device"""
+        # Generate dev_eui if missing
+        dev_eui = device['dev_eui']
+        if not dev_eui:
+            # Generate a simulated dev_eui from device ID
+            import hashlib
+            dev_eui = hashlib.md5(str(device['id']).encode()).hexdigest()[:16].upper()
+            device['dev_eui'] = dev_eui
+            logger.warning(f"Device {device['name']} has no dev_eui, using generated: {dev_eui}")
+        
+        # Base values with realistic ranges
+        self.device_states[dev_eui] = {
+            'temperature': random.uniform(18.0, 28.0),
+            'humidity': random.uniform(30.0, 70.0),
+            'battery': random.uniform(85.0, 100.0),
+            'rssi': random.randint(-120, -60),
+            'snr': random.uniform(-5.0, 10.0),
+            'counter': 0,
+            'last_update': time.time()
+        }
+        
+        logger.info(f"Initialized state for device {device['name']} ({dev_eui})")
+    
+    def generate_realistic_telemetry(self, dev_eui: str) -> dict:
+        """Generate realistic telemetry data with natural variations"""
+        state = self.device_states[dev_eui]
+        current_time = time.time()
+        time_delta = current_time - state['last_update']
+        
+        # Temperature: slow drift with daily cycle
+        temp_trend = random.uniform(-0.3, 0.3) * (time_delta / 60)
+        state['temperature'] += temp_trend
+        state['temperature'] = max(15.0, min(35.0, state['temperature']))
+        
+        # Humidity: inverse correlation with temperature
+        humidity_trend = -temp_trend * 1.5 + random.uniform(-0.5, 0.5) * (time_delta / 60)
+        state['humidity'] += humidity_trend
+        state['humidity'] = max(20.0, min(90.0, state['humidity']))
+        
+        # Battery: slow drain
+        battery_drain = random.uniform(0.001, 0.005) * (time_delta / 60)
+        state['battery'] -= battery_drain
+        state['battery'] = max(0.0, state['battery'])
+        
+        # Network quality: random fluctuations
+        state['rssi'] += random.randint(-5, 5)
+        state['rssi'] = max(-120, min(-60, state['rssi']))
+        
+        state['snr'] += random.uniform(-0.5, 0.5)
+        state['snr'] = max(-10.0, min(15.0, state['snr']))
+        
+        # Update counter and timestamp
+        state['counter'] += 1
+        state['last_update'] = current_time
+        
+        return {
+            'temperature': round(state['temperature'], 2),
+            'humidity': round(state['humidity'], 2),
+            'battery': round(state['battery'], 2),
+            'rssi': state['rssi'],
+            'snr': round(state['snr'], 2),
+            'counter': state['counter']
+        }
+    
+    def create_mqtt_payload(self, dev_eui: str, telemetry: dict) -> dict:
+        """Create MQTT payload matching existing processor format"""
+        # Match the format that mqtt_processor.py expects
+        payload = {
+            "applicationID": "1",
+            "applicationName": "IoT Platform",
+            "deviceName": self.active_devices[dev_eui]['name'],
+            "devEUI": dev_eui,
+            "rxInfo": [{
+                "gatewayID": "simulated-gateway",
+                "rssi": telemetry['rssi'],
+                "loRaSNR": telemetry['snr'],
+                "location": {
+                    "latitude": 0.0,
+                    "longitude": 0.0
+                }
+            }],
+            "txInfo": {
+                "frequency": 868100000,
+                "dr": 5
+            },
+            "fCnt": telemetry['counter'],
+            "fPort": 1,
+            "data": self.encode_telemetry(telemetry),
+            "object": telemetry
+        }
+        
+        return payload
+    
+    def encode_telemetry(self, telemetry: dict) -> str:
+        """Encode telemetry to base64 (simulated LoRaWAN payload)"""
+        import base64
+        # Simple encoding for demonstration
+        data_bytes = json.dumps(telemetry).encode()
+        return base64.b64encode(data_bytes).decode()
+    
+    def publish_device_data(self, dev_eui: str):
+        """Generate and publish telemetry for a device"""
+        try:
+            # Generate realistic telemetry
+            telemetry = self.generate_realistic_telemetry(dev_eui)
+            
+            # Create payload matching existing format
+            payload = self.create_mqtt_payload(dev_eui, telemetry)
+            
+            # Publish to local mosquitto (same topic structure as real devices)
+            topic = f"devices/{dev_eui}/up"
+            self.local_client.publish(topic, json.dumps(payload))
+            
+            logger.info(
+                f"Published data for {self.active_devices[dev_eui]['name']} "
+                f"(temp: {telemetry['temperature']}°C, "
+                f"humidity: {telemetry['humidity']}%, "
+                f"battery: {telemetry['battery']}%)"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error publishing data for {dev_eui}: {e}")
+    
+    async def simulation_loop(self):
+        """Main simulation loop"""
+        publish_interval = self.config['simulator']['publish_interval']
+        device_check_interval = self.config['simulator']['device_check_interval']
+        last_device_check = 0
+        
+        logger.info("Starting simulation loop...")
+        
+        while True:
+            try:
+                current_time = time.time()
+                
+                # Periodically check for new/removed devices
+                if current_time - last_device_check >= device_check_interval:
+                    devices = self.fetch_devices()
+                    current_dev_euis = {d['dev_eui'] for d in devices}
+                    active_dev_euis = set(self.active_devices.keys())
+                    
+                    # Add new devices
+                    new_devices = current_dev_euis - active_dev_euis
+                    for device in devices:
+                        if device['dev_eui'] in new_devices:
+                            self.active_devices[device['dev_eui']] = device
+                            self.initialize_device_state(device)
+                            logger.info(f"🟢 Started simulating new device: {device['name']}")
+                    
+                    # Remove deleted devices
+                    removed_devices = active_dev_euis - current_dev_euis
+                    for dev_eui in removed_devices:
+                        device_name = self.active_devices[dev_eui]['name']
+                        del self.active_devices[dev_eui]
+                        del self.device_states[dev_eui]
+                        logger.info(f"🔴 Stopped simulating removed device: {device_name}")
+                    
+                    last_device_check = current_time
+                
+                # Publish data for all active devices
+                for dev_eui in list(self.active_devices.keys()):
+                    self.publish_device_data(dev_eui)
+                
+                # Wait before next cycle
+                await asyncio.sleep(publish_interval)
+                
+            except Exception as e:
+                logger.error(f"Error in simulation loop: {e}")
+                await asyncio.sleep(5)
+    
+    async def run(self):
+        """Main entry point"""
+        try:
+            logger.info("🚀 IoT Device Simulator Starting...")
+            
+            # Connect to database
+            self.connect_database()
+            
+            # Connect to MQTT
+            self.connect_mqtt()
+            
+            # Load initial devices
+            devices = self.fetch_devices()
+            logger.info(f"Found {len(devices)} active devices in database")
+            
+            for device in devices:
+                self.active_devices[device['dev_eui']] = device
+                self.initialize_device_state(device)
+            
+            # Start simulation loop
+            await self.simulation_loop()
+            
+        except KeyboardInterrupt:
+            logger.info("Shutting down simulator...")
+        except Exception as e:
+            logger.error(f"Fatal error: {e}")
+        finally:
+            if self.local_client:
+                self.local_client.loop_stop()
+                self.local_client.disconnect()
+            if self.db_conn:
+                self.db_conn.close()
+            logger.info("Simulator stopped")
+
+
+if __name__ == "__main__":
+    simulator = DeviceSimulator()
+    asyncio.run(simulator.run())
