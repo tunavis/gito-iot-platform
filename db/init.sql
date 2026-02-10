@@ -451,11 +451,13 @@ CREATE TABLE IF NOT EXISTS dashboards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(200) NOT NULL,
     description TEXT,
-    is_default BOOLEAN DEFAULT false,
-    layout JSONB DEFAULT '[]',
-    settings JSONB DEFAULT '{}',
+    is_default BOOLEAN DEFAULT false NOT NULL,
+    layout_config JSONB DEFAULT '{}' NOT NULL,
+    theme JSONB DEFAULT '{}' NOT NULL,
+    solution_type VARCHAR(100),
+    extra_data JSONB DEFAULT '{}' NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -464,31 +466,33 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     dashboard_id UUID NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
     widget_type VARCHAR(50) NOT NULL,
-    title VARCHAR(255),
-    configuration JSONB DEFAULT '{}',
-    data_sources JSONB DEFAULT '[]',
-    position_x INTEGER DEFAULT 0,
-    position_y INTEGER DEFAULT 0,
-    width INTEGER DEFAULT 4,
-    height INTEGER DEFAULT 3,
+    title VARCHAR(200),
+    position_x INTEGER NOT NULL,
+    position_y INTEGER NOT NULL,
+    width INTEGER DEFAULT 2 NOT NULL,
+    height INTEGER DEFAULT 2 NOT NULL,
+    configuration JSONB DEFAULT '{}' NOT NULL,
+    data_sources JSONB DEFAULT '[]' NOT NULL,
+    refresh_interval INTEGER DEFAULT 30 NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT check_positive_dimensions CHECK (width > 0 AND height > 0),
+    CONSTRAINT check_valid_position CHECK (position_x >= 0 AND position_y >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS solution_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(200) NOT NULL UNIQUE,
+    identifier VARCHAR(100) NOT NULL UNIQUE,
+    category VARCHAR(50) NOT NULL,
     description TEXT,
-    industry VARCHAR(100),
-    category VARCHAR(100),
-    icon VARCHAR(50),
-    preview_image VARCHAR(500),
-    dashboard_template JSONB NOT NULL DEFAULT '{}',
-    device_type_templates JSONB DEFAULT '[]',
-    alert_rule_templates JSONB DEFAULT '[]',
-    tags JSONB DEFAULT '[]',
-    is_featured BOOLEAN DEFAULT false,
-    usage_count INTEGER DEFAULT 0,
+    icon VARCHAR(50) DEFAULT 'layout-dashboard',
+    color VARCHAR(20) DEFAULT '#0066CC',
+    target_device_types JSONB DEFAULT '[]' NOT NULL,
+    required_capabilities JSONB DEFAULT '[]' NOT NULL,
+    template_config JSONB NOT NULL,
+    preview_image_url TEXT,
+    is_active BOOLEAN DEFAULT true NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -647,10 +651,30 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_dashboards_tenant_user') THEN
         CREATE INDEX idx_dashboards_tenant_user ON dashboards(tenant_id, user_id);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_dashboards_solution_type') THEN
+        CREATE INDEX idx_dashboards_solution_type ON dashboards(solution_type);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_dashboards_created_at') THEN
+        CREATE INDEX idx_dashboards_created_at ON dashboards(created_at);
+    END IF;
 
     -- Dashboard Widgets
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_widgets_dashboard') THEN
         CREATE INDEX idx_widgets_dashboard ON dashboard_widgets(dashboard_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_dashboard_widgets_type') THEN
+        CREATE INDEX idx_dashboard_widgets_type ON dashboard_widgets(widget_type);
+    END IF;
+
+    -- Solution Templates
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_category') THEN
+        CREATE INDEX idx_solution_templates_category ON solution_templates(category);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_active') THEN
+        CREATE INDEX idx_solution_templates_active ON solution_templates(is_active);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_identifier') THEN
+        CREATE INDEX idx_solution_templates_identifier ON solution_templates(identifier);
     END IF;
 
     -- Notifications
