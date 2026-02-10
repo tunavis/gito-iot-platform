@@ -85,10 +85,17 @@ jobs:
           echo "✅ Code updated"
 
       - name: Login to Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           cd /opt/gito-iot
           echo "🔐 Logging into GitHub Container Registry..."
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u tunavis --password-stdin
+          if [ -z "$GHCR_TOKEN" ]; then
+            echo "❌ ERROR: GHCR_TOKEN secret not set!"
+            echo "Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u tunavis --password-stdin
           echo "✅ Logged in"
 
       - name: Pull Docker Images
