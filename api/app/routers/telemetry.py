@@ -1,15 +1,21 @@
-"""Telemetry query routes - retrieve historical time-series data with aggregation."""
+"""
+Telemetry API - Query time-series data with aggregation support.
+
+Uses key-value storage pattern (industry-standard like ThingsBoard/Cumulocity):
+- One row per metric per timestamp
+- Supports unlimited dynamic metrics per device
+- Efficient queries for specific metrics or all metrics
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from sqlalchemy import select, func, and_, text, desc
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional, List
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 import logging
 
 from app.database import get_session, RLSSession
-from app.models.base import Device, TelemetryHot
+from app.models.base import Device, Telemetry
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.security import decode_token
 
@@ -27,17 +33,17 @@ async def get_current_tenant(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
         )
-    
+
     token = authorization.split(" ")[1]
     payload = decode_token(token)
     tenant_id = payload.get("tenant_id")
-    
+
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token: missing tenant_id",
         )
-    
+
     return UUID(tenant_id)
 
 
@@ -52,7 +58,7 @@ class TelemetryAggregator:
         elif duration_hours <= 24:
             return "hour"  # 1-hour buckets for last 24 hours
         elif duration_hours <= 168:  # 1 week
-            return "hour"  # Still hourly for week (6 hours not supported)
+            return "hour"  # Still hourly for week
         else:
             return "day"  # 1-day buckets for longer periods
 
@@ -65,30 +71,32 @@ async def query_telemetry(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
     start_time: datetime = Query(..., description="Start time for query (ISO format)"),
     end_time: datetime = Query(None, description="End time for query (defaults to now)"),
+    metrics: Optional[str] = Query(None, description="Comma-separated list of metrics (e.g., 'temperature,humidity')"),
     aggregation: Literal["raw", "avg", "min", "max", "sum"] = Query("raw", description="Aggregation type"),
     page: int = Query(1, ge=1),
     per_page: int = Query(100, ge=1, le=1000),
 ):
     """
     Query telemetry data for a device.
-    
+
     Parameters:
     - start_time: Start timestamp (required, ISO 8601 format)
     - end_time: End timestamp (optional, defaults to now)
+    - metrics: Comma-separated list of metric keys to filter (optional, defaults to all)
     - aggregation: Type of aggregation (raw, avg, min, max, sum)
     - page: Pagination page number
     - per_page: Results per page (max 1000)
-    
-    Returns paginated telemetry records with optionally aggregated values.
+
+    Returns telemetry data pivoted by timestamp with all metrics as columns.
     """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant mismatch",
         )
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Verify device exists
     device_query = select(Device).where(
         Device.tenant_id == tenant_id,
@@ -96,32 +104,36 @@ async def query_telemetry(
     )
     device_result = await session.execute(device_query)
     device = device_result.scalar_one_or_none()
-    
+
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
         )
-    
+
     # Set default end_time to now if not provided
     if end_time is None:
         end_time = datetime.now(timezone.utc)
-    
+
     # Validate time range
     if start_time >= end_time:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="start_time must be before end_time",
         )
-    
-    # For raw data, query directly from telemetry_hot table
+
+    # Parse metrics filter
+    metric_keys = None
+    if metrics:
+        metric_keys = [m.strip() for m in metrics.split(",") if m.strip()]
+
     if aggregation == "raw":
         return await _query_raw_telemetry(
-            session, tenant_id, device_id, start_time, end_time, page, per_page
+            session, tenant_id, device_id, start_time, end_time, metric_keys, page, per_page
         )
     else:
         return await _query_aggregated_telemetry(
-            session, tenant_id, device_id, start_time, end_time, aggregation, page, per_page
+            session, tenant_id, device_id, start_time, end_time, metric_keys, aggregation, page, per_page
         )
 
 
@@ -131,62 +143,117 @@ async def _query_raw_telemetry(
     device_id: UUID,
     start_time: datetime,
     end_time: datetime,
+    metric_keys: Optional[List[str]],
     page: int,
     per_page: int,
 ) -> SuccessResponse:
-    """Query raw telemetry data using SQLAlchemy ORM."""
+    """
+    Query raw telemetry data.
+
+    Returns data pivoted by timestamp - each row represents one point in time
+    with all metrics as key-value pairs.
+    """
     offset = (page - 1) * per_page
 
     try:
         logger.debug(
             f"Querying telemetry - Device: {device_id}, "
             f"Range: {start_time.isoformat()} to {end_time.isoformat()}, "
-            f"Page: {page}, Per page: {per_page}"
+            f"Metrics: {metric_keys or 'all'}, Page: {page}"
         )
 
-        # Build base query with filters
-        base_filters = and_(
-            TelemetryHot.tenant_id == tenant_id,
-            TelemetryHot.device_id == device_id,
-            TelemetryHot.timestamp >= start_time,
-            TelemetryHot.timestamp <= end_time
-        )
+        # Build metric filter clause
+        metric_filter = ""
+        if metric_keys:
+            # Safely parameterize metric keys
+            metric_filter = "AND metric_key = ANY(:metric_keys)"
 
-        # Count query
-        count_query = select(func.count(TelemetryHot.id)).where(base_filters)
-        count_result = await session.execute(count_query)
+        # Query to pivot key-value rows back to object format
+        # Groups by timestamp and aggregates all metrics for that timestamp
+        query_sql = f"""
+        WITH distinct_timestamps AS (
+            SELECT DISTINCT ts
+            FROM telemetry
+            WHERE tenant_id = :tenant_id
+              AND device_id = :device_id
+              AND ts >= :start_time
+              AND ts <= :end_time
+            ORDER BY ts DESC
+            LIMIT :limit OFFSET :offset
+        )
+        SELECT
+            dt.ts as timestamp,
+            jsonb_object_agg(
+                t.metric_key,
+                COALESCE(t.metric_value::text, t.metric_value_str, t.metric_value_json::text)
+            ) as metrics
+        FROM distinct_timestamps dt
+        JOIN telemetry t ON t.ts = dt.ts
+            AND t.tenant_id = :tenant_id
+            AND t.device_id = :device_id
+            {metric_filter}
+        GROUP BY dt.ts
+        ORDER BY dt.ts DESC
+        """
+
+        # Count distinct timestamps
+        count_sql = f"""
+        SELECT COUNT(DISTINCT ts)
+        FROM telemetry
+        WHERE tenant_id = :tenant_id
+          AND device_id = :device_id
+          AND ts >= :start_time
+          AND ts <= :end_time
+        """
+
+        params = {
+            "tenant_id": str(tenant_id),
+            "device_id": str(device_id),
+            "start_time": start_time,
+            "end_time": end_time,
+            "limit": per_page,
+            "offset": offset,
+        }
+        if metric_keys:
+            params["metric_keys"] = metric_keys
+
+        # Execute count query
+        count_result = await session.execute(text(count_sql), params)
         total = count_result.scalar() or 0
 
-        # Data query with pagination
-        data_query = (
-            select(TelemetryHot)
-            .where(base_filters)
-            .order_by(desc(TelemetryHot.timestamp))
-            .limit(per_page)
-            .offset(offset)
-        )
+        # Execute data query
+        result = await session.execute(text(query_sql), params)
+        rows = result.fetchall()
 
-        result = await session.execute(data_query)
-        telemetry_records = result.scalars().all()
+        logger.debug(f"Retrieved {len(rows)} of {total} timestamps for device {device_id}")
 
-        logger.debug(f"Retrieved {len(telemetry_records)} of {total} records for device {device_id}")
+        # Format response - convert JSONB to proper Python dict with typed values
+        data = []
+        for row in rows:
+            timestamp = row[0]
+            metrics_json = row[1] or {}
 
-        # Format response
-        data = [
-            {
-                "id": str(record.id),
-                "device_id": str(record.device_id),
-                "temperature": float(record.temperature) if record.temperature is not None else None,
-                "humidity": float(record.humidity) if record.humidity is not None else None,
-                "pressure": float(record.pressure) if record.pressure is not None else None,
-                "battery": float(record.battery) if record.battery is not None else None,
-                "rssi": int(record.rssi) if record.rssi is not None else None,
-                "payload": record.payload if record.payload else {},
-                "timestamp": record.timestamp.isoformat() if record.timestamp else None,
-                "created_at": record.created_at.isoformat() if record.created_at else None,
+            # Parse numeric values from the aggregated JSON
+            record = {
+                "timestamp": timestamp.isoformat() if timestamp else None,
+                "device_id": str(device_id),
             }
-            for record in telemetry_records
-        ]
+
+            # Add each metric with proper type conversion
+            for key, value in metrics_json.items():
+                if value is None:
+                    record[key] = None
+                else:
+                    # Try to parse as number
+                    try:
+                        if "." in str(value):
+                            record[key] = float(value)
+                        else:
+                            record[key] = int(value)
+                    except (ValueError, TypeError):
+                        record[key] = value
+
+            data.append(record)
 
         return SuccessResponse(
             data=data,
@@ -210,11 +277,12 @@ async def _query_aggregated_telemetry(
     device_id: UUID,
     start_time: datetime,
     end_time: datetime,
+    metric_keys: Optional[List[str]],
     aggregation: str,
     page: int,
     per_page: int,
 ) -> SuccessResponse:
-    """Query aggregated telemetry data using SQLAlchemy ORM with time bucketing."""
+    """Query aggregated telemetry data with time bucketing."""
 
     try:
         # Calculate duration for time bucket selection
@@ -223,7 +291,7 @@ async def _query_aggregated_telemetry(
 
         logger.debug(
             f"Aggregating telemetry - Device: {device_id}, Duration: {duration}h, "
-            f"Bucket: {bucket_size}, Aggregation: {aggregation}"
+            f"Bucket: {bucket_size}, Aggregation: {aggregation}, Metrics: {metric_keys or 'all'}"
         )
 
         # Validate aggregation function
@@ -231,81 +299,84 @@ async def _query_aggregated_telemetry(
         if agg_func not in ["AVG", "MIN", "MAX", "SUM"]:
             agg_func = "AVG"
 
-        # Use raw SQL for time bucketing (PostgreSQL-specific feature)
-        # SQLAlchemy doesn't have good support for DATE_TRUNC in ORM
+        # Build metric filter clause
+        metric_filter = ""
+        if metric_keys:
+            metric_filter = "AND metric_key = ANY(:metric_keys)"
+
+        # Query with time bucketing and metric aggregation
         query_sql = f"""
         SELECT
-            DATE_TRUNC('{bucket_size}', timestamp) as time_bucket,
-            {agg_func}(temperature) as temperature,
-            {agg_func}(humidity) as humidity,
-            {agg_func}(pressure) as pressure,
-            {agg_func}(battery) as battery,
-            {agg_func}(rssi) as rssi,
+            DATE_TRUNC('{bucket_size}', ts) as time_bucket,
+            metric_key,
+            {agg_func}(metric_value) as value,
             COUNT(*) as sample_count
-        FROM telemetry_hot
+        FROM telemetry
         WHERE tenant_id = :tenant_id
           AND device_id = :device_id
-          AND timestamp >= :start_time
-          AND timestamp <= :end_time
-        GROUP BY DATE_TRUNC('{bucket_size}', timestamp)
-        ORDER BY time_bucket DESC
-        LIMIT :limit OFFSET :offset
+          AND ts >= :start_time
+          AND ts <= :end_time
+          AND metric_value IS NOT NULL
+          {metric_filter}
+        GROUP BY DATE_TRUNC('{bucket_size}', ts), metric_key
+        ORDER BY time_bucket DESC, metric_key
         """
 
         count_sql = f"""
-        SELECT COUNT(DISTINCT DATE_TRUNC('{bucket_size}', timestamp))
-        FROM telemetry_hot
+        SELECT COUNT(DISTINCT DATE_TRUNC('{bucket_size}', ts))
+        FROM telemetry
         WHERE tenant_id = :tenant_id
           AND device_id = :device_id
-          AND timestamp >= :start_time
-          AND timestamp <= :end_time
+          AND ts >= :start_time
+          AND ts <= :end_time
         """
 
         offset = (page - 1) * per_page
 
+        params = {
+            "tenant_id": str(tenant_id),
+            "device_id": str(device_id),
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        if metric_keys:
+            params["metric_keys"] = metric_keys
+
         # Execute count query
-        count_result = await session.execute(
-            text(count_sql),
-            {
-                "tenant_id": str(tenant_id),
-                "device_id": str(device_id),
-                "start_time": start_time,
-                "end_time": end_time
-            }
-        )
+        count_result = await session.execute(text(count_sql), params)
         total = count_result.scalar() or 0
 
         # Execute data query
-        result = await session.execute(
-            text(query_sql),
-            {
-                "tenant_id": str(tenant_id),
-                "device_id": str(device_id),
-                "start_time": start_time,
-                "end_time": end_time,
-                "limit": per_page,
-                "offset": offset
-            }
-        )
-
+        result = await session.execute(text(query_sql), params)
         rows = result.fetchall()
 
-        # Format response
-        data = [
-            {
-                "time_bucket": row[0].isoformat() if row[0] else None,
-                "temperature": float(row[1]) if row[1] is not None else None,
-                "humidity": float(row[2]) if row[2] is not None else None,
-                "pressure": float(row[3]) if row[3] is not None else None,
-                "battery": float(row[4]) if row[4] is not None else None,
-                "rssi": float(row[5]) if row[5] is not None else None,
-                "sample_count": int(row[6]) if row[6] else 0,
-            }
-            for row in rows
-        ]
+        # Pivot the results: group by time_bucket, with metrics as keys
+        buckets = {}
+        for row in rows:
+            time_bucket = row[0]
+            metric_key = row[1]
+            value = row[2]
+            sample_count = row[3]
+
+            bucket_key = time_bucket.isoformat() if time_bucket else None
+            if bucket_key not in buckets:
+                buckets[bucket_key] = {
+                    "time_bucket": bucket_key,
+                    "sample_count": 0,
+                }
+
+            buckets[bucket_key][metric_key] = float(value) if value is not None else None
+            buckets[bucket_key]["sample_count"] += sample_count
+
+        # Convert to list and apply pagination
+        data = list(buckets.values())
+
+        # Sort by time_bucket descending and apply pagination
+        data.sort(key=lambda x: x["time_bucket"] or "", reverse=True)
+        paginated_data = data[offset:offset + per_page]
 
         return SuccessResponse(
-            data=data,
+            data=paginated_data,
             meta=PaginationMeta(page=page, per_page=per_page, total=total),
         )
 
@@ -327,14 +398,16 @@ async def get_latest_telemetry(
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
     minutes: int = Query(60, ge=1, le=1440, description="Look back N minutes"),
+    metrics: Optional[str] = Query(None, description="Comma-separated list of metrics"),
 ):
     """
-    Get the latest telemetry record for a device using SQLAlchemy ORM.
+    Get the latest telemetry values for a device.
 
     Parameters:
     - minutes: Look back period in minutes (1-1440, default 60)
+    - metrics: Comma-separated list of metrics to return (optional, defaults to all)
 
-    Returns the most recent telemetry reading within the time window.
+    Returns the most recent value for each metric within the time window.
     """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(
@@ -359,46 +432,86 @@ async def get_latest_telemetry(
         )
 
     try:
-        # Use timezone-aware datetime
         start_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-        end_time = datetime.now(timezone.utc)
 
-        # Query latest telemetry using ORM
-        query = (
-            select(TelemetryHot)
-            .where(
-                and_(
-                    TelemetryHot.tenant_id == tenant_id,
-                    TelemetryHot.device_id == device_id,
-                    TelemetryHot.timestamp >= start_time,
-                    TelemetryHot.timestamp <= end_time
-                )
-            )
-            .order_by(desc(TelemetryHot.timestamp))
-            .limit(1)
-        )
+        # Parse metrics filter
+        metric_keys = None
+        if metrics:
+            metric_keys = [m.strip() for m in metrics.split(",") if m.strip()]
 
-        result = await session.execute(query)
-        record = result.scalar_one_or_none()
+        # Build metric filter clause
+        metric_filter = ""
+        if metric_keys:
+            metric_filter = "AND metric_key = ANY(:metric_keys)"
 
-        if not record:
+        # Query to get latest value for each metric using DISTINCT ON
+        query_sql = f"""
+        SELECT DISTINCT ON (metric_key)
+            metric_key,
+            metric_value,
+            metric_value_str,
+            metric_value_json,
+            unit,
+            ts
+        FROM telemetry
+        WHERE tenant_id = :tenant_id
+          AND device_id = :device_id
+          AND ts >= :start_time
+          {metric_filter}
+        ORDER BY metric_key, ts DESC
+        """
+
+        params = {
+            "tenant_id": str(tenant_id),
+            "device_id": str(device_id),
+            "start_time": start_time,
+        }
+        if metric_keys:
+            params["metric_keys"] = metric_keys
+
+        result = await session.execute(text(query_sql), params)
+        rows = result.fetchall()
+
+        if not rows:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No telemetry data found in the last {minutes} minutes",
             )
 
+        # Build response with latest values for each metric
         data = {
-            "id": str(record.id),
-            "device_id": str(record.device_id),
-            "temperature": float(record.temperature) if record.temperature is not None else None,
-            "humidity": float(record.humidity) if record.humidity is not None else None,
-            "pressure": float(record.pressure) if record.pressure is not None else None,
-            "battery": float(record.battery) if record.battery is not None else None,
-            "rssi": int(record.rssi) if record.rssi is not None else None,
-            "payload": record.payload if record.payload else {},
-            "timestamp": record.timestamp.isoformat() if record.timestamp else None,
-            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "device_id": str(device_id),
+            "timestamp": None,  # Will be set to most recent
         }
+
+        latest_ts = None
+        for row in rows:
+            metric_key = row[0]
+            metric_value = row[1]
+            metric_value_str = row[2]
+            metric_value_json = row[3]
+            unit = row[4]
+            ts = row[5]
+
+            # Use the value in priority: numeric > string > json
+            if metric_value is not None:
+                data[metric_key] = float(metric_value)
+            elif metric_value_str is not None:
+                data[metric_key] = metric_value_str
+            elif metric_value_json is not None:
+                data[metric_key] = metric_value_json
+            else:
+                data[metric_key] = None
+
+            # Optionally include unit
+            if unit:
+                data[f"{metric_key}_unit"] = unit
+
+            # Track most recent timestamp
+            if latest_ts is None or ts > latest_ts:
+                latest_ts = ts
+
+        data["timestamp"] = latest_ts.isoformat() if latest_ts else None
 
         return SuccessResponse(data=data)
 
@@ -407,6 +520,79 @@ async def get_latest_telemetry(
     except Exception as e:
         logger.error(
             f"Failed to fetch latest telemetry for device {device_id}: {type(e).__name__}: {str(e)}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Query error: {type(e).__name__}: {str(e)}",
+        )
+
+
+@router.get("/metrics", response_model=SuccessResponse)
+async def list_available_metrics(
+    tenant_id: UUID,
+    device_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+    days: int = Query(7, ge=1, le=30, description="Look back N days"),
+):
+    """
+    List all available metric keys for a device.
+
+    Returns distinct metric keys that have been recorded for the device
+    within the specified time period.
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch",
+        )
+
+    await session.set_tenant_context(tenant_id)
+
+    # Verify device exists
+    device_query = select(Device).where(
+        Device.tenant_id == tenant_id,
+        Device.id == device_id,
+    )
+    device_result = await session.execute(device_query)
+    device = device_result.scalar_one_or_none()
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    try:
+        start_time = datetime.now(timezone.utc) - timedelta(days=days)
+
+        query_sql = """
+        SELECT DISTINCT metric_key
+        FROM telemetry
+        WHERE tenant_id = :tenant_id
+          AND device_id = :device_id
+          AND ts >= :start_time
+        ORDER BY metric_key
+        """
+
+        result = await session.execute(
+            text(query_sql),
+            {
+                "tenant_id": str(tenant_id),
+                "device_id": str(device_id),
+                "start_time": start_time,
+            }
+        )
+        rows = result.fetchall()
+
+        metrics = [row[0] for row in rows]
+
+        return SuccessResponse(data={"metrics": metrics, "count": len(metrics)})
+
+    except Exception as e:
+        logger.error(
+            f"Failed to list metrics for device {device_id}: {type(e).__name__}: {str(e)}",
             exc_info=True
         )
         raise HTTPException(

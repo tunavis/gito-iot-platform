@@ -224,7 +224,11 @@ class DatabaseService:
         timestamp: datetime
     ) -> bool:
         """
-        Insert telemetry into TimescaleDB.
+        Insert telemetry into TimescaleDB using key-value format.
+
+        Each metric in the payload becomes a separate row in the telemetry table.
+        This enables unlimited dynamic metrics per device (industry-standard pattern).
+
         Returns True on success, False on failure.
         """
         try:
@@ -234,16 +238,36 @@ class DatabaseService:
                     "SELECT set_config('app.tenant_id', %s, false)",
                     (tenant_id,)
                 )
-                
-                # Insert telemetry record
-                await conn.execute(
-                    """
-                    INSERT INTO telemetry_hot (tenant_id, device_id, payload, timestamp)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (tenant_id, device_id, json.dumps(payload), timestamp)
-                )
-                
+
+                # Insert one row per metric (key-value format)
+                # This enables unlimited dynamic metrics
+                for metric_key, metric_value in payload.items():
+                    if metric_value is None:
+                        continue
+
+                    # Determine value type and column
+                    value_float = None
+                    value_str = None
+                    value_json = None
+
+                    if isinstance(metric_value, (int, float)):
+                        value_float = float(metric_value)
+                    elif isinstance(metric_value, str):
+                        value_str = metric_value
+                    elif isinstance(metric_value, (dict, list)):
+                        value_json = json.dumps(metric_value)
+                    else:
+                        # Convert other types to string
+                        value_str = str(metric_value)
+
+                    await conn.execute(
+                        """
+                        INSERT INTO telemetry (tenant_id, device_id, metric_key, metric_value, metric_value_str, metric_value_json, ts)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (tenant_id, device_id, metric_key, value_float, value_str, value_json, timestamp)
+                    )
+
                 # Update device last_seen
                 await conn.execute(
                     """
@@ -253,8 +277,17 @@ class DatabaseService:
                     """,
                     (timestamp, device_id, tenant_id)
                 )
-                
+
                 await conn.commit()
+
+                logger.debug(
+                    "Telemetry inserted",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "device_id": device_id,
+                        "metrics_count": len(payload)
+                    }
+                )
                 return True
         except Exception as e:
             logger.error(
