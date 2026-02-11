@@ -21,7 +21,8 @@
       "Bash(docker-compose build:*)",
       "Bash(ls:*)",
       "mcp__postgres_Gito_IOT__analyze_db_health",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git add:*)"
     ]
   }
 }

@@ -90,7 +90,7 @@ async def list_devices(
     devices = result.scalars().all()
     
     return SuccessResponse(
-        data=[DeviceResponse.from_orm(d) for d in devices],
+        data=[DeviceResponse.model_validate(d) for d in devices],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
 
@@ -150,7 +150,7 @@ async def create_device(
             )
             # Don't fail device creation if TTN sync fails
     
-    return SuccessResponse(data=DeviceResponse.from_orm(device))
+    return SuccessResponse(data=DeviceResponse.model_validate(device))
 
 
 @router.get("/{device_id}", response_model=SuccessResponse)
@@ -182,7 +182,7 @@ async def get_device(
             detail="Device not found",
         )
     
-    return SuccessResponse(data=DeviceResponse.from_orm(device))
+    return SuccessResponse(data=DeviceResponse.model_validate(device))
 
 
 @router.put("/{device_id}", response_model=SuccessResponse)
@@ -261,7 +261,7 @@ async def update_device(
             )
             # Don't fail device update if ChirpStack sync fails
     
-    return SuccessResponse(data=DeviceResponse.from_orm(device))
+    return SuccessResponse(data=DeviceResponse.model_validate(device))
 
 
 @router.delete("/{device_id}", response_model=SuccessResponse)
