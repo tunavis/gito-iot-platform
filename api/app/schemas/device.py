@@ -50,7 +50,7 @@ class DeviceResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     name: str
-    device_type: str
+    device_type: Optional[str] = None
     status: DeviceStatus
     last_seen: Optional[datetime] = None
     battery_level: Optional[float] = None

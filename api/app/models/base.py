@@ -261,7 +261,3 @@ class Telemetry(BaseModel):
         # Latest value queries (DISTINCT ON device_id, metric_key ORDER BY ts DESC)
         Index("idx_telemetry_latest", "device_id", "metric_key", "ts", postgresql_ops={"ts": "DESC"}),
     )
-
-
-# Keep alias for backwards compatibility during migration
-TelemetryHot = Telemetry
