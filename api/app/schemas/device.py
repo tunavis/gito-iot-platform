@@ -16,28 +16,15 @@ class DeviceStatus(str, Enum):
     PROVISIONING = "provisioning"
 
 
-class DeviceTypeInfo(BaseModel):
-    """Nested device type information in device response."""
-    id: UUID
-    name: str
-    category: str
-    icon: str
-    color: str
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class DeviceCreate(BaseModel):
     """Create device request."""
     name: str = Field(min_length=1, max_length=255, description="Device name")
-    device_type_id: UUID = Field(description="Device type ID (foreign key to device_types table)")
+    device_type: str = Field(min_length=1, max_length=100, description="Device type")
     attributes: dict = Field(default_factory=dict, description="Device attributes (JSON)")
-    # Hierarchy fields (STRICT — all required)
-    organization_id: UUID = Field(..., description="Organization ID (required)")
-    site_id: UUID = Field(..., description="Site ID (required)")
-    device_group_id: UUID = Field(..., description="Device group ID (required)")
+    # Hierarchy fields
+    organization_id: Optional[UUID] = Field(None, description="Organization ID")
+    site_id: Optional[UUID] = Field(None, description="Site ID")
+    device_group_id: Optional[UUID] = Field(None, description="Device group ID")
     # LoRaWAN fields (optional - for ChirpStack integration)
     lorawan_dev_eui: Optional[str] = Field(None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)")
     chirpstack_app_id: Optional[str] = Field(None, description="ChirpStack application ID")
@@ -47,10 +34,7 @@ class DeviceCreate(BaseModel):
 class DeviceUpdate(BaseModel):
     """Update device request."""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
-    device_type_id: Optional[UUID] = Field(None, description="Device type ID (can reassign device to different type)")
     attributes: Optional[dict] = None
-    firmware_version: Optional[str] = Field(None, max_length=50, description="Current firmware version")
-    hardware_version: Optional[str] = Field(None, max_length=50, description="Hardware revision")
     # Hierarchy fields
     organization_id: Optional[UUID] = Field(None, description="Organization ID")
     site_id: Optional[UUID] = Field(None, description="Site ID")
@@ -62,34 +46,26 @@ class DeviceUpdate(BaseModel):
 
 
 class DeviceResponse(BaseModel):
-    """Device response model with embedded device type info."""
+    """Device response model."""
     id: UUID
     tenant_id: UUID
     name: str
-    device_type_id: UUID
-    device_type: Optional[DeviceTypeInfo] = Field(
-        None,
-        validation_alias="device_type_rel",
-        description="Nested device type information from device_type_rel relationship"
-    )
+    device_type: Optional[str] = None
     status: DeviceStatus
     last_seen: Optional[datetime] = None
     battery_level: Optional[float] = None
     signal_strength: Optional[int] = None
-    firmware_version: Optional[str] = None
-    hardware_version: Optional[str] = None
     attributes: dict
-    # Hierarchy fields (strict — always present)
-    organization_id: UUID
-    site_id: UUID
-    device_group_id: UUID
+    # Hierarchy fields
+    organization_id: Optional[UUID] = None
+    site_id: Optional[UUID] = None
+    device_group_id: Optional[UUID] = None
     # LoRaWAN fields
-    lorawan_dev_eui: Optional[str] = Field(None, validation_alias="dev_eui")
-    chirpstack_app_id: Optional[str] = Field(None, validation_alias="ttn_app_id")
+    lorawan_dev_eui: Optional[str] = None
+    chirpstack_app_id: Optional[str] = None
     device_profile_id: Optional[str] = None
-    chirpstack_synced: bool = Field(default=False, validation_alias="ttn_synced")
-    device_token: Optional[str] = Field(None, description="Device API authentication token")
+    chirpstack_synced: bool = False
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True)

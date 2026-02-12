@@ -1,15 +1,14 @@
-"""Initial schema - complete database structure
+"""Initial schema from init.sql
 
 Revision ID: 001_initial
-Revises:
-Create Date: 2026-02-08
+Revises: 
+Create Date: 2026-02-12 00:00:00.000000
 
-This migration runs the idempotent init.sql file which creates all tables.
-The init.sql is 100% idempotent - safe to run on fresh or existing databases.
 """
 from typing import Sequence, Union
+from pathlib import Path
+
 from alembic import op
-import os
 
 # revision identifiers, used by Alembic.
 revision: str = '001_initial'
@@ -19,64 +18,59 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Run the idempotent init.sql to create/update all tables."""
-
-    # Path to init.sql in Docker container
-    init_sql_path = '/app/db/init.sql'
-
-    # Fallback for local development
-    if not os.path.exists(init_sql_path):
-        # Try relative path from project root
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        init_sql_path = os.path.join(project_root, 'db', 'init.sql')
-
-    if not os.path.exists(init_sql_path):
-        raise FileNotFoundError(f"Cannot find init.sql at {init_sql_path}")
-
-    with open(init_sql_path, 'r') as f:
-        sql_content = f.read()
-
-    # Execute the idempotent SQL
-    op.execute(sql_content)
+    """Run the init.sql file to create all tables, indexes, RLS, triggers, and seed data."""
+    # Find init.sql relative to this migration file
+    init_sql_path = Path(__file__).resolve().parent.parent.parent / "db" / "init.sql"
+    
+    if not init_sql_path.exists():
+        # Fallback: try relative to working directory
+        init_sql_path = Path("db/init.sql")
+    
+    if not init_sql_path.exists():
+        raise FileNotFoundError(
+            f"Could not find init.sql. Searched:\n"
+            f"  - {Path(__file__).resolve().parent.parent.parent / 'db' / 'init.sql'}\n"
+            f"  - {Path('db/init.sql').resolve()}"
+        )
+    
+    sql = init_sql_path.read_text(encoding="utf-8")
+    
+    # Execute the full SQL file
+    op.execute(sql)
 
 
 def downgrade() -> None:
     """Drop all tables in reverse dependency order."""
-    op.execute("""
-        -- Drop in reverse dependency order
-        DROP TABLE IF EXISTS notification_queue CASCADE;
-        DROP TABLE IF EXISTS notifications CASCADE;
-        DROP TABLE IF EXISTS notification_rules CASCADE;
-        DROP TABLE IF EXISTS notification_channels CASCADE;
-        DROP TABLE IF EXISTS notification_templates CASCADE;
-        DROP TABLE IF EXISTS notification_settings CASCADE;
-        DROP TABLE IF EXISTS dashboard_widgets CASCADE;
-        DROP TABLE IF EXISTS dashboards CASCADE;
-        DROP TABLE IF EXISTS solution_templates CASCADE;
-        DROP TABLE IF EXISTS device_availability_log CASCADE;
-        DROP TABLE IF EXISTS device_events CASCADE;
-        DROP TABLE IF EXISTS event_types CASCADE;
-        DROP TABLE IF EXISTS device_profiles CASCADE;
-        DROP TABLE IF EXISTS ota_campaign_devices CASCADE;
-        DROP TABLE IF EXISTS ota_campaigns CASCADE;
-        DROP TABLE IF EXISTS device_firmware_history CASCADE;
-        DROP TABLE IF EXISTS firmware_versions CASCADE;
-        DROP TABLE IF EXISTS group_bulk_operations CASCADE;
-        DROP TABLE IF EXISTS group_devices CASCADE;
-        DROP TABLE IF EXISTS alarms CASCADE;
-        DROP TABLE IF EXISTS alert_events CASCADE;
-        DROP TABLE IF EXISTS alert_rule_conditions CASCADE;
-        DROP TABLE IF EXISTS composite_alert_rules CASCADE;
-        DROP TABLE IF EXISTS alert_rules CASCADE;
-        DROP TABLE IF EXISTS telemetry_hot CASCADE;
-        DROP TABLE IF EXISTS device_credentials CASCADE;
-        DROP TABLE IF EXISTS devices CASCADE;
-        DROP TABLE IF EXISTS device_groups CASCADE;
-        DROP TABLE IF EXISTS device_types CASCADE;
-        DROP TABLE IF EXISTS sites CASCADE;
-        DROP TABLE IF EXISTS organizations CASCADE;
-        DROP TABLE IF EXISTS audit_logs CASCADE;
-        DROP TABLE IF EXISTS users CASCADE;
-        DROP TABLE IF EXISTS tenants CASCADE;
-        DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
-    """)
+    tables = [
+        "notification_queue",
+        "notifications",
+        "notification_rules",
+        "notification_channels",
+        "notification_templates",
+        "ota_campaign_devices",
+        "ota_campaigns",
+        "device_firmware_history",
+        "firmware_versions",
+        "group_bulk_operations",
+        "group_devices",
+        "dashboard_widgets",
+        "dashboards",
+        "solution_templates",
+        "composite_alert_rules",
+        "alarms",
+        "alert_events",
+        "alert_rule_conditions",
+        "alert_rules",
+        "audit_logs",
+        "device_credentials",
+        "telemetry",
+        "devices",
+        "device_groups",
+        "device_types",
+        "sites",
+        "organizations",
+        "users",
+        "tenants",
+    ]
+    for table in tables:
+        op.execute(f"DROP TABLE IF EXISTS {table} CASCADE")

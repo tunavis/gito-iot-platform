@@ -22,16 +22,7 @@
       "Bash(ls:*)",
       "mcp__postgres_Gito_IOT__analyze_db_health",
       "Bash(curl:*)",
-      "Bash(ping:*)",
-      "Bash(npx next lint:*)",
-      "Bash(findstr:*)",
-      "mcp__github__get_file_contents",
-      "Bash(npx tsc:*)",
-      "Bash(psql:*)",
-      "Bash(git rm:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(xargs:*)"
+      "Bash(git add:*)"
     ]
   }
 }

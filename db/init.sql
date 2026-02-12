@@ -1,31 +1,28 @@
 -- ============================================================================
--- GITO IOT PLATFORM - PostgreSQL Schema (Production-Ready, Idempotent)
--- ============================================================================
--- This file is 100% IDEMPOTENT - safe to run multiple times on any database
--- All CREATE TABLE use IF NOT EXISTS
--- All CREATE INDEX use IF NOT EXISTS
--- All ALTER TABLE check before adding columns
+-- Gito IoT Platform - Database Schema
+-- Generated from SQLAlchemy models (feature/telemetry-kv-refactor)
+-- IDEMPOTENT: Safe to run on fresh or existing databases
 -- ============================================================================
 
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================================
--- SECTION 1: CORE TABLES
+-- SECTION 1: CORE ENTITIES
 -- ============================================================================
 
--- Tenants (SaaS Customers - root of multi-tenancy)
+-- Tenants (SaaS multi-tenancy root)
 CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(100) UNIQUE NOT NULL,
-    status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_tenant_status CHECK (status IN ('active', 'inactive', 'suspended'))
 );
 
--- Users (User Accounts)
+-- Users (tenant-scoped accounts)
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -37,39 +34,42 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_email_per_tenant UNIQUE(tenant_id, email),
-    CONSTRAINT valid_role CHECK (role IN ('SUPER_ADMIN', 'TENANT_ADMIN', 'SITE_ADMIN', 'CLIENT', 'VIEWER'))
+    CONSTRAINT valid_user_role CHECK (role IN ('SUPER_ADMIN', 'TENANT_ADMIN', 'SITE_ADMIN', 'CLIENT', 'VIEWER'))
 );
 
--- Organizations (Sub-customers within tenants)
+-- Organizations (sub-customers within tenant)
 CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
+    slug VARCHAR(100) NOT NULL,
     description TEXT,
-    parent_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-    attributes JSONB DEFAULT '{}',
+    billing_contact VARCHAR(255),
+    chirpstack_app_id VARCHAR(100),
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    attributes JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_org_name_per_tenant UNIQUE(tenant_id, name)
+    CONSTRAINT valid_org_status CHECK (status IN ('active', 'inactive', 'suspended'))
 );
 
--- Sites (Physical locations)
+-- Sites (physical locations, hierarchical)
 CREATE TABLE IF NOT EXISTS sites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    parent_site_id UUID REFERENCES sites(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    type VARCHAR(50),
+    site_type VARCHAR(50),
     address TEXT,
     coordinates JSONB,
-    timezone VARCHAR(50) DEFAULT 'UTC',
+    timezone VARCHAR(50) NOT NULL DEFAULT 'UTC',
+    attributes JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_site_name_per_org UNIQUE(tenant_id, organization_id, name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Device Types (Templates with telemetry schemas)
+-- Device Types (templates for device registration)
 CREATE TABLE IF NOT EXISTS device_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -77,64 +77,59 @@ CREATE TABLE IF NOT EXISTS device_types (
     description TEXT,
     manufacturer VARCHAR(255),
     model VARCHAR(255),
-    category VARCHAR(100),
-    icon VARCHAR(50),
-    color VARCHAR(20),
+    category VARCHAR(50) NOT NULL DEFAULT 'sensor',
+    icon VARCHAR(50) DEFAULT 'cpu',
+    color VARCHAR(20) DEFAULT '#6366f1',
     data_model JSONB DEFAULT '[]',
-    telemetry_schema JSONB DEFAULT '{}',
-    command_schema JSONB DEFAULT '{}',
     capabilities JSONB DEFAULT '[]',
     default_settings JSONB DEFAULT '{}',
     connectivity JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    device_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_device_type_name UNIQUE(tenant_id, name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Devices (IoT Device Inventory)
+-- Devices (IoT devices, tenant-scoped with hierarchy)
 CREATE TABLE IF NOT EXISTS devices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
     site_id UUID REFERENCES sites(id) ON DELETE SET NULL,
     device_group_id UUID,
-    device_type_id UUID REFERENCES device_types(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
-    device_type VARCHAR(100),
+    device_type VARCHAR(100) NOT NULL,
     dev_eui VARCHAR(16),
-    app_eui VARCHAR(16),
-    app_key VARCHAR(32),
-    join_eui VARCHAR(16),
-    ttn_app_id VARCHAR(100),
-    ttn_dev_id VARCHAR(100),
-    chirpstack_app_id VARCHAR(100),
-    device_profile_id VARCHAR(100),
-    chirpstack_synced BOOLEAN DEFAULT FALSE,
-    status VARCHAR(50) DEFAULT 'offline' CHECK (status IN ('online', 'offline', 'idle', 'error', 'provisioning')),
+    status VARCHAR(50) NOT NULL DEFAULT 'offline',
     last_seen TIMESTAMPTZ,
     battery_level FLOAT,
     signal_strength INTEGER,
-    attributes JSONB DEFAULT '{}',
+    attributes JSONB NOT NULL DEFAULT '{}',
+    ttn_app_id VARCHAR(100),
+    device_profile_id VARCHAR(100),
+    ttn_synced BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_device_status CHECK (status IN ('online', 'offline', 'idle', 'error', 'provisioning'))
 );
 
--- Device Groups (Logical groupings of devices)
+-- Device Groups (logical groupings of devices)
 CREATE TABLE IF NOT EXISTS device_groups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-    site_id UUID REFERENCES sites(id) ON DELETE SET NULL,
+    site_id UUID REFERENCES sites(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    membership_rule JSONB DEFAULT '{}',
-    attributes JSONB DEFAULT '{}',
+    group_type VARCHAR(50),
+    membership_rule JSONB NOT NULL DEFAULT '{}',
+    attributes JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_group_name_per_tenant UNIQUE(tenant_id, name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Add foreign key for device_group_id after device_groups exists
+-- Add FK for device_group_id after device_groups exists
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -146,7 +141,7 @@ BEGIN
     END IF;
 END $$;
 
--- Group Devices (Junction table)
+-- Group Devices (junction table)
 CREATE TABLE IF NOT EXISTS group_devices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     group_id UUID NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
@@ -160,50 +155,53 @@ CREATE TABLE IF NOT EXISTS device_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    credential_type VARCHAR(50) NOT NULL CHECK (credential_type IN ('mqtt_password', 'device_token', 'api_key')),
+    credential_type VARCHAR(50) NOT NULL,
     credential_hash VARCHAR(255) NOT NULL,
     username VARCHAR(255),
     status VARCHAR(50) DEFAULT 'active',
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    rotated_at TIMESTAMPTZ
+    rotated_at TIMESTAMPTZ,
+    CONSTRAINT valid_cred_type CHECK (credential_type IN ('mqtt_password', 'device_token', 'api_key'))
 );
 
 -- ============================================================================
--- SECTION 2: TELEMETRY & TIME-SERIES
+-- SECTION 2: TELEMETRY (Key-Value Time-Series)
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS telemetry_hot (
-    id UUID DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,
+CREATE TABLE IF NOT EXISTS telemetry (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    temperature FLOAT,
-    humidity FLOAT,
-    pressure FLOAT,
-    battery FLOAT,
-    rssi INTEGER,
-    payload JSONB,
-    timestamp TIMESTAMPTZ NOT NULL,
+    metric_key VARCHAR(100) NOT NULL,
+    metric_value FLOAT,
+    metric_value_str VARCHAR(500),
+    metric_value_json JSONB,
+    unit VARCHAR(20),
+    ts TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ============================================================================
--- SECTION 3: ALERT SYSTEM
+-- SECTION 3: ALERT SYSTEM (Unified: THRESHOLD + COMPOSITE)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS alert_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
     name VARCHAR(255),
     description TEXT,
-    metric VARCHAR(100),
-    operator VARCHAR(10) CHECK (operator IN ('>', '<', '>=', '<=', '==', '!=')),
-    threshold FLOAT,
-    severity VARCHAR(20) DEFAULT 'warning',
-    cooldown_minutes INTEGER DEFAULT 5,
-    active BOOLEAN DEFAULT true,
+    rule_type VARCHAR(20) NOT NULL DEFAULT 'THRESHOLD',
+    severity VARCHAR(20) NOT NULL DEFAULT 'MAJOR',
+    active BOOLEAN NOT NULL DEFAULT true,
+    cooldown_minutes INTEGER NOT NULL DEFAULT 5,
     last_fired_at TIMESTAMPTZ,
+    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+    metric VARCHAR(50),
+    operator VARCHAR(10),
+    threshold FLOAT,
+    conditions JSONB,
+    logic VARCHAR(10),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -214,40 +212,54 @@ CREATE TABLE IF NOT EXISTS alert_rule_conditions (
     field VARCHAR(100) NOT NULL,
     operator VARCHAR(10) NOT NULL,
     threshold FLOAT NOT NULL,
-    weight INTEGER DEFAULT 1,
-    sequence INTEGER NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    weight INTEGER NOT NULL DEFAULT 1,
+    sequence INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_condition_operator CHECK (operator IN ('>', '<', '>=', '<=', '==', '!=')),
+    CONSTRAINT valid_condition_weight CHECK (weight >= 1 AND weight <= 100)
 );
 
 CREATE TABLE IF NOT EXISTS alert_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     alert_rule_id UUID REFERENCES alert_rules(id) ON DELETE CASCADE,
-    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
-    metric_name VARCHAR(50),
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    metric_name VARCHAR(50) NOT NULL,
     metric_value FLOAT,
     message TEXT,
-    notification_sent BOOLEAN DEFAULT false,
+    severity VARCHAR(20) NOT NULL DEFAULT 'MAJOR',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    alarm_type VARCHAR(100),
+    source VARCHAR(100),
+    acknowledged_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    acknowledged_at TIMESTAMPTZ,
+    cleared_at TIMESTAMPTZ,
+    notification_sent BOOLEAN NOT NULL DEFAULT false,
     notification_sent_at TIMESTAMPTZ,
-    fired_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    fired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_severity CHECK (severity IN ('CRITICAL', 'MAJOR', 'MINOR', 'WARNING')),
+    CONSTRAINT valid_alarm_status CHECK (status IN ('ACTIVE', 'ACKNOWLEDGED', 'CLEARED'))
 );
 
 CREATE TABLE IF NOT EXISTS alarms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
     alert_rule_id UUID REFERENCES alert_rules(id) ON DELETE SET NULL,
-    severity VARCHAR(20) NOT NULL DEFAULT 'warning',
-    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'acknowledged', 'cleared', 'suppressed')),
-    message TEXT,
-    metadata JSONB DEFAULT '{}',
-    triggered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+    acknowledged_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    alarm_type VARCHAR(100) NOT NULL,
+    source VARCHAR(255),
+    severity VARCHAR(20) NOT NULL DEFAULT 'MAJOR',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    message TEXT NOT NULL,
+    context JSONB,
+    fired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     acknowledged_at TIMESTAMPTZ,
-    acknowledged_by UUID REFERENCES users(id),
     cleared_at TIMESTAMPTZ,
-    cleared_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_alarm_severity CHECK (severity IN ('CRITICAL', 'MAJOR', 'MINOR', 'WARNING')),
+    CONSTRAINT valid_alarm_lifecycle CHECK (status IN ('ACTIVE', 'ACKNOWLEDGED', 'CLEARED'))
 );
 
 CREATE TABLE IF NOT EXISTS composite_alert_rules (
@@ -255,14 +267,17 @@ CREATE TABLE IF NOT EXISTS composite_alert_rules (
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    logic_operator VARCHAR(10) DEFAULT 'AND' CHECK (logic_operator IN ('AND', 'OR')),
+    enabled BOOLEAN NOT NULL DEFAULT true,
     conditions JSONB NOT NULL DEFAULT '[]',
-    actions JSONB DEFAULT '[]',
-    enabled BOOLEAN DEFAULT true,
+    logic VARCHAR(10) NOT NULL DEFAULT 'AND',
+    severity VARCHAR(20) NOT NULL DEFAULT 'warning',
+    weight_score INTEGER,
     cooldown_minutes INTEGER DEFAULT 5,
     last_triggered_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_logic CHECK (logic IN ('AND', 'OR')),
+    CONSTRAINT valid_composite_severity CHECK (severity IN ('info', 'warning', 'critical'))
 );
 
 -- ============================================================================
@@ -283,41 +298,45 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 -- ============================================================================
--- SECTION 5: NOTIFICATIONS
+-- SECTION 5: NOTIFICATIONS (Redesigned)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS notification_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    channel_type VARCHAR(50) NOT NULL,
+    alert_type VARCHAR(100),
     name VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL,
-    subject_template TEXT,
-    body_template TEXT NOT NULL,
-    variables JSONB DEFAULT '[]',
-    is_system BOOLEAN DEFAULT false,
+    subject VARCHAR(500),
+    body TEXT NOT NULL,
+    variables JSONB NOT NULL DEFAULT '{}',
+    enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_template_channel_type CHECK (channel_type IN ('email', 'slack', 'webhook'))
 );
 
 CREATE TABLE IF NOT EXISTS notification_channels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL,
-    config JSONB NOT NULL DEFAULT '{}',
-    enabled BOOLEAN DEFAULT true,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_type VARCHAR(50) NOT NULL,
+    config JSONB NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    verified BOOLEAN NOT NULL DEFAULT false,
+    verified_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_notification_channel_type CHECK (channel_type IN ('email', 'slack', 'webhook', 'apns', 'fcm', 'sms'))
 );
 
 CREATE TABLE IF NOT EXISTS notification_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    event_types JSONB NOT NULL DEFAULT '[]',
-    channel_ids JSONB NOT NULL DEFAULT '[]',
-    template_id UUID REFERENCES notification_templates(id),
-    conditions JSONB DEFAULT '{}',
-    enabled BOOLEAN DEFAULT true,
+    alert_rule_id UUID NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+    channel_id UUID NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+    enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -325,45 +344,37 @@ CREATE TABLE IF NOT EXISTS notification_rules (
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    channel_id UUID REFERENCES notification_channels(id),
-    type VARCHAR(50) NOT NULL,
-    title VARCHAR(255),
-    message TEXT NOT NULL,
-    metadata JSONB DEFAULT '{}',
-    status VARCHAR(20) DEFAULT 'pending',
+    alert_event_id UUID NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
+    channel_id UUID NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+    channel_type VARCHAR(50) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    delivery_status VARCHAR(50),
+    error_message TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMPTZ,
     sent_at TIMESTAMPTZ,
-    read_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    delivered_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_notification_status CHECK (status IN ('pending', 'sending', 'sent', 'failed', 'bounced', 'skipped')),
+    CONSTRAINT valid_delivery_status CHECK (delivery_status IS NULL OR delivery_status IN ('success', 'permanent_failure', 'temporary_failure', 'invalid_address', 'rate_limited'))
 );
 
 CREATE TABLE IF NOT EXISTS notification_queue (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    channel_id UUID REFERENCES notification_channels(id) ON DELETE CASCADE,
-    event_type VARCHAR(100) NOT NULL,
-    payload JSONB NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending',
-    attempts INTEGER DEFAULT 0,
-    last_attempt_at TIMESTAMPTZ,
+    alert_event_id UUID NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
     error_message TEXT,
+    attempted_at TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    scheduled_for TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS notification_settings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    channel_type VARCHAR(50) NOT NULL,
-    enabled BOOLEAN DEFAULT true,
-    config JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_user_channel UNIQUE(user_id, channel_type)
+    CONSTRAINT valid_notification_queue_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))
 );
 
 -- ============================================================================
--- SECTION 6: FIRMWARE & OTA
+-- SECTION 6: FIRMWARE & OTA (retained from staging)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS firmware_versions (
@@ -428,19 +439,21 @@ CREATE TABLE IF NOT EXISTS group_bulk_operations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     group_id UUID NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
-    operation_type VARCHAR(50) NOT NULL CHECK (operation_type IN ('bulk_ota', 'bulk_command', 'bulk_sync')),
-    status VARCHAR(50) DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+    operation_type VARCHAR(50) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'queued',
     cadence_workflow_id VARCHAR(255),
     devices_total INTEGER NOT NULL,
-    devices_completed INTEGER DEFAULT 0,
-    devices_failed INTEGER DEFAULT 0,
-    progress_percent INTEGER DEFAULT 0,
-    metadata JSONB DEFAULT '{}',
+    devices_completed INTEGER NOT NULL DEFAULT 0,
+    devices_failed INTEGER NOT NULL DEFAULT 0,
+    progress_percent INTEGER NOT NULL DEFAULT 0,
+    operation_metadata JSONB NOT NULL DEFAULT '{}',
     error_message TEXT,
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT valid_bulk_op_type CHECK (operation_type IN ('bulk_ota', 'bulk_command', 'bulk_sync')),
+    CONSTRAINT valid_bulk_op_status CHECK (status IN ('queued', 'running', 'completed', 'failed'))
 );
 
 -- ============================================================================
@@ -453,11 +466,11 @@ CREATE TABLE IF NOT EXISTS dashboards (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(200) NOT NULL,
     description TEXT,
-    is_default BOOLEAN DEFAULT false NOT NULL,
-    layout_config JSONB DEFAULT '{}' NOT NULL,
-    theme JSONB DEFAULT '{}' NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT false,
+    layout_config JSONB NOT NULL DEFAULT '{}',
+    theme JSONB NOT NULL DEFAULT '{}',
     solution_type VARCHAR(100),
-    extra_data JSONB DEFAULT '{}' NOT NULL,
+    extra_data JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -469,11 +482,11 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
     title VARCHAR(200),
     position_x INTEGER NOT NULL,
     position_y INTEGER NOT NULL,
-    width INTEGER DEFAULT 2 NOT NULL,
-    height INTEGER DEFAULT 2 NOT NULL,
-    configuration JSONB DEFAULT '{}' NOT NULL,
-    data_sources JSONB DEFAULT '[]' NOT NULL,
-    refresh_interval INTEGER DEFAULT 30 NOT NULL,
+    width INTEGER NOT NULL DEFAULT 2,
+    height INTEGER NOT NULL DEFAULT 2,
+    configuration JSONB NOT NULL DEFAULT '{}',
+    data_sources JSONB NOT NULL DEFAULT '[]',
+    refresh_interval INTEGER NOT NULL DEFAULT 30,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT check_positive_dimensions CHECK (width > 0 AND height > 0),
@@ -488,72 +501,17 @@ CREATE TABLE IF NOT EXISTS solution_templates (
     description TEXT,
     icon VARCHAR(50) DEFAULT 'layout-dashboard',
     color VARCHAR(20) DEFAULT '#0066CC',
-    target_device_types JSONB DEFAULT '[]' NOT NULL,
-    required_capabilities JSONB DEFAULT '[]' NOT NULL,
+    target_device_types JSONB NOT NULL DEFAULT '[]',
+    required_capabilities JSONB NOT NULL DEFAULT '[]',
     template_config JSONB NOT NULL,
     preview_image_url TEXT,
-    is_active BOOLEAN DEFAULT true NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ============================================================================
--- SECTION 8: DEVICE EVENTS & PROFILES
--- ============================================================================
-
-CREATE TABLE IF NOT EXISTS event_types (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    code VARCHAR(50) NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    severity VARCHAR(20) DEFAULT 'info',
-    category VARCHAR(50),
-    is_system BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_event_code_per_tenant UNIQUE(tenant_id, code)
-);
-
-CREATE TABLE IF NOT EXISTS device_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    event_type_id UUID REFERENCES event_types(id) ON DELETE SET NULL,
-    event_code VARCHAR(50) NOT NULL,
-    severity VARCHAR(20) DEFAULT 'info',
-    message TEXT,
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS device_availability_log (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    status VARCHAR(20) NOT NULL,
-    previous_status VARCHAR(20),
-    reason VARCHAR(100),
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS device_profiles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    protocol VARCHAR(50) NOT NULL,
-    payload_codec JSONB DEFAULT '{}',
-    uplink_decoder TEXT,
-    downlink_encoder TEXT,
-    settings JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT unique_profile_name UNIQUE(tenant_id, name)
-);
-
--- ============================================================================
--- SECTION 9: INDEXES (All with IF NOT EXISTS via DO blocks)
+-- SECTION 8: INDEXES
 -- ============================================================================
 
 DO $$
@@ -571,12 +529,15 @@ BEGIN
         CREATE INDEX idx_users_tenant_id ON users(tenant_id);
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_users_tenant_email') THEN
-        CREATE INDEX idx_users_tenant_email ON users(tenant_id, email);
+        CREATE UNIQUE INDEX idx_users_tenant_email ON users(tenant_id, email);
     END IF;
 
     -- Organizations
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_organizations_tenant') THEN
         CREATE INDEX idx_organizations_tenant ON organizations(tenant_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_organizations_slug') THEN
+        CREATE UNIQUE INDEX idx_organizations_slug ON organizations(tenant_id, slug);
     END IF;
 
     -- Sites
@@ -585,6 +546,20 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_sites_organization') THEN
         CREATE INDEX idx_sites_organization ON sites(organization_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_sites_parent') THEN
+        CREATE INDEX idx_sites_parent ON sites(parent_site_id);
+    END IF;
+
+    -- Device Types
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_types_tenant') THEN
+        CREATE INDEX idx_device_types_tenant ON device_types(tenant_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_types_category') THEN
+        CREATE INDEX idx_device_types_category ON device_types(category);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_types_active') THEN
+        CREATE INDEX idx_device_types_active ON device_types(is_active);
     END IF;
 
     -- Devices
@@ -595,7 +570,10 @@ BEGIN
         CREATE INDEX idx_devices_status ON devices(status);
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_last_seen') THEN
-        CREATE INDEX idx_devices_last_seen ON devices(last_seen DESC);
+        CREATE INDEX idx_devices_last_seen ON devices(last_seen);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_tenant_dev_eui') THEN
+        CREATE UNIQUE INDEX idx_devices_tenant_dev_eui ON devices(tenant_id, dev_eui);
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_organization') THEN
         CREATE INDEX idx_devices_organization ON devices(organization_id);
@@ -603,29 +581,38 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_site') THEN
         CREATE INDEX idx_devices_site ON devices(site_id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_device_type') THEN
-        CREATE INDEX idx_devices_device_type ON devices(device_type_id);
-    END IF;
-
-    -- Device Types
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_types_tenant') THEN
-        CREATE INDEX idx_device_types_tenant ON device_types(tenant_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_group') THEN
+        CREATE INDEX idx_devices_group ON devices(device_group_id);
     END IF;
 
     -- Device Groups
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_groups_tenant') THEN
         CREATE INDEX idx_device_groups_tenant ON device_groups(tenant_id);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_groups_org') THEN
+        CREATE INDEX idx_device_groups_org ON device_groups(organization_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_groups_site') THEN
+        CREATE INDEX idx_device_groups_site ON device_groups(site_id);
+    END IF;
 
-    -- Telemetry
+    -- Device Credentials
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_creds_tenant_device') THEN
+        CREATE INDEX idx_creds_tenant_device ON device_credentials(tenant_id, device_id);
+    END IF;
+
+    -- Telemetry (KV pattern)
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_telemetry_device_metric_ts') THEN
+        CREATE INDEX idx_telemetry_device_metric_ts ON telemetry(device_id, metric_key, ts);
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_telemetry_tenant_device') THEN
-        CREATE INDEX idx_telemetry_tenant_device ON telemetry_hot(tenant_id, device_id, timestamp DESC);
+        CREATE INDEX idx_telemetry_tenant_device ON telemetry(tenant_id, device_id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_telemetry_device_time') THEN
-        CREATE INDEX idx_telemetry_device_time ON telemetry_hot(device_id, timestamp DESC);
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_telemetry_ts') THEN
+        CREATE INDEX idx_telemetry_ts ON telemetry(ts);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_telemetry_timestamp') THEN
-        CREATE INDEX idx_telemetry_timestamp ON telemetry_hot(timestamp DESC);
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_telemetry_latest') THEN
+        CREATE INDEX idx_telemetry_latest ON telemetry(device_id, metric_key, ts DESC);
     END IF;
 
     -- Alert Rules
@@ -635,6 +622,40 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_rules_device') THEN
         CREATE INDEX idx_alert_rules_device ON alert_rules(device_id);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_rules_active') THEN
+        CREATE INDEX idx_alert_rules_active ON alert_rules(active);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_rules_type') THEN
+        CREATE INDEX idx_alert_rules_type ON alert_rules(rule_type);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_rules_severity') THEN
+        CREATE INDEX idx_alert_rules_severity ON alert_rules(severity);
+    END IF;
+
+    -- Alert Rule Conditions
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_conditions_rule') THEN
+        CREATE INDEX idx_alert_conditions_rule ON alert_rule_conditions(rule_id);
+    END IF;
+
+    -- Alert Events
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_events_tenant') THEN
+        CREATE INDEX idx_alert_events_tenant ON alert_events(tenant_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_events_rule') THEN
+        CREATE INDEX idx_alert_events_rule ON alert_events(alert_rule_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_events_device') THEN
+        CREATE INDEX idx_alert_events_device ON alert_events(device_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_events_severity') THEN
+        CREATE INDEX idx_alert_events_severity ON alert_events(severity);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_events_status') THEN
+        CREATE INDEX idx_alert_events_status ON alert_events(status);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alert_events_fired') THEN
+        CREATE INDEX idx_alert_events_fired ON alert_events(fired_at);
+    END IF;
 
     -- Alarms
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alarms_tenant') THEN
@@ -643,8 +664,28 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alarms_device') THEN
         CREATE INDEX idx_alarms_device ON alarms(device_id);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alarms_type') THEN
+        CREATE INDEX idx_alarms_type ON alarms(alarm_type);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alarms_severity') THEN
+        CREATE INDEX idx_alarms_severity ON alarms(severity);
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alarms_status') THEN
         CREATE INDEX idx_alarms_status ON alarms(status);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_alarms_fired') THEN
+        CREATE INDEX idx_alarms_fired ON alarms(fired_at);
+    END IF;
+
+    -- Composite Alert Rules
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_composite_rules_tenant') THEN
+        CREATE INDEX idx_composite_rules_tenant ON composite_alert_rules(tenant_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_composite_rules_enabled') THEN
+        CREATE INDEX idx_composite_rules_enabled ON composite_alert_rules(enabled);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_composite_rules_severity') THEN
+        CREATE INDEX idx_composite_rules_severity ON composite_alert_rules(severity);
     END IF;
 
     -- Dashboards
@@ -677,42 +718,100 @@ BEGIN
         CREATE INDEX idx_solution_templates_identifier ON solution_templates(identifier);
     END IF;
 
+    -- Notification Templates
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_templates_tenant') THEN
+        CREATE INDEX idx_notification_templates_tenant ON notification_templates(tenant_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_templates_channel') THEN
+        CREATE INDEX idx_notification_templates_channel ON notification_templates(channel_type);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_templates_enabled') THEN
+        CREATE INDEX idx_notification_templates_enabled ON notification_templates(enabled);
+    END IF;
+
+    -- Notification Channels
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_channels_tenant') THEN
+        CREATE INDEX idx_notification_channels_tenant ON notification_channels(tenant_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_channels_user') THEN
+        CREATE INDEX idx_notification_channels_user ON notification_channels(user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_channels_enabled') THEN
+        CREATE INDEX idx_notification_channels_enabled ON notification_channels(enabled);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_channels_type') THEN
+        CREATE INDEX idx_notification_channels_type ON notification_channels(channel_type);
+    END IF;
+
+    -- Notification Rules
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_rules_alert') THEN
+        CREATE INDEX idx_notification_rules_alert ON notification_rules(alert_rule_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_rules_channel') THEN
+        CREATE INDEX idx_notification_rules_channel ON notification_rules(channel_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_rules_enabled') THEN
+        CREATE INDEX idx_notification_rules_enabled ON notification_rules(enabled);
+    END IF;
+
     -- Notifications
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_tenant') THEN
         CREATE INDEX idx_notifications_tenant ON notifications(tenant_id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_user') THEN
-        CREATE INDEX idx_notifications_user ON notifications(user_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_alert_event') THEN
+        CREATE INDEX idx_notifications_alert_event ON notifications(alert_event_id);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_channel') THEN
+        CREATE INDEX idx_notifications_channel ON notifications(channel_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_status') THEN
+        CREATE INDEX idx_notifications_status ON notifications(status);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_recipient') THEN
+        CREATE INDEX idx_notifications_recipient ON notifications(recipient);
+    END IF;
+
+    -- Notification Queue
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_queue_status') THEN
-        CREATE INDEX idx_notification_queue_status ON notification_queue(status, scheduled_for);
+        CREATE INDEX idx_notification_queue_status ON notification_queue(status);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_queue_tenant') THEN
+        CREATE INDEX idx_notification_queue_tenant ON notification_queue(tenant_id);
     END IF;
 
     -- Audit Logs
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_audit_tenant') THEN
         CREATE INDEX idx_audit_tenant ON audit_logs(tenant_id);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_audit_user') THEN
+        CREATE INDEX idx_audit_user ON audit_logs(user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_audit_resource') THEN
+        CREATE INDEX idx_audit_resource ON audit_logs(resource_type, resource_id);
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_audit_created_at') THEN
         CREATE INDEX idx_audit_created_at ON audit_logs(created_at DESC);
     END IF;
 
-    -- Device Events
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_events_tenant') THEN
-        CREATE INDEX idx_device_events_tenant ON device_events(tenant_id);
+    -- Bulk Operations
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_bulk_operations_tenant') THEN
+        CREATE INDEX idx_bulk_operations_tenant ON group_bulk_operations(tenant_id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_events_device') THEN
-        CREATE INDEX idx_device_events_device ON device_events(device_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_bulk_operations_group') THEN
+        CREATE INDEX idx_bulk_operations_group ON group_bulk_operations(group_id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_device_events_created') THEN
-        CREATE INDEX idx_device_events_created ON device_events(created_at DESC);
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_bulk_operations_status') THEN
+        CREATE INDEX idx_bulk_operations_status ON group_bulk_operations(status);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_bulk_operations_created_at') THEN
+        CREATE INDEX idx_bulk_operations_created_at ON group_bulk_operations(created_at);
     END IF;
 END $$;
 
 -- ============================================================================
--- SECTION 10: ROW-LEVEL SECURITY
+-- SECTION 9: ROW-LEVEL SECURITY
 -- ============================================================================
 
--- Enable RLS on all tenant-scoped tables (idempotent)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
@@ -720,7 +819,7 @@ ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_credentials ENABLE ROW LEVEL SECURITY;
-ALTER TABLE telemetry_hot ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telemetry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alarms ENABLE ROW LEVEL SECURITY;
@@ -730,17 +829,14 @@ ALTER TABLE notification_channels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_queue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE firmware_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_firmware_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ota_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE group_bulk_operations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dashboards ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_types ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_availability_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_profiles ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies (idempotent - DROP IF EXISTS then CREATE)
+-- RLS Policies (idempotent)
 DO $$
 BEGIN
     -- Users
@@ -779,8 +875,8 @@ BEGIN
         USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
 
     -- Telemetry
-    DROP POLICY IF EXISTS telemetry_tenant_isolation ON telemetry_hot;
-    CREATE POLICY telemetry_tenant_isolation ON telemetry_hot FOR ALL
+    DROP POLICY IF EXISTS telemetry_tenant_isolation ON telemetry;
+    CREATE POLICY telemetry_tenant_isolation ON telemetry FOR ALL
         USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
 
     -- Alert Rules
@@ -828,6 +924,11 @@ BEGIN
     CREATE POLICY queue_tenant_isolation ON notification_queue FOR ALL
         USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
 
+    -- Notification Templates
+    DROP POLICY IF EXISTS templates_tenant_isolation ON notification_templates;
+    CREATE POLICY templates_tenant_isolation ON notification_templates FOR ALL
+        USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
+
     -- Firmware Versions
     DROP POLICY IF EXISTS firmware_tenant_isolation ON firmware_versions;
     CREATE POLICY firmware_tenant_isolation ON firmware_versions FOR ALL
@@ -855,33 +956,12 @@ BEGIN
             tenant_id = current_setting('app.current_tenant_id', true)::UUID
             AND user_id = current_setting('app.current_user_id', true)::UUID
         );
-
-    -- Event Types
-    DROP POLICY IF EXISTS event_types_tenant_isolation ON event_types;
-    CREATE POLICY event_types_tenant_isolation ON event_types FOR ALL
-        USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
-
-    -- Device Events
-    DROP POLICY IF EXISTS device_events_tenant_isolation ON device_events;
-    CREATE POLICY device_events_tenant_isolation ON device_events FOR ALL
-        USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
-
-    -- Device Availability Log
-    DROP POLICY IF EXISTS availability_tenant_isolation ON device_availability_log;
-    CREATE POLICY availability_tenant_isolation ON device_availability_log FOR ALL
-        USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
-
-    -- Device Profiles
-    DROP POLICY IF EXISTS profiles_tenant_isolation ON device_profiles;
-    CREATE POLICY profiles_tenant_isolation ON device_profiles FOR ALL
-        USING (tenant_id = current_setting('app.current_tenant_id', true)::UUID);
 END $$;
 
 -- ============================================================================
--- SECTION 11: FUNCTIONS & TRIGGERS
+-- SECTION 10: FUNCTIONS & TRIGGERS
 -- ============================================================================
 
--- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -890,7 +970,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create triggers (idempotent - DROP IF EXISTS then CREATE)
 DO $$
 DECLARE
     tbl TEXT;
@@ -898,9 +977,9 @@ DECLARE
         'tenants', 'users', 'organizations', 'sites', 'devices', 'device_types',
         'device_groups', 'alert_rules', 'alarms', 'composite_alert_rules',
         'notification_channels', 'notification_rules', 'notification_templates',
-        'notification_settings', 'firmware_versions', 'ota_campaigns',
+        'firmware_versions', 'ota_campaigns',
         'group_bulk_operations', 'dashboards', 'dashboard_widgets',
-        'solution_templates', 'device_profiles'
+        'solution_templates', 'notifications'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables_with_updated_at
@@ -911,10 +990,9 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- SECTION 12: SEED DATA (Demo Tenant & Admin)
+-- SECTION 11: SEED DATA (Demo Tenant & Admin)
 -- ============================================================================
 
--- Create default tenant for testing
 INSERT INTO tenants (id, name, slug, status)
 VALUES (
     '00000000-0000-0000-0000-000000000001'::UUID,
@@ -923,7 +1001,6 @@ VALUES (
     'active'
 ) ON CONFLICT (id) DO NOTHING;
 
--- Create admin user for demo tenant (password: admin123)
 INSERT INTO users (
     id, tenant_id, email, password_hash, full_name, role, status
 ) VALUES (
@@ -939,6 +1016,6 @@ INSERT INTO users (
 -- ============================================================================
 -- COMPLETE
 -- ============================================================================
--- This schema is production-ready and idempotent.
--- Safe to run on fresh database OR existing database.
+-- This schema matches the SQLAlchemy models on feature/telemetry-kv-refactor.
+-- Safe to run on a fresh database. Staging DB must be reset (volume removed).
 -- ============================================================================

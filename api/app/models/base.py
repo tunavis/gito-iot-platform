@@ -234,30 +234,42 @@ class AuditLog(BaseModel):
     )
 
 
-class TelemetryHot(BaseModel):
-    """Telemetry time-series data - hot storage for recent data."""
-    __tablename__ = "telemetry_hot"
+class Telemetry(BaseModel):
+    """
+    Telemetry time-series data - key-value storage for unlimited metrics.
+
+    Industry-standard design (ThingsBoard/Cumulocity pattern):
+    - One row per metric per timestamp
+    - Supports any metric name dynamically
+    - Efficient queries for specific metrics
+    - Works with TimescaleDB hypertables
+    """
+    __tablename__ = "telemetry"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
 
-    # Common telemetry fields
-    temperature = Column(Float, nullable=True)
-    humidity = Column(Float, nullable=True)
-    pressure = Column(Float, nullable=True)
-    battery = Column(Float, nullable=True)
-    rssi = Column(Integer, nullable=True)
+    # Key-value metric storage
+    metric_key = Column(String(100), nullable=False)  # "temperature", "humidity", "custom_sensor_1", etc.
+    metric_value = Column(Float, nullable=True)  # Numeric value (most common)
+    metric_value_str = Column(String(500), nullable=True)  # String value (status, mode, etc.)
+    metric_value_json = Column(JSONB, nullable=True)  # Complex/nested values
 
-    # Device-specific metrics in JSONB
-    payload = Column(JSONB, default={}, nullable=False)
+    # Unit hint from device type schema (optional, for display)
+    unit = Column(String(20), nullable=True)  # "°C", "%", "m³/hr", etc.
 
     # Timestamps
-    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), nullable=False)  # Measurement timestamp
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        Index("idx_telemetry_device_time", "device_id", "timestamp"),
+        # Primary query pattern: device + metric + time range
+        Index("idx_telemetry_device_metric_ts", "device_id", "metric_key", "ts"),
+        # Tenant isolation queries
         Index("idx_telemetry_tenant_device", "tenant_id", "device_id"),
-        Index("idx_telemetry_timestamp", "timestamp"),
+        # Time-based queries (for TimescaleDB retention policies)
+        Index("idx_telemetry_ts", "ts"),
+        # Latest value queries (DISTINCT ON device_id, metric_key ORDER BY ts DESC)
+        Index("idx_telemetry_latest", "device_id", "metric_key", "ts", postgresql_ops={"ts": "DESC"}),
     )

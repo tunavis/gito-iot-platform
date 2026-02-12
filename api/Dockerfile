@@ -14,9 +14,10 @@ COPY api/app ./app
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
 
-# Copy Alembic migrations
+# Copy Alembic migrations and init.sql
 COPY api/alembic ./alembic
 COPY api/alembic.ini ./alembic.ini
+COPY db/init.sql ./db/init.sql
 
 # Copy database init SQL
 COPY db/init.sql ./db/init.sql

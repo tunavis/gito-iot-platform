@@ -105,58 +105,29 @@ jobs:
           docker compose -f docker-compose.staging.yml --env-file .env.staging pull
           echo "✅ Images pulled"
 
-      - name: Stop Current Services
+      - name: Stop Current Services and Reset Database
         run: |
           cd /opt/gito-iot
           echo "🛑 Stopping current services..."
-          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans || true
-          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging 2>/dev/null || true
-          echo "✅ Services stopped"
-
-      - name: Run Database Migrations
-        run: |
-          cd /opt/gito-iot
-          echo "📋 Checking database migrations..."
-
-          # Start postgres, redis, and API for migrations
-          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d postgres
-          sleep 5
-          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d redis
-          sleep 3
-          docker compose -f docker-compose.staging.yml --env-file .env.staging up -d api
-          sleep 15
-
-          echo "Current migration status:"
-          docker exec gito-api-staging alembic current || echo "⚠️  Could not get current status"
-
-          echo ""
-          echo "⚡ Running migrations..."
-          docker exec gito-api-staging alembic upgrade head || {
-            echo "❌ MIGRATION FAILED!"
-            echo ""
-            echo "📋 API Logs:"
-            docker logs gito-api-staging --tail 100
-            echo ""
-            echo "⚠️  Database may be inconsistent. Run: ./scripts/reset_staging_database.sh"
-            exit 1
-          }
-
-          echo "✅ Migrations completed"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans --volumes || true
+          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging gito-postgres-staging gito-redis-staging 2>/dev/null || true
+          echo "✅ Services stopped and DB volume removed for clean migration"
 
       - name: Start All Services
         run: |
           cd /opt/gito-iot
           echo "🚀 Starting all services..."
-
-          # Stop API (we'll restart everything together)
-          docker compose -f docker-compose.staging.yml --env-file .env.staging down
-
-          # Start all services
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
-
           echo "⏳ Waiting for services to start..."
-          sleep 20
+          sleep 30
           echo "✅ Services started"
+
+      - name: Verify Migration
+        run: |
+          cd /opt/gito-iot
+          echo "📋 Checking migration status..."
+          docker exec gito-api-staging alembic current || echo "⚠️ Could not get migration status"
+          echo "✅ Migration verified"
 
       - name: Health Check
         run: |

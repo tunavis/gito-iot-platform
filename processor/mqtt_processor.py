@@ -216,15 +216,6 @@ class DatabaseService:
             await self.conn_pool.close()
             logger.info("Database connection pool closed")
 
-    # Fixed columns in telemetry_hot that should be extracted from payload
-    FIXED_METRIC_COLUMNS = {
-        'temperature': float,
-        'humidity': float,
-        'battery': float,
-        'pressure': float,
-        'rssi': int,
-    }
-
     async def insert_telemetry(
         self,
         tenant_id: str,
@@ -233,56 +224,50 @@ class DatabaseService:
         timestamp: datetime
     ) -> bool:
         """
-        Insert telemetry into TimescaleDB.
-        Extracts known metrics (temperature, humidity, battery, pressure, rssi)
-        into dedicated columns and stores the full payload in JSONB.
+        Insert telemetry into TimescaleDB using key-value format.
+
+        Each metric in the payload becomes a separate row in the telemetry table.
+        This enables unlimited dynamic metrics per device (industry-standard pattern).
+
         Returns True on success, False on failure.
         """
         try:
-            # Extract known metrics into fixed columns
-            temperature = None
-            humidity = None
-            battery = None
-            pressure = None
-            rssi = None
-
-            for metric, cast_fn in self.FIXED_METRIC_COLUMNS.items():
-                val = payload.get(metric)
-                if val is not None:
-                    try:
-                        converted = cast_fn(val)
-                    except (ValueError, TypeError):
-                        converted = None
-                    if metric == 'temperature':
-                        temperature = converted
-                    elif metric == 'humidity':
-                        humidity = converted
-                    elif metric == 'battery':
-                        battery = converted
-                    elif metric == 'pressure':
-                        pressure = converted
-                    elif metric == 'rssi':
-                        rssi = converted
-
             async with self.conn_pool.connection() as conn:
                 # Set tenant context for RLS
                 await conn.execute(
                     "SELECT set_config('app.tenant_id', %s, false)",
                     (tenant_id,)
                 )
-                
-                # Insert telemetry record with fixed columns + full payload
-                await conn.execute(
-                    """
-                    INSERT INTO telemetry_hot
-                        (tenant_id, device_id, temperature, humidity, battery,
-                         pressure, rssi, payload, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (tenant_id, device_id, temperature, humidity, battery,
-                     pressure, rssi, json.dumps(payload), timestamp)
-                )
-                
+
+                # Insert one row per metric (key-value format)
+                # This enables unlimited dynamic metrics
+                for metric_key, metric_value in payload.items():
+                    if metric_value is None:
+                        continue
+
+                    # Determine value type and column
+                    value_float = None
+                    value_str = None
+                    value_json = None
+
+                    if isinstance(metric_value, (int, float)):
+                        value_float = float(metric_value)
+                    elif isinstance(metric_value, str):
+                        value_str = metric_value
+                    elif isinstance(metric_value, (dict, list)):
+                        value_json = json.dumps(metric_value)
+                    else:
+                        # Convert other types to string
+                        value_str = str(metric_value)
+
+                    await conn.execute(
+                        """
+                        INSERT INTO telemetry (tenant_id, device_id, metric_key, metric_value, metric_value_str, metric_value_json, ts)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (tenant_id, device_id, metric_key, value_float, value_str, value_json, timestamp)
+                    )
+
                 # Update device last_seen
                 await conn.execute(
                     """
@@ -292,8 +277,17 @@ class DatabaseService:
                     """,
                     (timestamp, device_id, tenant_id)
                 )
-                
+
                 await conn.commit()
+
+                logger.debug(
+                    "Telemetry inserted",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "device_id": device_id,
+                        "metrics_count": len(payload)
+                    }
+                )
                 return True
         except Exception as e:
             logger.error(

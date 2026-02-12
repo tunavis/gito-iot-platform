@@ -1,11 +1,11 @@
 """Device Type schemas - Pydantic models for device type API."""
 
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from uuid import UUID
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class DeviceCategory(str, Enum):
@@ -114,21 +114,41 @@ class DeviceTypeResponse(BaseModel):
     manufacturer: Optional[str]
     model: Optional[str]
     category: str
-    
+
     icon: Optional[str]
     color: Optional[str]
-    
+
     data_model: List[Any]
     capabilities: List[str]
     default_settings: Optional[dict]
     connectivity: Optional[dict]
     metadata: Optional[dict] = Field(None, validation_alias="extra_metadata")
-    
+
     is_active: bool
     device_count: int
-    
+
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def telemetry_schema(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Convert data_model array to telemetry_schema object for frontend compatibility.
+
+        Transforms:
+        [{"name": "temperature", "type": "float", "unit": "°C", "min": -40, "max": 85}]
+
+        To:
+        {"temperature": {"type": "float", "unit": "°C", "min": -40, "max": 85}}
+        """
+        schema = {}
+        for field in self.data_model:
+            if isinstance(field, dict) and "name" in field:
+                field_name = field["name"]
+                field_schema = {k: v for k, v in field.items() if k != "name"}
+                schema[field_name] = field_schema
+        return schema
 
     class Config:
         from_attributes = True
