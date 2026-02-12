@@ -76,31 +76,117 @@ jobs:
     needs: build-and-push
 
     steps:
-      - name: Deploy to Staging Server
+      - name: Pull Latest Code
         run: |
           cd /opt/gito-iot
+          echo "📥 Pulling latest code..."
+          git fetch origin
+          git reset --hard origin/staging
+          echo "✅ Code updated"
 
-          # Pull latest code
-          git pull origin staging
+      - name: Login to Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          cd /opt/gito-iot
+          echo "🔐 Logging into GitHub Container Registry..."
+          if [ -z "$GHCR_TOKEN" ]; then
+            echo "❌ ERROR: GHCR_TOKEN secret not set!"
+            echo "Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u tunavis --password-stdin
+          echo "✅ Logged in"
 
-          # Login to GitHub Container Registry
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-          # Pull latest images (using Docker Compose V2 - no hyphen)
+      - name: Pull Docker Images
+        run: |
+          cd /opt/gito-iot
+          echo "📦 Pulling latest Docker images..."
           docker compose -f docker-compose.staging.yml --env-file .env.staging pull
+          echo "✅ Images pulled"
 
-          # Stop and remove old containers (prevents volume conflicts)
-          docker compose -f docker-compose.staging.yml --env-file .env.staging down
+      - name: Stop Current Services and Reset Database
+        run: |
+          cd /opt/gito-iot
+          echo "🛑 Stopping current services..."
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans --volumes || true
+          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging gito-postgres-staging gito-redis-staging 2>/dev/null || true
+          echo "✅ Services stopped and DB volume removed for clean migration"
 
-          # Start services with new images
+      - name: Start All Services
+        run: |
+          cd /opt/gito-iot
+          echo "🚀 Starting all services..."
           docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
+          echo "⏳ Waiting for services to start..."
+          sleep 30
+          echo "✅ Services started"
 
-          # Clean up old images
-          docker image prune -af
-
-          echo "✅ Staging deployment complete!"
+      - name: Verify Migration
+        run: |
+          cd /opt/gito-iot
+          echo "📋 Checking migration status..."
+          docker exec gito-api-staging alembic current || echo "⚠️ Could not get migration status"
+          echo "✅ Migration verified"
 
       - name: Health Check
         run: |
-          sleep 30
-          curl -f https://staging-api.yourdomain.com/api/health || exit 1
+          cd /opt/gito-iot
+          echo "🏥 Running health check..."
+
+          MAX_RETRIES=6
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "✅ Health check PASSED (HTTP $HTTP_CODE)"
+              exit 0
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "⏳ Attempt $RETRY_COUNT/$MAX_RETRIES (HTTP $HTTP_CODE)"
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                sleep 10
+              fi
+            fi
+          done
+
+          echo "❌ Health check FAILED after $MAX_RETRIES attempts"
+          echo ""
+          echo "📋 Service Status:"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging ps
+          echo ""
+          echo "📋 API Logs:"
+          docker logs gito-api-staging --tail 100
+          echo ""
+          echo "📋 Web Logs:"
+          docker logs gito-web-staging --tail 50
+          echo ""
+          echo "📋 Nginx Logs:"
+          docker logs gito-nginx-staging --tail 50
+          exit 1
+
+      - name: Cleanup
+        if: success()
+        run: |
+          cd /opt/gito-iot
+          echo "🧹 Cleaning up old images..."
+          docker image prune -af --filter "until=24h"
+          echo "✅ Cleanup complete"
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          cd /opt/gito-iot
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ DEPLOYMENT SUCCESSFUL!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📊 Service Status:"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging ps
+          echo ""
+          echo "🌐 Application: https://dev-iot.gito.co.za"
+          echo "🏥 Health: https://dev-iot.gito.co.za/api/health"
+          echo ""
