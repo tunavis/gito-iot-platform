@@ -161,7 +161,7 @@ class UnifiedAlertRule(BaseModel):
         return {
             "id": str(self.id),
             "tenant_id": str(self.tenant_id),
-            "name": self.name or f"{self.metric} Alert" if self.metric else "Alert Rule",
+            "name": self.name if self.name else (f"{self.metric} Alert" if self.metric else "Alert Rule"),
             "description": self.description,
             "rule_type": rule_type_api,  # Convert DB format to API format
             "severity": severity_api,  # Convert DB format to API format

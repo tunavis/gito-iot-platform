@@ -22,9 +22,55 @@ import {
   Trash2,
   Bell,
   BarChart3,
-  Calendar
+  Calendar,
+  Zap,
+  Droplets,
+  Thermometer,
+  Gauge,
+  Navigation,
+  Cpu,
+  HardDrive,
+  Package
 } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+// Icon mapping for common metrics (optional visual enhancement, NOT used for filtering)
+const METRIC_ICONS: Record<string, any> = {
+  battery: Battery,
+  rssi: Signal,
+  signal_strength: Signal,
+  temperature: Thermometer,
+  humidity: Droplets,
+  pressure: Gauge,
+  voltage: Zap,
+  current: Zap,
+  power: Zap,
+  energy: Zap,
+  speed: Navigation,
+  cpu_usage: Cpu,
+  memory_usage: HardDrive,
+  packets_received: Package,
+  packets_transmitted: Package
+};
+
+// Color mapping for common metrics (optional visual enhancement)
+const METRIC_COLORS: Record<string, string> = {
+  temperature: '#ef4444',
+  humidity: '#3b82f6',
+  battery: '#10b981',
+  rssi: '#8b5cf6',
+  signal_strength: '#8b5cf6',
+  pressure: '#f59e0b',
+  voltage: '#6366f1',
+  current: '#ec4899',
+  power: '#f59e0b',
+  energy: '#10b981',
+  speed: '#ef4444',
+  cpu_usage: '#f59e0b',
+  memory_usage: '#8b5cf6',
+  altitude: '#3b82f6',
+  flow_rate: '#3b82f6'
+};
 
 interface Device {
   id: string;
@@ -41,14 +87,22 @@ interface Device {
   hardware_version?: string | null;
 }
 
+interface DeviceType {
+  id: string;
+  name: string;
+  telemetry_schema: Record<string, {
+    type: string;
+    unit?: string;
+    min?: number;
+    max?: number;
+    description?: string;
+  }>;
+}
+
+// Dynamic telemetry point - no hardcoded fields
 interface TelemetryPoint {
   timestamp: string;
-  temperature?: number | null;
-  humidity?: number | null;
-  battery?: number | null;
-  rssi?: number | null;
-  pressure?: number | null;
-  payload?: Record<string, any> | null;
+  [key: string]: any;
 }
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
@@ -59,6 +113,7 @@ export default function DeviceDetailPage() {
   const deviceId = params?.id as string;
 
   const [device, setDevice] = useState<Device | null>(null);
+  const [deviceType, setDeviceType] = useState<DeviceType | null>(null);
   const [loading, setLoading] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
@@ -67,13 +122,39 @@ export default function DeviceDetailPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [alarms, setAlarms] = useState<any[]>([]);
 
-  // Calculate time range
+  // Auto-discover metrics from telemetry data
+  const discoveredMetrics = useMemo(() => {
+    if (telemetryData.length === 0) return [];
+
+    // Get all keys from telemetry data (excluding system fields)
+    const systemFields = ['timestamp', 'device_id', 'tenant_id', 'id', 'ts', 'metric_key', 'metric_value', 'metric_value_str', 'metric_value_json'];
+    const metricSet = new Set<string>();
+
+    telemetryData.forEach(point => {
+      Object.keys(point).forEach(key => {
+        if (!systemFields.includes(key)) {
+          metricSet.add(key);
+        }
+      });
+    });
+
+    return Array.from(metricSet);
+  }, [telemetryData]);
+
+  // Filter numeric metrics for KPI cards
+  const numericMetrics = useMemo(() => {
+    return discoveredMetrics.filter(metric => {
+      const sample = telemetryData.find(d => d[metric] != null);
+      return sample && typeof sample[metric] === 'number';
+    });
+  }, [discoveredMetrics, telemetryData]);
+
   const getTimeRangeHours = (range: TimeRange): number => {
     const map = { '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720 };
     return map[range];
   };
 
-  // Load device and initial data
+  // Load device and device type
   useEffect(() => {
     const load = async () => {
       const token = localStorage.getItem('auth_token');
@@ -86,7 +167,19 @@ export default function DeviceDetailPage() {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
-          setDevice((await res.json()).data);
+          const deviceData = (await res.json()).data;
+          setDevice(deviceData);
+
+          // Load device type if available
+          if (deviceData.device_type_id) {
+            const typeRes = await fetch(`/api/v1/tenants/${tenant}/device-types/${deviceData.device_type_id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (typeRes.ok) {
+              const typeData = await typeRes.json();
+              setDeviceType(typeData.data || typeData);
+            }
+          }
         }
 
         // Load recent alarms
@@ -138,45 +231,42 @@ export default function DeviceDetailPage() {
     loadTelemetry();
   }, [deviceId, device, timeRange]);
 
-  // WebSocket for real-time updates
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (!token || !deviceId) return;
+  // Get metric metadata from device type schema
+  const getMetricMetadata = (metricKey: string): {
+    type?: string;
+    unit?: string;
+    min?: number;
+    max?: number;
+    description?: string;
+  } => {
+    if (!deviceType?.telemetry_schema) return {};
+    return deviceType.telemetry_schema[metricKey] || {};
+  };
 
-    const ws = new WebSocket(`ws://localhost:8000/api/v1/ws/devices/${deviceId}?token=${token}`);
+  // Calculate trend for any metric
+  const calculateTrend = (metricKey: string) => {
+    if (telemetryData.length < 2) return null;
+    const recentData = telemetryData.slice(-10).filter(d => d[metricKey] != null && typeof d[metricKey] === 'number');
+    if (recentData.length < 2) return null;
 
-    ws.onopen = () => setWsConnected(true);
-    ws.onclose = () => setWsConnected(false);
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'telemetry' && data.data) {
-          setDevice(prev => prev ? {
-            ...prev,
-            last_seen: new Date().toISOString(),
-            battery_level: data.data.battery ?? prev.battery_level,
-            signal_strength: data.data.rssi ?? prev.signal_strength
-          } : null);
+    const values = recentData.map(d => d[metricKey] as number);
+    const avg1 = values.slice(0, Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(values.length / 2);
+    const avg2 = values.slice(Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.ceil(values.length / 2);
 
-          // Add to telemetry data
-          setTelemetryData(prev => [...prev, {
-            timestamp: new Date().toISOString(),
-            temperature: data.data.temperature,
-            humidity: data.data.humidity,
-            battery: data.data.battery,
-            rssi: data.data.rssi,
-            pressure: data.data.pressure
-          }].slice(-100)); // Keep last 100 points
-        }
-      } catch (e) {
-        console.error('WebSocket message error:', e);
-      }
-    };
+    const change = ((avg2 - avg1) / avg1) * 100;
+    return { value: change, direction: change > 0 ? 'up' : 'down' };
+  };
 
-    return () => ws.close();
-  }, [deviceId]);
+  // Get current value for metric (latest/most recent)
+  const getCurrentValue = (metricKey: string) => {
+    // Get the LAST point with this metric (most recent), not the first
+    const pointsWithMetric = telemetryData.filter(d => d[metricKey] != null);
+    if (pointsWithMetric.length === 0) return null;
+    const latestPoint = pointsWithMetric[pointsWithMetric.length - 1];
+    return latestPoint[metricKey];
+  };
 
-  // Calculate device health score
+  // Calculate health score
   const healthScore = useMemo(() => {
     if (!device) return 0;
     let score = 100;
@@ -184,15 +274,11 @@ export default function DeviceDetailPage() {
     if (device.status === 'offline') score -= 50;
     else if (device.status === 'idle') score -= 20;
 
-    if (device.battery_level !== null) {
-      if (device.battery_level < 20) score -= 20;
-      else if (device.battery_level < 50) score -= 10;
-    }
+    if (device.battery_level !== null && device.battery_level < 20) score -= 20;
+    else if (device.battery_level !== null && device.battery_level < 50) score -= 10;
 
-    if (device.signal_strength !== null) {
-      if (device.signal_strength < -100) score -= 15;
-      else if (device.signal_strength < -80) score -= 5;
-    }
+    if (device.signal_strength !== null && device.signal_strength < -100) score -= 15;
+    else if (device.signal_strength !== null && device.signal_strength < -80) score -= 5;
 
     if (alarms.length > 0) score -= Math.min(alarms.length * 5, 20);
 
@@ -205,32 +291,14 @@ export default function DeviceDetailPage() {
     return 'text-red-600 bg-red-50 border-red-200';
   };
 
-  // Calculate trends
-  const calculateTrend = (metric: 'temperature' | 'humidity' | 'battery' | 'rssi') => {
-    if (telemetryData.length < 2) return null;
-    const recentData = telemetryData.slice(-10).filter(d => d[metric] !== null && d[metric] !== undefined);
-    if (recentData.length < 2) return null;
-
-    const values = recentData.map(d => d[metric]!);
-    const avg1 = values.slice(0, Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(values.length / 2);
-    const avg2 = values.slice(Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.ceil(values.length / 2);
-
-    const change = ((avg2 - avg1) / avg1) * 100;
-    return { value: change, direction: change > 0 ? 'up' : 'down' };
-  };
-
   const exportTelemetry = () => {
-    if (telemetryData.length === 0) return;
+    if (telemetryData.length === 0 || discoveredMetrics.length === 0) return;
 
     const csv = [
-      ['Timestamp', 'Temperature (°C)', 'Humidity (%)', 'Battery (%)', 'RSSI (dBm)', 'Pressure (hPa)'].join(','),
+      ['Timestamp', ...discoveredMetrics].join(','),
       ...telemetryData.map(d => [
         d.timestamp,
-        d.temperature ?? '',
-        d.humidity ?? '',
-        d.battery ?? '',
-        d.rssi ?? '',
-        d.pressure ?? ''
+        ...discoveredMetrics.map(m => d[m] ?? '')
       ].join(','))
     ].join('\n');
 
@@ -307,7 +375,7 @@ export default function DeviceDetailPage() {
               <div className="flex items-center gap-3 text-sm text-gray-600">
                 <span className="font-mono bg-gray-100 px-2 py-1 rounded">{deviceId}</span>
                 <span>•</span>
-                <span>{device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                <span>{device.device_type}</span>
                 {device.location && (
                   <>
                     <span>•</span>
@@ -339,74 +407,9 @@ export default function DeviceDetailPage() {
           </div>
         </div>
 
-        {/* Quick Stats Cards */}
+        {/* Dynamic KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Battery */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Battery className="w-5 h-5 text-green-600" />
-                </div>
-                <span className="text-sm font-medium text-gray-600">Battery Level</span>
-              </div>
-              {calculateTrend('battery') && (
-                <div className={`flex items-center gap-1 text-xs font-medium ${
-                  calculateTrend('battery')!.direction === 'up' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {calculateTrend('battery')!.direction === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {Math.abs(calculateTrend('battery')!.value).toFixed(1)}%
-                </div>
-              )}
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {device.battery_level !== null && device.battery_level !== undefined
-                ? `${Math.round(device.battery_level)}%`
-                : 'N/A'}
-            </p>
-            <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all ${
-                  device.battery_level && device.battery_level > 50
-                    ? 'bg-green-500'
-                    : device.battery_level && device.battery_level > 20
-                    ? 'bg-yellow-500'
-                    : 'bg-red-500'
-                }`}
-                style={{ width: `${device.battery_level || 0}%` }}
-              ></div>
-            </div>
-          </div>
-
-          {/* Signal Strength */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Signal className="w-5 h-5 text-blue-600" />
-                </div>
-                <span className="text-sm font-medium text-gray-600">Signal Strength</span>
-              </div>
-              {calculateTrend('rssi') && (
-                <div className={`flex items-center gap-1 text-xs font-medium ${
-                  calculateTrend('rssi')!.direction === 'up' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {calculateTrend('rssi')!.direction === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {Math.abs(calculateTrend('rssi')!.value).toFixed(1)}%
-                </div>
-              )}
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {device.signal_strength ? `${device.signal_strength} dBm` : 'N/A'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {device.signal_strength && device.signal_strength > -70 ? 'Excellent' :
-               device.signal_strength && device.signal_strength > -85 ? 'Good' :
-               device.signal_strength && device.signal_strength > -100 ? 'Fair' : 'Poor'}
-            </p>
-          </div>
-
-          {/* Last Seen */}
+          {/* Last Seen - Always show */}
           <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -431,7 +434,7 @@ export default function DeviceDetailPage() {
             </p>
           </div>
 
-          {/* Active Alarms */}
+          {/* Active Alarms - Always show */}
           <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-3">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -452,6 +455,54 @@ export default function DeviceDetailPage() {
               {alarms.length > 0 ? 'Requires attention' : 'All systems normal'}
             </p>
           </div>
+
+          {/* Dynamic metric cards - show first 2 numeric metrics */}
+          {numericMetrics.slice(0, 2).map(metricKey => {
+            const currentValue = getCurrentValue(metricKey);
+            const trend = calculateTrend(metricKey);
+            const metadata = getMetricMetadata(metricKey);
+            const Icon = METRIC_ICONS[metricKey] || Activity;
+            const color = METRIC_COLORS[metricKey] || '#6366f1';
+
+            return (
+              <div key={metricKey} className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
+                      <Icon className="w-5 h-5" style={{ color }} />
+                    </div>
+                    <span className="text-sm font-medium text-gray-600 capitalize">
+                      {metadata.description || metricKey.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  {trend && (
+                    <div className={`flex items-center gap-1 text-xs font-medium ${
+                      trend.direction === 'up' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {trend.direction === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                      {Math.abs(trend.value).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <p className="text-3xl font-bold text-gray-900">
+                  {currentValue != null
+                    ? `${typeof currentValue === 'number' ? currentValue.toFixed(1) : currentValue}${metadata.unit ? ` ${metadata.unit}` : ''}`
+                    : 'N/A'}
+                </p>
+                {metadata.min != null && metadata.max != null && typeof currentValue === 'number' && (
+                  <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        width: `${((currentValue - metadata.min) / (metadata.max - metadata.min)) * 100}%`,
+                        backgroundColor: color
+                      }}
+                    ></div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Tabs */}
@@ -486,9 +537,7 @@ export default function DeviceDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Device Type</p>
-                  <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">
-                    {device.device_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </p>
+                  <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.device_type}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Status</p>
@@ -550,13 +599,10 @@ export default function DeviceDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        {point.temperature && (
-                          <p className="text-sm text-gray-600">Temp: {point.temperature.toFixed(1)}°C</p>
-                        )}
-                        {point.humidity && (
-                          <p className="text-xs text-gray-500">Humidity: {point.humidity.toFixed(1)}%</p>
-                        )}
+                      <div className="text-right text-xs text-gray-600">
+                        {discoveredMetrics.slice(0, 2).map(m => point[m] != null && (
+                          <p key={m}>{m}: {typeof point[m] === 'number' ? point[m].toFixed(1) : point[m]}</p>
+                        ))}
                       </div>
                     </div>
                   ))
@@ -626,182 +672,22 @@ export default function DeviceDetailPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Temperature Chart */}
-                {telemetryData.some(d => d.temperature !== null && d.temperature !== undefined) && (
-                  <TelemetryChartCard
-                    title="Temperature"
-                    data={telemetryData}
-                    dataKey="temperature"
-                    unit="°C"
-                    color="#ef4444"
-                  />
-                )}
+                {/* Dynamically generate charts for all numeric metrics */}
+                {numericMetrics.map(metricKey => {
+                  const metadata = getMetricMetadata(metricKey);
+                  const color = METRIC_COLORS[metricKey] || '#6366f1';
 
-                {/* Humidity Chart */}
-                {telemetryData.some(d => d.humidity !== null && d.humidity !== undefined) && (
-                  <TelemetryChartCard
-                    title="Humidity"
-                    data={telemetryData}
-                    dataKey="humidity"
-                    unit="%"
-                    color="#3b82f6"
-                  />
-                )}
-
-                {/* Battery Chart */}
-                {telemetryData.some(d => d.battery !== null && d.battery !== undefined) && (
-                  <TelemetryChartCard
-                    title="Battery Level"
-                    data={telemetryData}
-                    dataKey="battery"
-                    unit="%"
-                    color="#10b981"
-                  />
-                )}
-
-                {/* RSSI Chart */}
-                {telemetryData.some(d => d.rssi !== null && d.rssi !== undefined) && (
-                  <TelemetryChartCard
-                    title="Signal Strength (RSSI)"
-                    data={telemetryData}
-                    dataKey="rssi"
-                    unit="dBm"
-                    color="#8b5cf6"
-                  />
-                )}
-
-                {/* Pressure Chart */}
-                {telemetryData.some(d => d.pressure !== null && d.pressure !== undefined) && (
-                  <TelemetryChartCard
-                    title="Pressure"
-                    data={telemetryData}
-                    dataKey="pressure"
-                    unit="hPa"
-                    color="#f59e0b"
-                  />
-                )}
-
-                {/* Payload Charts - for device-specific telemetry */}
-                {/* Voltage Chart */}
-                {telemetryData.some(d => d.payload?.voltage !== null && d.payload?.voltage !== undefined) && (
-                  <TelemetryChartCard
-                    title="Voltage"
-                    data={telemetryData}
-                    payloadKey="voltage"
-                    unit="V"
-                    color="#6366f1"
-                  />
-                )}
-
-                {/* Current Chart */}
-                {telemetryData.some(d => d.payload?.current !== null && d.payload?.current !== undefined) && (
-                  <TelemetryChartCard
-                    title="Current"
-                    data={telemetryData}
-                    payloadKey="current"
-                    unit="A"
-                    color="#ec4899"
-                  />
-                )}
-
-                {/* Power Chart */}
-                {telemetryData.some(d => d.payload?.power !== null && d.payload?.power !== undefined) && (
-                  <TelemetryChartCard
-                    title="Power"
-                    data={telemetryData}
-                    payloadKey="power"
-                    unit="W"
-                    color="#f59e0b"
-                  />
-                )}
-
-                {/* Energy Chart */}
-                {telemetryData.some(d => d.payload?.energy !== null && d.payload?.energy !== undefined) && (
-                  <TelemetryChartCard
-                    title="Energy"
-                    data={telemetryData}
-                    payloadKey="energy"
-                    unit="kWh"
-                    color="#10b981"
-                  />
-                )}
-
-                {/* Flow Rate Chart */}
-                {telemetryData.some(d => d.payload?.flow_rate !== null && d.payload?.flow_rate !== undefined) && (
-                  <TelemetryChartCard
-                    title="Flow Rate"
-                    data={telemetryData}
-                    payloadKey="flow_rate"
-                    unit="L/min"
-                    color="#3b82f6"
-                  />
-                )}
-
-                {/* Total Volume Chart */}
-                {telemetryData.some(d => d.payload?.total_volume !== null && d.payload?.total_volume !== undefined) && (
-                  <TelemetryChartCard
-                    title="Total Volume"
-                    data={telemetryData}
-                    payloadKey="total_volume"
-                    unit="L"
-                    color="#8b5cf6"
-                  />
-                )}
-
-                {/* Speed Chart (GPS Trackers) */}
-                {telemetryData.some(d => d.payload?.speed !== null && d.payload?.speed !== undefined) && (
-                  <TelemetryChartCard
-                    title="Speed"
-                    data={telemetryData}
-                    payloadKey="speed"
-                    unit="km/h"
-                    color="#ef4444"
-                  />
-                )}
-
-                {/* CPU Usage Chart (Gateways) */}
-                {telemetryData.some(d => d.payload?.cpu_usage !== null && d.payload?.cpu_usage !== undefined) && (
-                  <TelemetryChartCard
-                    title="CPU Usage"
-                    data={telemetryData}
-                    payloadKey="cpu_usage"
-                    unit="%"
-                    color="#f59e0b"
-                  />
-                )}
-
-                {/* Memory Usage Chart (Gateways) */}
-                {telemetryData.some(d => d.payload?.memory_usage !== null && d.payload?.memory_usage !== undefined) && (
-                  <TelemetryChartCard
-                    title="Memory Usage"
-                    data={telemetryData}
-                    payloadKey="memory_usage"
-                    unit="%"
-                    color="#8b5cf6"
-                  />
-                )}
-
-                {/* Air Quality Chart */}
-                {telemetryData.some(d => d.payload?.air_quality !== null && d.payload?.air_quality !== undefined) && (
-                  <TelemetryChartCard
-                    title="Air Quality Index"
-                    data={telemetryData}
-                    payloadKey="air_quality"
-                    unit="AQI"
-                    color="#ef4444"
-                  />
-                )}
-
-                {/* Target Temperature Chart (Thermostats) */}
-                {telemetryData.some(d => d.payload?.target_temperature !== null && d.payload?.target_temperature !== undefined) && (
-                  <TelemetryChartCard
-                    title="Target Temperature"
-                    data={telemetryData}
-                    payloadKey="target_temperature"
-                    unit="°C"
-                    color="#10b981"
-                  />
-                )}
+                  return (
+                    <TelemetryChartCard
+                      key={metricKey}
+                      title={metadata.description || metricKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      data={telemetryData}
+                      metricKey={metricKey}
+                      unit={metadata.unit || ''}
+                      color={color}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -812,46 +698,33 @@ export default function DeviceDetailPage() {
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} />
+          <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} discoveredMetrics={discoveredMetrics} />
         )}
       </main>
     </div>
   );
 }
 
-// Telemetry Chart Card Component
+// Dynamic Telemetry Chart Card
 function TelemetryChartCard({
   title,
   data,
-  dataKey,
+  metricKey,
   unit,
-  color,
-  payloadKey
+  color
 }: {
   title: string;
   data: TelemetryPoint[];
-  dataKey?: keyof TelemetryPoint;
+  metricKey: string;
   unit: string;
   color: string;
-  payloadKey?: string;
 }) {
   const chartData = data
-    .map(d => {
-      let value: number | null | undefined;
-
-      // Check payload first if payloadKey is provided
-      if (payloadKey && d.payload && typeof d.payload[payloadKey] === 'number') {
-        value = d.payload[payloadKey];
-      } else if (dataKey && d[dataKey] !== null && d[dataKey] !== undefined) {
-        value = d[dataKey] as number;
-      }
-
-      return {
-        time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        value
-      };
-    })
-    .filter(d => d.value !== null && d.value !== undefined) as { time: string; value: number }[];
+    .map(d => ({
+      time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      value: d[metricKey]
+    }))
+    .filter(d => d.value != null && typeof d.value === 'number') as { time: string; value: number }[];
 
   if (chartData.length === 0) return null;
 
@@ -872,7 +745,7 @@ function TelemetryChartCard({
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={chartData}>
           <defs>
-            <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`gradient-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.3} />
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
@@ -903,12 +776,11 @@ function TelemetryChartCard({
             stroke={color}
             strokeWidth={2}
             fillOpacity={1}
-            fill={`url(#gradient-${dataKey})`}
+            fill={`url(#gradient-${metricKey})`}
           />
         </AreaChart>
       </ResponsiveContainer>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200">
         <div>
           <p className="text-xs text-gray-500">Min</p>
@@ -927,7 +799,7 @@ function TelemetryChartCard({
   );
 }
 
-// Device Alarms Component
+// Device Alarms Component (unchanged from original)
 function DeviceAlarms({ deviceId }: { deviceId: string }) {
   type AlarmSeverity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'WARNING';
   type AlarmStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'CLEARED';
@@ -1144,8 +1016,8 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
   );
 }
 
-// Device Settings Component
-function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; deviceId: string; onUpdate: (d: Device) => void }) {
+// Device Settings Component - now dynamic
+function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { device: Device; deviceId: string; onUpdate: (d: Device) => void; discoveredMetrics: string[] }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1279,7 +1151,7 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
           <button onClick={() => setShowNewRule(!showNewRule)} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">+ Add Rule</button>
         </div>
 
-        {showNewRule && <NewAlertRuleForm deviceId={deviceId} onCreated={(rule) => { setAlertRules(prev => [rule, ...prev]); setShowNewRule(false); }} onCancel={() => setShowNewRule(false)} />}
+        {showNewRule && <NewAlertRuleForm deviceId={deviceId} discoveredMetrics={discoveredMetrics} onCreated={(rule) => { setAlertRules(prev => [rule, ...prev]); setShowNewRule(false); }} onCancel={() => setShowNewRule(false)} />}
 
         <div className="space-y-2">
           {alertRules.length === 0 ? (
@@ -1331,10 +1203,11 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
   );
 }
 
-function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string; onCreated: (rule: any) => void; onCancel: () => void }) {
+// Dynamic New Alert Rule Form
+function NewAlertRuleForm({ deviceId, discoveredMetrics, onCreated, onCancel }: { deviceId: string; discoveredMetrics: string[]; onCreated: (rule: any) => void; onCancel: () => void }) {
   const [formData, setFormData] = useState({
     name: '',
-    metric: 'temperature',
+    metric: discoveredMetrics[0] || '',
     operator: 'gt',
     threshold: 0,
     cooldown_minutes: 5,
@@ -1377,11 +1250,13 @@ function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string;
         <div>
           <label className="block text-xs text-gray-600 mb-1">Metric</label>
           <select value={formData.metric} onChange={e => setFormData(prev => ({ ...prev, metric: e.target.value as any }))} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="temperature">Temperature</option>
-            <option value="humidity">Humidity</option>
-            <option value="battery">Battery</option>
-            <option value="rssi">RSSI</option>
-            <option value="pressure">Pressure</option>
+            {discoveredMetrics.length === 0 ? (
+              <option value="">No metrics available</option>
+            ) : (
+              discoveredMetrics.map(m => (
+                <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>
+              ))
+            )}
           </select>
         </div>
         <div>
@@ -1406,7 +1281,7 @@ function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string;
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white transition-colors">Cancel</button>
-        <button onClick={create} disabled={submitting} className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">
+        <button onClick={create} disabled={submitting || discoveredMetrics.length === 0} className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">
           {submitting ? 'Creating...' : 'Create Rule'}
         </button>
       </div>

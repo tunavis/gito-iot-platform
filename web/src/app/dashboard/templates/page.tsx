@@ -243,72 +243,98 @@ export default function TemplateGalleryPage() {
               {filteredTemplates.map((template) => (
                 <div
                   key={template.id}
-                  className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-all group"
+                  className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all group"
                 >
-                  {/* Template Header */}
+                  {/* Template Preview Header */}
                   <div
-                    className="p-6 flex items-center gap-4"
-                    style={{ backgroundColor: `${template.color}10` }}
+                    className="relative h-32 flex items-center justify-center overflow-hidden"
+                    style={{ backgroundColor: `${template.color}08` }}
                   >
+                    {/* Grid pattern to suggest dashboard layout */}
+                    <div className="absolute inset-0 opacity-[0.06]" style={{
+                      backgroundImage: `linear-gradient(${template.color} 1px, transparent 1px), linear-gradient(90deg, ${template.color} 1px, transparent 1px)`,
+                      backgroundSize: "24px 24px"
+                    }} />
                     <div
-                      className="p-3 rounded-lg"
+                      className="relative p-4 rounded-xl"
                       style={{ backgroundColor: template.color, color: "white" }}
                     >
                       {ICON_MAP[template.icon] || <Factory className="w-8 h-8" />}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 text-lg">
+                  </div>
+
+                  {/* Template Body */}
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className="font-semibold text-gray-900 text-base">
                         {template.name}
                       </h3>
                       <span
-                        className={`inline-block text-xs px-2 py-1 rounded-full mt-1 ${
+                        className={`inline-block text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
                           CATEGORY_COLORS[template.category] || "bg-gray-100 text-gray-700"
                         }`}
                       >
                         {template.category.replace(/_/g, " ")}
                       </span>
                     </div>
-                  </div>
 
-                  {/* Template Body */}
-                  <div className="p-6">
-                    <p className="text-sm text-gray-600 mb-4">
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                       {template.description}
                     </p>
 
-                    <div className="space-y-2 mb-4">
+                    {/* Device Types */}
+                    {template.target_device_types.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {template.target_device_types.map((dt) => (
+                          <span
+                            key={dt}
+                            className="text-xs px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200"
+                          >
+                            {dt.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Compatibility */}
+                    <div className="flex items-center gap-2 mb-4">
                       {template.compatible_device_count !== undefined && template.compatible_device_count > 0 ? (
-                        <div className="flex items-start gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span className="text-xs text-gray-600">
-                            {template.compatible_device_count} compatible {template.compatible_device_count === 1 ? 'device' : 'devices'} found
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                          <span className="text-xs text-green-700 font-medium">
+                            {template.compatible_device_count} compatible {template.compatible_device_count === 1 ? 'device' : 'devices'}
                           </span>
                         </div>
                       ) : (
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                          <span className="text-xs text-gray-600">
+                        <div className="flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                          <span className="text-xs text-amber-600">
                             No compatible devices yet
                           </span>
                         </div>
                       )}
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-xs text-gray-600">
-                          Pre-configured widgets and layouts
-                        </span>
-                      </div>
                     </div>
 
                     <button
                       onClick={() => handleApplyTemplate(template.id)}
                       disabled={applyingTemplate === template.id}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="w-full px-4 py-2.5 text-white rounded-lg transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      style={{
+                        backgroundColor: applyingTemplate === template.id ? "#9ca3af" : template.color,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (applyingTemplate !== template.id) {
+                          e.currentTarget.style.filter = "brightness(0.9)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.filter = "brightness(1)";
+                      }}
                     >
                       {applyingTemplate === template.id ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Applying...
+                          Creating Dashboard...
                         </>
                       ) : (
                         "Use Template"

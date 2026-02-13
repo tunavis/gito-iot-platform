@@ -89,9 +89,18 @@ async def list_solution_templates(
         compatible_count = 0
         target_types = template.target_device_types or []
 
+        # Normalize target types for case-insensitive matching
+        normalized_targets = {t.lower().replace(" ", "_").replace("-", "_") for t in target_types}
+
         for device in devices:
-            # Check if device type matches any target type
-            if device.device_type in target_types:
+            if not device.device_type:
+                continue
+
+            # Normalize device type for comparison (handle both formats)
+            device_type_normalized = device.device_type.lower().replace(" ", "_").replace("-", "_")
+
+            # Check if device type matches any target type (normalized comparison)
+            if device_type_normalized in normalized_targets:
                 compatible_count += 1
 
         template_dict = {
@@ -152,14 +161,20 @@ async def get_solution_template(
     compatible_count = 0
 
     if target_types:
-        count_result = await session.execute(
-            select(func.count(Device.id))
-            .where(
-                Device.tenant_id == tenant_id,
-                Device.device_type.in_(target_types)
-            )
+        # Normalize target types for case-insensitive matching
+        normalized_targets = {t.lower().replace(" ", "_").replace("-", "_") for t in target_types}
+
+        # Get all tenant devices and count matches
+        devices_result = await session.execute(
+            select(Device).where(Device.tenant_id == tenant_id)
         )
-        compatible_count = count_result.scalar()
+        devices = devices_result.scalars().all()
+
+        for device in devices:
+            if device.device_type:
+                device_type_normalized = device.device_type.lower().replace(" ", "_").replace("-", "_")
+                if device_type_normalized in normalized_targets:
+                    compatible_count += 1
 
     template_dict = {
         "id": template.id,
@@ -255,15 +270,23 @@ async def apply_solution_template(
     compatible_devices = []
 
     if target_types:
+        # Normalize target types for case-insensitive matching
+        normalized_targets = {t.lower().replace(" ", "_").replace("-", "_") for t in target_types}
+
+        # Get all tenant devices and filter for matches
         devices_result = await session.execute(
-            select(Device)
-            .where(
-                Device.tenant_id == tenant_id,
-                Device.device_type.in_(target_types)
-            )
-            .limit(10)  # Limit to first 10 compatible devices
+            select(Device).where(Device.tenant_id == tenant_id)
         )
-        compatible_devices = devices_result.scalars().all()
+        all_devices = devices_result.scalars().all()
+
+        # Filter compatible devices
+        for device in all_devices:
+            if device.device_type:
+                device_type_normalized = device.device_type.lower().replace(" ", "_").replace("-", "_")
+                if device_type_normalized in normalized_targets:
+                    compatible_devices.append(device)
+                    if len(compatible_devices) >= 10:  # Limit to first 10
+                        break
 
     for idx, widget_config in enumerate(widgets_config):
         position = widget_config.get("position", {})

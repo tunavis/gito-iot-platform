@@ -183,7 +183,7 @@ export default function NewDevicePage() {
       const tenant = payload.tenant_id;
 
       const res = await fetch(
-        `/api/v1/tenants/${tenant}/sites/${siteId}/device-groups`,
+        `/api/v1/tenants/${tenant}/device-groups?site_id=${siteId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -222,7 +222,7 @@ export default function NewDevicePage() {
       const body: any = {
         name: deviceInfo.name,
         device_type_id: selectedType.id,
-        device_type: selectedType.category, // Legacy field
+        device_type: selectedType.name,
         description: deviceInfo.description || undefined,
         serial_number: deviceInfo.serial_number || undefined,
         tags: deviceInfo.tags.length > 0 ? deviceInfo.tags : undefined,

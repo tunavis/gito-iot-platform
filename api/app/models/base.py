@@ -67,7 +67,11 @@ class Device(BaseModel):
     
     name = Column(String(255), nullable=False)
     device_type = Column(String(100), nullable=False)
-    dev_eui = Column(String(16), nullable=True)  # For LoRaWAN (alias for lorawan_dev_eui)
+    device_type_id = Column(UUID(as_uuid=True), ForeignKey("device_types.id", ondelete="SET NULL"), nullable=True, index=True)
+    description = Column(Text, nullable=True)
+    serial_number = Column(String(255), nullable=True)
+    tags = Column(JSONB, default=[], nullable=True)
+    dev_eui = Column(String(16), nullable=True)  # For LoRaWAN
     status = Column(String(50), default="offline", nullable=False)
     last_seen = Column(DateTime(timezone=True))
     battery_level = Column(Float)
