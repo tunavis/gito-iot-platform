@@ -4,26 +4,29 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import { 
-  Cpu, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Clock, 
-  Search, 
-  Grid3x3, 
-  List, 
-  ChevronUp, 
+import {
+  Cpu,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Search,
+  Grid3x3,
+  List,
+  Monitor,
+  ChevronUp,
   ChevronDown,
   Battery,
   BatteryLow,
   BatteryWarning
 } from 'lucide-react';
+import HMITileCard from '@/components/HMI/tiles/HMITileCard';
 
 interface Device {
   id: string;
   tenant_id: string;
   name: string;
   device_type: string;
+  device_type_id?: string;
   status: 'online' | 'offline' | 'idle' | 'error';
   last_seen: string | null;
   battery_level: number | null;
@@ -34,7 +37,16 @@ interface Device {
   updated_at: string;
 }
 
-type ViewMode = 'grid' | 'list';
+interface DeviceTypeInfo {
+  id: string;
+  name: string;
+  category: string;
+  telemetry_schema: Record<string, any>;
+  connectivity?: Record<string, any>;
+  [key: string]: unknown;
+}
+
+type ViewMode = 'grid' | 'list' | 'hmi';
 type StatusFilter = 'all' | 'online' | 'offline' | 'idle';
 type SortField = 'name' | 'device_type' | 'status' | 'battery_level' | 'last_seen';
 type SortDirection = 'asc' | 'desc';
@@ -51,6 +63,8 @@ export default function DevicesPage() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('');
+  const [deviceTypesMap, setDeviceTypesMap] = useState<Map<string, DeviceTypeInfo>>(new Map());
 
   const loadDevices = useCallback(async () => {
       try {
@@ -62,6 +76,7 @@ export default function DevicesPage() {
 
         const payload = JSON.parse(atob(token.split('.')[1]));
         const tenant = payload.tenant_id;
+        setTenantId(tenant);
 
         const response = await fetch(`/api/v1/tenants/${tenant}/devices`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -73,6 +88,20 @@ export default function DevicesPage() {
         }
 
         setDevices(data.data || []);
+
+        // Load device types for HMI tile view
+        const typesRes = await fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (typesRes.ok) {
+          const typesData = await typesRes.json();
+          const typesArray: DeviceTypeInfo[] = typesData.data || [];
+          const map = new Map<string, DeviceTypeInfo>();
+          for (const dt of typesArray) {
+            map.set(dt.id, dt);
+          }
+          setDeviceTypesMap(map);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load devices');
       } finally {
@@ -335,8 +364,8 @@ export default function DevicesPage() {
                 <button
                   onClick={() => setViewMode('grid')}
                   className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                    viewMode === 'grid' 
-                      ? 'bg-white text-primary-600 shadow-sm' 
+                    viewMode === 'grid'
+                      ? 'bg-white text-primary-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -346,13 +375,24 @@ export default function DevicesPage() {
                 <button
                   onClick={() => setViewMode('list')}
                   className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                    viewMode === 'list' 
-                      ? 'bg-white text-primary-600 shadow-sm' 
+                    viewMode === 'list'
+                      ? 'bg-white text-primary-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <List className="w-4 h-4" />
                   <span>List</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('hmi')}
+                  className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                    viewMode === 'hmi'
+                      ? 'bg-white text-primary-600 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span>HMI</span>
                 </button>
               </div>
             </div>
@@ -539,6 +579,19 @@ export default function DevicesPage() {
                   </Link>
                 </div>
               </div>
+            ))}
+          </div>
+        ) : viewMode === 'hmi' ? (
+          /* HMI Tile View */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredDevices.map((device, idx) => (
+              <HMITileCard
+                key={device.id}
+                device={device}
+                deviceType={device.device_type_id ? deviceTypesMap.get(device.device_type_id) || null : null}
+                tenantId={tenantId}
+                staggerIndex={idx}
+              />
             ))}
           </div>
         ) : (

@@ -2,12 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import DashboardGrid from "@/components/DashboardBuilder/DashboardGrid";
 import WidgetLibrary from "@/components/DashboardBuilder/WidgetLibrary";
 import WidgetConfigModal from "@/components/DashboardBuilder/WidgetConfigModal";
-import { Droplet, Zap, Cloud, Truck, Factory } from "lucide-react";
 
 interface Widget {
   id: string;
@@ -26,11 +24,6 @@ interface Dashboard {
   name: string;
   description?: string;
   is_default: boolean;
-  solution_type?: string;
-  theme?: {
-    title?: string;
-    primary_color?: string;
-  };
   widgets: Widget[];
 }
 
@@ -393,41 +386,6 @@ export default function DashboardPage() {
     (w) => w.id === selectedWidgetId
   );
 
-  const getTemplateLogo = (solutionType?: string) => {
-    if (!solutionType) return null;
-
-    const config: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
-      water_flow_monitoring: {
-        icon: <Droplet className="w-8 h-8" />,
-        color: "#0ea5e9",
-        bg: "from-cyan-500 to-blue-600",
-      },
-      energy_meter_monitoring: {
-        icon: <Zap className="w-8 h-8" />,
-        color: "#f59e0b",
-        bg: "from-amber-500 to-orange-600",
-      },
-      environmental_monitoring: {
-        icon: <Cloud className="w-8 h-8" />,
-        color: "#10b981",
-        bg: "from-green-500 to-emerald-600",
-      },
-      fleet_tracking: {
-        icon: <Truck className="w-8 h-8" />,
-        color: "#8b5cf6",
-        bg: "from-purple-500 to-indigo-600",
-      },
-      smart_factory: {
-        icon: <Factory className="w-8 h-8" />,
-        color: "#ef4444",
-        bg: "from-red-500 to-pink-600",
-      },
-    };
-
-    return config[solutionType] || null;
-  };
-
-  const templateLogo = getTemplateLogo(dashboard?.solution_type);
 
   if (loading) {
     return (
@@ -501,22 +459,14 @@ export default function DashboardPage() {
               No Dashboard Found
             </h2>
             <p className="text-gray-600 mb-4">
-              Get started by creating your first dashboard or using a template.
+              Get started by creating your first dashboard.
             </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => loadDefaultDashboard()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Create Dashboard
-              </button>
-              <Link
-                href="/dashboard/templates"
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-              >
-                Browse Templates
-              </Link>
-            </div>
+            <button
+              onClick={() => loadDefaultDashboard()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Create Dashboard
+            </button>
           </div>
         </main>
       </div>
@@ -531,44 +481,21 @@ export default function DashboardPage() {
         {/* Top Bar */}
         <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-[60] shadow-sm">
           <div className="flex items-center gap-3">
-            {/* Template Logo */}
-            {templateLogo && (
-              <div
-                className={`p-3 rounded-xl bg-gradient-to-br ${templateLogo.bg} text-white shadow-lg`}
-                title={dashboard.solution_type?.replace(/_/g, " ")}
-              >
-                {templateLogo.icon}
-              </div>
+            {editMode ? (
+              <input
+                type="text"
+                value={dashboard.name}
+                onChange={(e) =>
+                  setDashboard({ ...dashboard, name: e.target.value })
+                }
+                className="text-xl font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                placeholder="Dashboard Name"
+              />
+            ) : (
+              <h1 className="text-xl font-semibold text-gray-900">
+                {dashboard.name}
+              </h1>
             )}
-
-            <div>
-              <div className="flex items-center gap-3">
-                {editMode ? (
-                  <input
-                    type="text"
-                    value={dashboard.name}
-                    onChange={(e) =>
-                      setDashboard({ ...dashboard, name: e.target.value })
-                    }
-                    className="text-xl font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
-                    placeholder="Dashboard Name"
-                  />
-                ) : (
-                  <h1 className="text-xl font-semibold text-gray-900">
-                    {dashboard.name}
-                  </h1>
-                )}
-              </div>
-              {/* Template Subtitle */}
-              {dashboard.solution_type && (
-                <p
-                  className="text-sm font-medium mt-0.5"
-                  style={{ color: dashboard.theme?.primary_color || templateLogo?.color || "#6b7280" }}
-                >
-                  {dashboard.theme?.title || dashboard.solution_type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                </p>
-              )}
-            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -622,7 +549,7 @@ export default function DashboardPage() {
                 style={{
                   backgroundColor: saving
                     ? "#9ca3af"
-                    : dashboard.theme?.primary_color || "#2563eb",
+                    : "#2563eb",
                   cursor: saving ? "not-allowed" : "pointer",
                 }}
                 onMouseEnter={(e) => {
@@ -654,29 +581,6 @@ export default function DashboardPage() {
             {/* Visual separator */}
             <div className="h-6 w-px bg-gray-300"></div>
 
-            <Link
-              href="/dashboard/templates"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                />
-              </svg>
-              Templates
-            </Link>
-
-            {/* Visual separator */}
-            <div className="h-6 w-px bg-gray-300"></div>
-
             <button
               onClick={() => {
                 localStorage.removeItem("auth_token");
@@ -690,53 +594,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Template Info Banner - Only show for template-based dashboards */}
-        {dashboard.solution_type && dashboard.description && (
-          <div
-            className="px-6 py-4 border-b"
-            style={{
-              backgroundColor: dashboard.theme?.primary_color
-                ? `${dashboard.theme.primary_color}10`
-                : "#f9fafb",
-              borderColor: dashboard.theme?.primary_color
-                ? `${dashboard.theme.primary_color}30`
-                : "#e5e7eb",
-            }}
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className="p-2 rounded-lg"
-                style={{
-                  backgroundColor: dashboard.theme?.primary_color || "#3b82f6",
-                  color: "white",
-                }}
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h3
-                  className="text-sm font-semibold mb-1"
-                  style={{ color: dashboard.theme?.primary_color || "#1f2937" }}
-                >
-                  {dashboard.theme?.title || "Solution Dashboard"}
-                </h3>
-                <p className="text-sm text-gray-600">{dashboard.description}</p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Main Content */}
         <div className="p-6">
@@ -757,65 +614,30 @@ export default function DashboardPage() {
                   />
                 </svg>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {dashboard.solution_type
-                    ? `Add Widgets to Your ${dashboard.theme?.title || "Dashboard"}`
-                    : "Your Dashboard is Empty"}
+                  Your Dashboard is Empty
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  {dashboard.solution_type
-                    ? "Start monitoring by adding widgets to visualize your device data."
-                    : "Add widgets to visualize your device data or use a pre-built template to get started quickly."}
+                  Add widgets to visualize your device data.
                 </p>
-                <div className="flex gap-3 justify-center">
-                  <button
-                    onClick={() => setShowWidgetLibrary(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors"
-                    style={{
-                      backgroundColor: dashboard.theme?.primary_color || "#2563eb",
-                    }}
-                    onMouseEnter={(e) => {
-                      const color = dashboard.theme?.primary_color || "#2563eb";
-                      e.currentTarget.style.filter = "brightness(0.9)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.filter = "brightness(1)";
-                    }}
+                <button
+                  onClick={() => setShowWidgetLibrary(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                    Add Widget
-                  </button>
-                  <Link
-                    href="/dashboard/templates"
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                      />
-                    </svg>
-                    Use Template
-                  </Link>
-                </div>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  Add Widget
+                </button>
               </div>
             </div>
           ) : (

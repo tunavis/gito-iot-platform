@@ -38,6 +38,14 @@ const config: Config = {
           dark: '#001F3F', // Navy for contrast
           light: '#E8F4F8', // Light blue background
         },
+        hmi: {
+          surface: '#f8fafc',
+          panel: '#f1f5f9',
+          inset: '#e2e8f0',
+          border: '#cbd5e1',
+          value: '#1e293b',
+          muted: '#94a3b8',
+        },
       },
       fontFamily: {
         sans: [

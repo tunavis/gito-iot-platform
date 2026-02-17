@@ -514,22 +514,6 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
     CONSTRAINT check_valid_position CHECK (position_x >= 0 AND position_y >= 0)
 );
 
-CREATE TABLE IF NOT EXISTS solution_templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(200) NOT NULL UNIQUE,
-    identifier VARCHAR(100) NOT NULL UNIQUE,
-    category VARCHAR(50) NOT NULL,
-    description TEXT,
-    icon VARCHAR(50) DEFAULT 'layout-dashboard',
-    color VARCHAR(20) DEFAULT '#0066CC',
-    target_device_types JSONB NOT NULL DEFAULT '[]',
-    required_capabilities JSONB NOT NULL DEFAULT '[]',
-    template_config JSONB NOT NULL,
-    preview_image_url TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 -- ============================================================================
 -- SECTION 8: INDEXES
@@ -731,16 +715,6 @@ BEGIN
         CREATE INDEX idx_dashboard_widgets_type ON dashboard_widgets(widget_type);
     END IF;
 
-    -- Solution Templates
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_category') THEN
-        CREATE INDEX idx_solution_templates_category ON solution_templates(category);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_active') THEN
-        CREATE INDEX idx_solution_templates_active ON solution_templates(is_active);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_identifier') THEN
-        CREATE INDEX idx_solution_templates_identifier ON solution_templates(identifier);
-    END IF;
 
     -- Notification Templates
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_templates_tenant') THEN
@@ -1003,7 +977,7 @@ DECLARE
         'notification_channels', 'notification_rules', 'notification_templates',
         'firmware_versions', 'ota_campaigns',
         'group_bulk_operations', 'dashboards', 'dashboard_widgets',
-        'solution_templates', 'notifications'
+        'notifications'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables_with_updated_at

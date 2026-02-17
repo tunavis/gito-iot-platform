@@ -33,6 +33,7 @@ import {
   Package
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import HMIRenderer from '@/components/HMI/HMIRenderer';
 
 // Icon mapping for common metrics (optional visual enhancement, NOT used for filtering)
 const METRIC_ICONS: Record<string, any> = {
@@ -90,6 +91,7 @@ interface Device {
 interface DeviceType {
   id: string;
   name: string;
+  category: string;
   telemetry_schema: Record<string, {
     type: string;
     unit?: string;
@@ -97,6 +99,12 @@ interface DeviceType {
     max?: number;
     description?: string;
   }>;
+  connectivity?: {
+    protocol?: string;
+    mqtt_topic_template?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 }
 
 // Dynamic telemetry point - no hardcoded fields
@@ -119,7 +127,8 @@ export default function DeviceDetailPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>([]);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('live');
+  const [tenantId, setTenantId] = useState<string>('');
   const [alarms, setAlarms] = useState<any[]>([]);
 
   // Auto-discover metrics from telemetry data
@@ -160,6 +169,7 @@ export default function DeviceDetailPage() {
       const token = localStorage.getItem('auth_token');
       if (!token) return router.push('/auth/login');
       const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+      setTenantId(tenant);
 
       try {
         // Load device details
@@ -407,122 +417,40 @@ export default function DeviceDetailPage() {
           </div>
         </div>
 
-        {/* Dynamic KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Last Seen - Always show */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Clock className="w-5 h-5 text-purple-600" />
-              </div>
-              <span className="text-sm font-medium text-gray-600">Last Seen</span>
-            </div>
-            <p className="text-lg font-semibold text-gray-900">
-              {device.last_seen
-                ? new Date(device.last_seen).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
-                : 'Never'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {device.last_seen
-                ? `${Math.round((Date.now() - new Date(device.last_seen).getTime()) / 1000 / 60)} min ago`
-                : 'Device has not reported'}
-            </p>
-          </div>
-
-          {/* Active Alarms - Always show */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                alarms.length > 0 ? 'bg-red-100' : 'bg-green-100'
-              }`}>
-                {alarms.length > 0 ? (
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                ) : (
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                )}
-              </div>
-              <span className="text-sm font-medium text-gray-600">Active Alarms</span>
-            </div>
-            <p className={`text-3xl font-bold ${alarms.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {alarms.length}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {alarms.length > 0 ? 'Requires attention' : 'All systems normal'}
-            </p>
-          </div>
-
-          {/* Dynamic metric cards - show first 2 numeric metrics */}
-          {numericMetrics.slice(0, 2).map(metricKey => {
-            const currentValue = getCurrentValue(metricKey);
-            const trend = calculateTrend(metricKey);
-            const metadata = getMetricMetadata(metricKey);
-            const Icon = METRIC_ICONS[metricKey] || Activity;
-            const color = METRIC_COLORS[metricKey] || '#6366f1';
-
-            return (
-              <div key={metricKey} className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
-                      <Icon className="w-5 h-5" style={{ color }} />
-                    </div>
-                    <span className="text-sm font-medium text-gray-600 capitalize">
-                      {metadata.description || metricKey.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                  {trend && (
-                    <div className={`flex items-center gap-1 text-xs font-medium ${
-                      trend.direction === 'up' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {trend.direction === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                      {Math.abs(trend.value).toFixed(1)}%
-                    </div>
-                  )}
-                </div>
-                <p className="text-3xl font-bold text-gray-900">
-                  {currentValue != null
-                    ? `${typeof currentValue === 'number' ? currentValue.toFixed(1) : currentValue}${metadata.unit ? ` ${metadata.unit}` : ''}`
-                    : 'N/A'}
-                </p>
-                {metadata.min != null && metadata.max != null && typeof currentValue === 'number' && (
-                  <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full transition-all"
-                      style={{
-                        width: `${((currentValue - metadata.min) / (metadata.max - metadata.min)) * 100}%`,
-                        backgroundColor: color
-                      }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-6">
           <nav className="flex gap-6">
-            {['overview', 'telemetry', 'alarms', 'settings'].map(tab => (
+            {([
+              { key: 'live', label: 'Live Device' },
+              { key: 'overview', label: 'Overview' },
+              { key: 'telemetry', label: 'Telemetry' },
+              { key: 'alarms', label: 'Alarms' },
+              { key: 'settings', label: 'Settings' },
+            ] as const).map(tab => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`pb-3 px-2 border-b-2 capitalize font-medium transition-colors ${
-                  activeTab === tab
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`pb-3 px-2 border-b-2 font-medium transition-colors ${
+                  activeTab === tab.key
                     ? 'border-primary-600 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </nav>
         </div>
+
+        {/* Live Device Tab - HMI Renderer */}
+        {activeTab === 'live' && tenantId && (
+          <HMIRenderer
+            deviceId={deviceId}
+            tenantId={tenantId}
+            device={device}
+            deviceType={deviceType}
+          />
+        )}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (

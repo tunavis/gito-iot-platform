@@ -1,417 +1,236 @@
 # 🚀 Deployment Guide - Gito IoT Platform
 
-Industry-standard deployment process for staging and production environments.
-
-## 📋 Prerequisites
-
-- Linux staging/production servers with Docker installed
-- GitHub repository access
-- SSH access to servers
-- Domain names configured (optional but recommended)
+**Staging URL:** https://dev-iot.gito.co.za
+**Health Check:** https://dev-iot.gito.co.za/api/health
 
 ---
 
-## 🏗️ Architecture Overview
+## 📋 Branch Strategy
 
 ```
-Developer PC → Git Push → GitHub Actions → Docker Registry → Linux Servers
+feature/* ──► main ──► staging ──► (production)
+                         ▲
+                    auto-deploys to
+                  dev-iot.gito.co.za
 ```
 
-### Environments:
-- **Development**: Local machine (Windows/Mac/Linux)
-- **Staging**: Linux server for team testing
-- **Production**: Linux server for end users
+| Branch | Purpose | Auto-Deploy |
+|--------|---------|-------------|
+| `feature/*` | Development work | No |
+| `main` | Stable baseline | No |
+| `staging` | Staging environment | ✅ Yes → dev-iot.gito.co.za |
 
 ---
 
-## 🔧 Initial Setup (One-Time)
+## 🚢 Deploying to Staging
 
-### 1. Server Preparation
-
-SSH into your staging server:
+### Step 1 — Merge your feature branch into staging
 
 ```bash
-ssh user@staging-server
-
-# Install Docker and Docker Compose
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER
-
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# Logout and login again for group changes to take effect
-exit
-```
-
-### 2. Create Application Directory
-
-```bash
-ssh user@staging-server
-
-# Create app directory
-sudo mkdir -p /opt/gito-iot
-sudo chown $USER:$USER /opt/gito-iot
-cd /opt/gito-iot
-
-# Clone repository
-git clone https://github.com/tunavis/gito-iot-platform.git .
-git checkout -b staging origin/main  # Create staging branch
-```
-
-### 3. Configure Environment Variables
-
-```bash
-# Copy and edit staging environment file
-cp .env.staging.example .env.staging
-nano .env.staging
-
-# Set secure values for:
-# - DATABASE_URL password
-# - JWT_SECRET_KEY (generate with: openssl rand -hex 32)
-# - MQTT_PASSWORD
-# - CORS_ORIGINS (your staging domain)
-```
-
-### 4. Set Up GitHub Secrets
-
-Go to GitHub repository → Settings → Secrets and variables → Actions
-
-Add these secrets:
-
-| Secret Name | Description | Example |
-|------------|-------------|---------|
-| `STAGING_HOST` | Staging server IP/hostname | `staging.yourdomain.com` |
-| `STAGING_USER` | SSH username | `deploy` |
-| `STAGING_SSH_KEY` | Private SSH key for deployment | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-
-#### Generate SSH Key for Deployment:
-
-On your local machine:
-```bash
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/gito_deploy
-cat ~/.ssh/gito_deploy.pub  # Copy this to server's ~/.ssh/authorized_keys
-cat ~/.ssh/gito_deploy      # Copy this to GitHub secret STAGING_SSH_KEY
-```
-
-On staging server:
-```bash
-mkdir -p ~/.ssh
-nano ~/.ssh/authorized_keys  # Paste the public key here
-chmod 700 ~/.ssh
-chmod 600 ~/.ssh/authorized_keys
-```
-
----
-
-## 📦 Deployment Process
-
-### Method 1: Automatic Deployment (Recommended)
-
-#### For Staging:
-
-```bash
-# On your local machine
-
-# 1. Commit your changes
+# Make sure your feature branch is committed and pushed
+git status
 git add .
-git commit -m "feat: add new dashboard features"
+git commit -m "feat: describe your change"
+git push origin feature/your-branch-name
 
-# 2. Push to staging branch (triggers automatic deployment)
+# Switch to staging and merge
+git checkout staging
+git pull origin staging          # Get latest staging first
+git merge feature/your-branch-name
+
+# Push — this triggers GitHub Actions deployment automatically
 git push origin staging
 ```
 
-**What happens automatically:**
-1. ✅ GitHub Actions builds Docker images
-2. ✅ Pushes images to GitHub Container Registry
-3. ✅ SSH into staging server
-4. ✅ Pulls latest images
-5. ✅ Restarts services with zero downtime
-6. ✅ Runs health checks
+### Step 2 — Watch the deployment
 
-**Monitor deployment:**
-- Go to GitHub → Actions tab → Watch the deployment progress
-- Check logs if deployment fails
+1. Go to **GitHub → Actions** tab
+2. Find the **"Deploy to Staging"** workflow run
+3. Watch it progress through:
+   - `Build and Push Docker Images` (builds api + web)
+   - `Deploy to Staging Server` (pulls, restarts, migrates, health checks)
 
-#### For Production:
+**Deployment takes ~3-5 minutes total.**
+
+### Step 3 — Verify
 
 ```bash
-# Create a release tag
-git checkout main
-git merge staging  # Merge tested staging code
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin main --tags
+# Quick health check
+curl https://dev-iot.gito.co.za/api/health
+
+# Expected response:
+# {"status":"ok","service":"Gito IoT API"}
 ```
 
-### Method 2: Manual Deployment
+---
 
-If you need to deploy manually:
+## ⚠️ What Staging Deploy Does
+
+The GitHub Actions workflow (`staging-deploy.yml`) runs on a **self-hosted runner** (the staging server itself):
+
+1. **Builds** Docker images for `api` and `web`
+2. **Pushes** images to GitHub Container Registry (ghcr.io)
+3. **Tears down** all services INCLUDING database volume (`down --volumes`)
+4. **Starts fresh** with new images
+5. **Runs Alembic migrations** automatically (`alembic upgrade head`)
+6. **Health checks** the API until it responds 200
+
+> ⚠️ **Database is wiped on every staging deploy.** Staging re-seeds from migrations. Do NOT store important test data on staging between deploys.
+
+---
+
+## 🗄️ Database Migrations
+
+**Every model change MUST have a migration in the same commit.**
+
+Staging runs `alembic upgrade head` automatically on every deploy. A broken migration = API crash-loop = site down.
 
 ```bash
+# Create a new migration after changing SQLAlchemy models
+docker exec gito-api alembic revision --autogenerate -m "describe your change"
+
+# Review the generated file in api/alembic/versions/
+# ALWAYS add IF NOT EXISTS / IF EXISTS guards for idempotency
+
+# Test it locally before pushing
+docker exec gito-api alembic upgrade head
+```
+
+**Migration rules:**
+- ✅ Use `IF NOT EXISTS` / `IF EXISTS` guards on all DDL
+- ✅ Drop old tables/columns in the same migration (no leftovers)
+- ✅ Test locally with `alembic upgrade head` before pushing
+- ❌ Never reference tables that don't exist yet
+- ❌ Never leave old code/columns/tables behind "for backwards compatibility"
+
+---
+
+## 🔍 Troubleshooting Staging
+
+### Check service status
+```bash
+# SSH into staging server
 ssh user@staging-server
 cd /opt/gito-iot
 
-# Pull latest code
+docker compose -f docker-compose.staging.yml ps
+```
+
+### View logs
+```bash
+# API logs (most important for errors)
+docker logs gito-api-staging --tail 100 -f
+
+# Web logs
+docker logs gito-web-staging --tail 50 -f
+
+# Nginx logs
+docker logs gito-nginx-staging --tail 50 -f
+```
+
+### API crash-loop (most common cause: failed migration)
+```bash
+# 1. Check the migration error
+docker logs gito-api-staging --tail 50
+
+# 2. If phantom revision error, fix alembic_version manually
+docker exec gito-postgres-staging psql -U gito -d gito \
+  -c "UPDATE alembic_version SET version_num = 'correct_revision_id';"
+
+# 3. Restart API
+docker compose -f docker-compose.staging.yml restart api
+```
+
+### 502 Bad Gateway
+Nginx lost its upstream connection after containers were recreated.
+
+```bash
+# Restart nginx to reconnect
+docker compose -f docker-compose.staging.yml restart nginx
+```
+
+> ⚠️ **Known issue:** When containers are recreated (`down` + `up`), nginx must be restarted separately even if it's still running. Always use `docker compose restart <service>` for individual service restarts — never `docker compose rm -f` on a single service.
+
+### Login / cookie issues on staging
+```bash
+# Verify env_file is set on ALL services in docker-compose.staging.yml
+# EVERY service must have:
+#   env_file:
+#     - .env.staging
+
+# Check COOKIE_SECURE and TRUST_PROXY are set in .env.staging
+grep -E "COOKIE_SECURE|TRUST_PROXY" /opt/gito-iot/.env.staging
+```
+
+### Force re-deploy without code change
+```bash
+# Trigger workflow manually:
+# GitHub → Actions → "Deploy to Staging" → Run workflow
+# OR push an empty commit:
+git commit --allow-empty -m "chore: trigger staging deploy"
+git push origin staging
+```
+
+---
+
+## 🔐 Required Secrets (GitHub)
+
+Go to: **GitHub → Settings → Secrets and variables → Actions**
+
+| Secret | Description |
+|--------|-------------|
+| `GHCR_TOKEN` | GitHub token with `packages:write` for container registry |
+
+The workflow uses a **self-hosted runner** on the staging server — no SSH key injection needed.
+
+---
+
+## 📦 Docker Compose Files
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Local development |
+| `docker-compose.staging.yml` | Staging environment |
+
+> Always use `docker compose` (v2 plugin syntax), not `docker-compose` (old standalone binary).
+
+---
+
+## 🌐 Environments
+
+| Env | URL | Branch | Database |
+|-----|-----|--------|----------|
+| Local Dev | http://localhost | any | Persistent local volume |
+| Staging | https://dev-iot.gito.co.za | `staging` | Reset on every deploy |
+| Production | TBD | tagged release | Persistent |
+
+---
+
+## 📋 Quick Reference
+
+```bash
+# Deploy to staging
+git checkout staging
 git pull origin staging
-
-# Pull latest Docker images
-docker-compose -f docker-compose.staging.yml pull
-
-# Restart services
-docker-compose -f docker-compose.staging.yml up -d
-
-# Check logs
-docker-compose -f docker-compose.staging.yml logs -f
-```
-
----
-
-## 🔍 Monitoring & Troubleshooting
-
-### View Logs
-
-```bash
-# All services
-docker-compose -f docker-compose.staging.yml logs -f
-
-# Specific service
-docker-compose -f docker-compose.staging.yml logs -f api
-docker-compose -f docker-compose.staging.yml logs -f web
-```
-
-### Check Service Health
-
-```bash
-# Check running containers
-docker-compose -f docker-compose.staging.yml ps
-
-# API health check
-curl http://localhost:8001/api/health
-
-# Check database
-docker-compose -f docker-compose.staging.yml exec postgres psql -U gito_user -d gito_iot_staging -c "SELECT COUNT(*) FROM devices;"
-```
-
-### Restart a Specific Service
-
-```bash
-docker-compose -f docker-compose.staging.yml restart api
-docker-compose -f docker-compose.staging.yml restart web
-```
-
-### View Resource Usage
-
-```bash
-docker stats
-```
-
----
-
-## 🌐 Nginx Configuration (Recommended)
-
-Set up Nginx as reverse proxy for SSL and domain access:
-
-```nginx
-# /etc/nginx/sites-available/gito-staging
-
-upstream gito_api {
-    server localhost:8001;
-}
-
-upstream gito_web {
-    server localhost:3001;
-}
-
-server {
-    listen 80;
-    server_name staging.yourdomain.com;
-
-    # Redirect HTTP to HTTPS
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name staging.yourdomain.com;
-
-    ssl_certificate /etc/letsencrypt/live/staging.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/staging.yourdomain.com/privkey.pem;
-
-    # Frontend
-    location / {
-        proxy_pass http://gito_web;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # API
-    location /api/ {
-        proxy_pass http://gito_api;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # WebSocket support
-    location /ws/ {
-        proxy_pass http://gito_api;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-Enable site:
-```bash
-sudo ln -s /etc/nginx/sites-available/gito-staging /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-
-# Set up SSL with Let's Encrypt
-sudo apt-get install certbot python3-certbot-nginx
-sudo certbot --nginx -d staging.yourdomain.com
-```
-
----
-
-## 🔐 Security Best Practices
-
-### 1. Environment Variables
-- ✅ Never commit `.env` files to Git
-- ✅ Use strong random secrets (32+ characters)
-- ✅ Rotate secrets regularly
-
-### 2. Database
-- ✅ Use strong database passwords
-- ✅ Restrict database ports (don't expose to public)
-- ✅ Regular backups
-
-### 3. Docker
-- ✅ Run containers as non-root users (already configured)
-- ✅ Use specific image tags (not `latest`)
-- ✅ Regularly update base images
-
-### 4. Server
-- ✅ Enable firewall (UFW)
-- ✅ SSH key authentication only (disable password)
-- ✅ Keep system updated
-
-```bash
-# Enable firewall
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-```
-
----
-
-## 📊 Database Migrations
-
-### Run Migrations on Staging
-
-```bash
-ssh user@staging-server
-cd /opt/gito-iot
-
-# Run migrations
-docker-compose -f docker-compose.staging.yml exec api python -m alembic upgrade head
-```
-
----
-
-## 🔄 Rollback Process
-
-### Rollback to Previous Version
-
-```bash
-ssh user@staging-server
-cd /opt/gito-iot
-
-# Option 1: Git rollback
-git checkout <previous-commit-hash>
-docker-compose -f docker-compose.staging.yml up -d
-
-# Option 2: Docker image rollback
-docker-compose -f docker-compose.staging.yml pull ghcr.io/tunavis/gito-iot-api:staging-<previous-sha>
-docker-compose -f docker-compose.staging.yml up -d
-```
-
----
-
-## 📝 Team Workflow
-
-### Developer Workflow
-
-1. **Create feature branch**
-   ```bash
-   git checkout -b feature/new-dashboard
-   ```
-
-2. **Develop locally**
-   ```bash
-   npm run dev  # Frontend
-   docker-compose up  # Backend services
-   ```
-
-3. **Commit and push**
-   ```bash
-   git add .
-   git commit -m "feat: add new dashboard"
-   git push origin feature/new-dashboard
-   ```
-
-4. **Create Pull Request**
-   - GitHub → Pull Requests → New PR
-   - Request code review from team
-
-5. **Merge to Staging**
-   - After PR approval, merge to `staging` branch
-   - Automatic deployment to staging server
-
-6. **Test on Staging**
-   - https://staging.yourdomain.com
-   - Verify features work correctly
-
-7. **Merge to Production**
-   - Merge `staging` → `main`
-   - Create release tag
-   - Deploy to production
-
----
-
-## 📞 Support
-
-- **Documentation**: Check `docs/` folder
-- **Issues**: GitHub Issues
-- **Team Chat**: [Your team chat]
-
----
-
-## ✅ Quick Command Reference
-
-```bash
-# Deploy to staging (automatic)
+git merge feature/your-branch-name
 git push origin staging
 
-# View logs
-docker-compose -f docker-compose.staging.yml logs -f
+# Check staging health
+curl https://dev-iot.gito.co.za/api/health
 
-# Restart services
-docker-compose -f docker-compose.staging.yml restart
+# Watch deployment logs (on staging server)
+docker logs gito-api-staging --tail 100 -f
 
-# Update and deploy
-git pull && docker-compose -f docker-compose.staging.yml up -d
+# Fix 502 Bad Gateway
+docker compose -f docker-compose.staging.yml restart nginx
 
-# Database backup
-docker-compose -f docker-compose.staging.yml exec postgres pg_dump -U gito_user gito_iot_staging > backup.sql
+# Fix crash-loop — check migration error first
+docker logs gito-api-staging --tail 50
 
-# Check health
-curl http://localhost:8001/api/health
+# Fix divergent git branch on staging server
+git fetch origin && git reset --hard origin/staging
 ```
+
+---
+
+**Last Updated:** 2026-02-17
