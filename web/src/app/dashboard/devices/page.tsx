@@ -4,76 +4,67 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import { useToast } from '@/components/ToastProvider';
-import { 
-  Cpu, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Clock, 
-  Search, 
-  Grid3x3, 
-  List, 
-  ChevronUp, 
+import {
+  Cpu,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Search,
+  Grid3x3,
+  List,
+  Monitor,
+  ChevronUp,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Battery,
   BatteryLow,
-  BatteryWarning,
-  Filter
+  BatteryWarning
 } from 'lucide-react';
-
-interface DeviceType {
-  id: string;
-  name: string;
-  category: string;
-  icon: string;
-  color: string;
-  manufacturer?: string;
-  model?: string;
-}
+import HMITileCard from '@/components/HMI/tiles/HMITileCard';
 
 interface Device {
   id: string;
   tenant_id: string;
   name: string;
-  device_type_id: string;
-  device_type?: DeviceType;  // Nested device type info from API
+  device_type: string;
+  device_type_id?: string;
   status: 'online' | 'offline' | 'idle' | 'error';
   last_seen: string | null;
   battery_level: number | null;
   dev_eui?: string;
   ttn_app_id?: string;
-  attributes: Record<string, any>;
+  metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
 
-type ViewMode = 'grid' | 'list';
+interface DeviceTypeInfo {
+  id: string;
+  name: string;
+  category: string;
+  telemetry_schema: Record<string, any>;
+  connectivity?: Record<string, any>;
+  [key: string]: unknown;
+}
+
+type ViewMode = 'grid' | 'list' | 'hmi';
 type StatusFilter = 'all' | 'online' | 'offline' | 'idle';
 type SortField = 'name' | 'device_type' | 'status' | 'battery_level' | 'last_seen';
 type SortDirection = 'asc' | 'desc';
 
 export default function DevicesPage() {
   const router = useRouter();
-  const toast = useToast();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all');
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalDevices, setTotalDevices] = useState(0);
-  const perPage = 24;
-  // Available device types for filter
-  const [deviceTypeOptions, setDeviceTypeOptions] = useState<{id: string; name: string; color: string}[]>([]);
+  const [tenantId, setTenantId] = useState<string>('');
+  const [deviceTypesMap, setDeviceTypesMap] = useState<Map<string, DeviceTypeInfo>>(new Map());
 
   const loadDevices = useCallback(async () => {
       try {
@@ -85,13 +76,9 @@ export default function DevicesPage() {
 
         const payload = JSON.parse(atob(token.split('.')[1]));
         const tenant = payload.tenant_id;
+        setTenantId(tenant);
 
-        const params = new URLSearchParams({
-          page: currentPage.toString(),
-          per_page: perPage.toString(),
-        });
-
-        const response = await fetch(`/api/v1/tenants/${tenant}/devices?${params}`, {
+        const response = await fetch(`/api/v1/tenants/${tenant}/devices`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -101,38 +88,30 @@ export default function DevicesPage() {
         }
 
         setDevices(data.data || []);
-        setTotalDevices(data.meta?.total ?? data.data?.length ?? 0);
+
+        // Load device types for HMI tile view
+        const typesRes = await fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (typesRes.ok) {
+          const typesData = await typesRes.json();
+          const typesArray: DeviceTypeInfo[] = typesData.data || [];
+          const map = new Map<string, DeviceTypeInfo>();
+          for (const dt of typesArray) {
+            map.set(dt.id, dt);
+          }
+          setDeviceTypesMap(map);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load devices');
       } finally {
         setLoading(false);
       }
-  }, [router, currentPage]);
-
-  // Load device types for filter
-  const loadDeviceTypes = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const tenant = payload.tenant_id;
-      const res = await fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDeviceTypeOptions((data.data || []).map((dt: any) => ({ id: dt.id, name: dt.name, color: dt.color })));
-      }
-    } catch {}
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     loadDevices();
   }, [loadDevices]);
-
-  useEffect(() => {
-    loadDeviceTypes();
-  }, [loadDeviceTypes]);
 
   // Bulk delete devices
   const handleBulkDelete = async () => {
@@ -162,29 +141,21 @@ export default function DevicesPage() {
         throw new Error(data.error?.message || 'Failed to delete devices');
       }
 
+      // Reload devices and clear selection
       const data = await response.json();
-      toast.success('Devices Deleted', data.data.message);
+      alert(data.data.message);
       setSelectedDevices(new Set());
-      loadDevices();
+      window.location.reload();
     } catch (err) {
-      toast.error('Delete Failed', err instanceof Error ? err.message : 'Failed to delete devices');
+      alert(err instanceof Error ? err.message : 'Failed to delete devices');
     }
   };
 
   // Sort devices
   const sortDevices = (devices: Device[]) => {
     return [...devices].sort((a, b) => {
-      let aVal: any;
-      let bVal: any;
-
-      // Handle nested device_type field
-      if (sortField === 'device_type') {
-        aVal = a.device_type?.name;
-        bVal = b.device_type?.name;
-      } else {
-        aVal = a[sortField];
-        bVal = b[sortField];
-      }
+      let aVal: any = a[sortField];
+      let bVal: any = b[sortField];
 
       // Handle null values
       if (aVal === null || aVal === undefined) return 1;
@@ -207,20 +178,18 @@ export default function DevicesPage() {
   // Filter and search devices
   const filteredDevices = useMemo(() => {
     let filtered = devices.filter(device => {
-      const deviceTypeName = device.device_type?.name || '';
-      const matchesSearch = searchQuery === '' ||
+      const matchesSearch = searchQuery === '' || 
         device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        deviceTypeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        device.device_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
         device.id.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesStatus = statusFilter === 'all' || device.status === statusFilter;
-      const matchesType = deviceTypeFilter === 'all' || device.device_type_id === deviceTypeFilter;
       
-      return matchesSearch && matchesStatus && matchesType;
+      const matchesStatus = statusFilter === 'all' || device.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
     });
 
     return sortDevices(filtered);
-  }, [devices, searchQuery, statusFilter, deviceTypeFilter, sortField, sortDirection]);
+  }, [devices, searchQuery, statusFilter, sortField, sortDirection]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -390,25 +359,13 @@ export default function DevicesPage() {
                 <option value="idle">Idle</option>
               </select>
 
-              {/* Device Type Filter */}
-              <select
-                value={deviceTypeFilter}
-                onChange={(e) => setDeviceTypeFilter(e.target.value)}
-                className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-              >
-                <option value="all">All Types</option>
-                {deviceTypeOptions.map(dt => (
-                  <option key={dt.id} value={dt.id}>{dt.name}</option>
-                ))}
-              </select>
-
               {/* View Mode Toggle */}
               <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                    viewMode === 'grid' 
-                      ? 'bg-white text-primary-600 shadow-sm' 
+                    viewMode === 'grid'
+                      ? 'bg-white text-primary-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -418,13 +375,24 @@ export default function DevicesPage() {
                 <button
                   onClick={() => setViewMode('list')}
                   className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                    viewMode === 'list' 
-                      ? 'bg-white text-primary-600 shadow-sm' 
+                    viewMode === 'list'
+                      ? 'bg-white text-primary-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <List className="w-4 h-4" />
                   <span>List</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('hmi')}
+                  className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                    viewMode === 'hmi'
+                      ? 'bg-white text-primary-600 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span>HMI</span>
                 </button>
               </div>
             </div>
@@ -485,7 +453,7 @@ export default function DevicesPage() {
             <AlertTriangle className="w-12 h-12 text-red-600 mx-auto mb-4" />
             <p className="text-red-600 mb-4">{error}</p>
             <button 
-              onClick={() => { setError(null); setLoading(true); loadDevices(); }}
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
               Retry
@@ -560,14 +528,8 @@ export default function DevicesPage() {
                       <span className={`w-2 h-2 rounded-full ${getStatusDotColor(device.status)} ${device.status === 'online' ? 'animate-pulse' : ''}`}></span>
                       {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
                     </span>
-                    <span
-                      className="text-xs font-medium px-2.5 py-1 rounded"
-                      style={{
-                        backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f1f5f9',
-                        color: device.device_type?.color || '#64748b'
-                      }}
-                    >
-                      {device.device_type?.name || 'Unknown Type'}
+                    <span className="text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
+                      {device.device_type}
                     </span>
                   </div>
                 </div>
@@ -617,6 +579,19 @@ export default function DevicesPage() {
                   </Link>
                 </div>
               </div>
+            ))}
+          </div>
+        ) : viewMode === 'hmi' ? (
+          /* HMI Tile View */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredDevices.map((device, idx) => (
+              <HMITileCard
+                key={device.id}
+                device={device}
+                deviceType={device.device_type_id ? deviceTypesMap.get(device.device_type_id) || null : null}
+                tenantId={tenantId}
+                staggerIndex={idx}
+              />
             ))}
           </div>
         ) : (
@@ -712,14 +687,8 @@ export default function DevicesPage() {
                         </Link>
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium"
-                          style={{
-                            backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f1f5f9',
-                            color: device.device_type?.color || '#64748b'
-                          }}
-                        >
-                          {device.device_type?.name || 'Unknown Type'}
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700">
+                          {device.device_type}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -777,59 +746,6 @@ export default function DevicesPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {!loading && !error && totalDevices > perPage && (
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-slate-600">
-              Page <span className="font-semibold">{currentPage}</span> of{' '}
-              <span className="font-semibold">{Math.ceil(totalDevices / perPage)}</span>
-              {' '}({totalDevices} total devices)
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              {Array.from({ length: Math.min(5, Math.ceil(totalDevices / perPage)) }, (_, i) => {
-                const totalPages = Math.ceil(totalDevices / perPage);
-                let page: number;
-                if (totalPages <= 5) {
-                  page = i + 1;
-                } else if (currentPage <= 3) {
-                  page = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  page = totalPages - 4 + i;
-                } else {
-                  page = currentPage - 2 + i;
-                }
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      currentPage === page
-                        ? 'bg-primary-600 text-white'
-                        : 'border border-slate-300 hover:bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalDevices / perPage), p + 1))}
-                disabled={currentPage >= Math.ceil(totalDevices / perPage)}
-                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Bulk Assign Modal */}
         {showBulkAssignModal && (
           <BulkAssignModal
@@ -859,12 +775,12 @@ export default function DevicesPage() {
                 }
 
                 const data = await response.json();
-                toast.success('Group Assigned', data.data.message);
+                alert(data.data.message);
                 setShowBulkAssignModal(false);
                 setSelectedDevices(new Set());
-                loadDevices();
+                window.location.reload();
               } catch (err) {
-                toast.error('Assignment Failed', err instanceof Error ? err.message : 'Failed to assign devices');
+                alert(err instanceof Error ? err.message : 'Failed to assign devices');
               }
             }}
             onCancel={() => setShowBulkAssignModal(false)}

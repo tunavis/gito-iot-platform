@@ -23,7 +23,7 @@ from app.models.notification import (
 from app.models.alarm import Alarm
 from app.models.composite_alert_rule import CompositeAlertRule
 from app.models.unified_alert_rule import UnifiedAlertRule
-from app.models.dashboard import Dashboard, DashboardWidget, SolutionTemplate
+from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.device_type import DeviceType
 
 __all__ = [
@@ -50,6 +50,5 @@ __all__ = [
     "UnifiedAlertRule",    # Unified alert rules (THRESHOLD + COMPOSITE)
     "Dashboard",
     "DashboardWidget",
-    "SolutionTemplate",
     "DeviceType",
 ]

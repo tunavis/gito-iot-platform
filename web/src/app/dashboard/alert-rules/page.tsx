@@ -45,6 +45,14 @@ interface AlertRule {
 interface Device {
   id: string;
   name: string;
+  device_type_id?: string;
+}
+
+interface DeviceType {
+  id: string;
+  name: string;
+  data_model?: Array<{ name: string; type?: string; unit?: string }>;
+  telemetry_schema?: Record<string, { type?: string; unit?: string }>;
 }
 
 // Helper to extract tenant_id from JWT token
@@ -67,6 +75,7 @@ function getTenantFromToken(): string | null {
 export default function AlertRulesPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [tenant, setTenant] = useState<string | null>(null);
   
@@ -115,13 +124,22 @@ export default function AlertRulesPage() {
     const token = localStorage.getItem('auth_token');
     if (!token || !tenant) return;
 
-    const res = await fetch(`/api/v1/tenants/${tenant}/devices?page=1&per_page=500`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const [devRes, dtRes] = await Promise.all([
+      fetch(`/api/v1/tenants/${tenant}/devices?page=1&per_page=500`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+    ]);
 
-    if (res.ok) {
-      const json = await res.json();
+    if (devRes.ok) {
+      const json = await devRes.json();
       setDevices(json.data || []);
+    }
+    if (dtRes.ok) {
+      const json = await dtRes.json();
+      setDeviceTypes(Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []));
     }
   }, [tenant]);
 
@@ -291,6 +309,7 @@ export default function AlertRulesPage() {
           <NewRuleForm
             tenant={tenant}
             devices={devices}
+            deviceTypes={deviceTypes}
             onSuccess={() => {
               setShowNewRuleForm(false);
               loadRules();
@@ -304,6 +323,7 @@ export default function AlertRulesPage() {
           <EditRuleForm
             tenant={tenant}
             devices={devices}
+            deviceTypes={deviceTypes}
             rule={editingRule}
             onSuccess={() => {
               setEditingRule(null);
@@ -448,15 +468,40 @@ export default function AlertRulesPage() {
 // NEW RULE FORM - Supports both THRESHOLD and COMPOSITE
 // ============================================================================
 
-function NewRuleForm({ 
-  tenant, 
-  devices, 
-  onSuccess, 
-  onCancel 
-}: { 
-  tenant: string | null; 
-  devices: Device[]; 
-  onSuccess: () => void; 
+function getMetricsForDevice(deviceId: string, devices: Device[], deviceTypes: DeviceType[]): string[] {
+  const extractMetrics = (dt: DeviceType): string[] => {
+    // Prefer telemetry_schema (computed from backend), fallback to data_model array
+    if (dt.telemetry_schema) return Object.keys(dt.telemetry_schema);
+    if (dt.data_model && Array.isArray(dt.data_model)) {
+      return dt.data_model.map(f => f.name).filter(Boolean);
+    }
+    return [];
+  };
+
+  if (!deviceId) {
+    // Global rule: collect all metrics from all device types
+    const allMetrics = new Set<string>();
+    deviceTypes.forEach(dt => extractMetrics(dt).forEach(k => allMetrics.add(k)));
+    return Array.from(allMetrics).sort();
+  }
+  const device = devices.find(d => d.id === deviceId);
+  if (!device?.device_type_id) return [];
+  const dt = deviceTypes.find(t => t.id === device.device_type_id);
+  if (!dt) return [];
+  return extractMetrics(dt).sort();
+}
+
+function NewRuleForm({
+  tenant,
+  devices,
+  deviceTypes,
+  onSuccess,
+  onCancel
+}: {
+  tenant: string | null;
+  devices: Device[];
+  deviceTypes: DeviceType[];
+  onSuccess: () => void;
   onCancel: () => void;
 }) {
   const [ruleType, setRuleType] = useState<RuleType>('THRESHOLD');
@@ -464,19 +509,23 @@ function NewRuleForm({
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<Severity>('warning');
   const [cooldownMinutes, setCooldownMinutes] = useState(5);
-  
+
   // THRESHOLD fields
   const [deviceId, setDeviceId] = useState('');
-  const [metric, setMetric] = useState('temperature');
+  const [metric, setMetric] = useState('');
+  const [customMetric, setCustomMetric] = useState('');
   const [operator, setOperator] = useState('gt');
   const [threshold, setThreshold] = useState<number>(0);
-  
+
   // COMPOSITE fields
   const [conditions, setConditions] = useState<AlertCondition[]>([]);
   const [logic, setLogic] = useState<ConditionLogic>('AND');
 
+  const availableMetrics = getMetricsForDevice(deviceId, devices, deviceTypes);
+
   const addCondition = () => {
-    setConditions([...conditions, { field: 'temperature', operator: 'gt', threshold: 0, weight: 1 }]);
+    const defaultField = availableMetrics[0] || 'temperature';
+    setConditions([...conditions, { field: defaultField, operator: 'gt', threshold: 0, weight: 1 }]);
   };
 
   const updateCondition = (idx: number, updates: Partial<AlertCondition>) => {
@@ -514,7 +563,7 @@ function NewRuleForm({
 
     if (ruleType === 'THRESHOLD') {
       payload.device_id = deviceId || null;
-      payload.metric = metric;
+      payload.metric = metric === '__custom__' ? customMetric : metric;
       payload.operator = operator;
       payload.threshold = threshold;
     } else {
@@ -618,7 +667,7 @@ function NewRuleForm({
                 <label className="block text-sm text-gray-700 mb-1">Device</label>
                 <select
                   value={deviceId}
-                  onChange={e => setDeviceId(e.target.value)}
+                  onChange={e => { setDeviceId(e.target.value); setMetric(''); }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 >
                   <option value="">Global (all devices)</option>
@@ -631,15 +680,25 @@ function NewRuleForm({
                 <label className="block text-sm text-gray-700 mb-1">Metric</label>
                 <select
                   value={metric}
-                  onChange={e => setMetric(e.target.value)}
+                  onChange={e => { setMetric(e.target.value); if (e.target.value !== '__custom__') setCustomMetric(''); }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 >
-                  <option value="temperature">Temperature</option>
-                  <option value="humidity">Humidity</option>
-                  <option value="battery">Battery</option>
-                  <option value="rssi">RSSI</option>
-                  <option value="pressure">Pressure</option>
+                  <option value="">Select metric...</option>
+                  {availableMetrics.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                  <option value="__custom__">Custom metric...</option>
                 </select>
+                {metric === '__custom__' && (
+                  <input
+                    type="text"
+                    value={customMetric}
+                    onChange={e => setCustomMetric(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-gray-300 rounded text-sm"
+                    placeholder="Enter metric key"
+                    required
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Operator</label>
@@ -649,11 +708,11 @@ function NewRuleForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
-                  <option value="gte">≥ Greater or equal</option>
+                  <option value="gte">&ge; Greater or equal</option>
                   <option value="lt">&lt; Less than</option>
-                  <option value="lte">≤ Less or equal</option>
+                  <option value="lte">&le; Less or equal</option>
                   <option value="eq">= Equal</option>
-                  <option value="neq">≠ Not equal</option>
+                  <option value="neq">&ne; Not equal</option>
                 </select>
               </div>
               <div>
@@ -705,11 +764,12 @@ function NewRuleForm({
                       onChange={e => updateCondition(idx, { field: e.target.value })}
                       className="px-2 py-1 text-sm border border-gray-300 rounded"
                     >
-                      <option value="temperature">Temperature</option>
-                      <option value="humidity">Humidity</option>
-                      <option value="battery">Battery</option>
-                      <option value="rssi">RSSI</option>
-                      <option value="pressure">Pressure</option>
+                      {availableMetrics.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                      {!availableMetrics.includes(cond.field) && (
+                        <option value={cond.field}>{cond.field}</option>
+                      )}
                     </select>
                     <select
                       value={cond.operator}
@@ -717,11 +777,11 @@ function NewRuleForm({
                       className="px-2 py-1 text-sm border border-gray-300 rounded"
                     >
                       <option value="gt">&gt;</option>
-                      <option value="gte">≥</option>
+                      <option value="gte">&ge;</option>
                       <option value="lt">&lt;</option>
-                      <option value="lte">≤</option>
+                      <option value="lte">&le;</option>
                       <option value="eq">=</option>
-                      <option value="neq">≠</option>
+                      <option value="neq">&ne;</option>
                     </select>
                     <input
                       type="number"
@@ -800,13 +860,15 @@ function NewRuleForm({
 
 function EditRuleForm({
   tenant,
-  devices: _devices,
+  devices,
+  deviceTypes,
   rule,
   onSuccess,
   onCancel
 }: {
   tenant: string | null;
   devices: Device[];
+  deviceTypes: DeviceType[];
   rule: AlertRule;
   onSuccess: () => void;
   onCancel: () => void;
@@ -815,18 +877,21 @@ function EditRuleForm({
   const [description, setDescription] = useState(rule.description || '');
   const [severity, setSeverity] = useState<Severity>(rule.severity);
   const [cooldownMinutes, setCooldownMinutes] = useState(rule.cooldown_minutes);
-  
+
   // THRESHOLD fields
-  const [metric, setMetric] = useState(rule.metric || 'temperature');
+  const [metric, setMetric] = useState(rule.metric || '');
   const [operator, setOperator] = useState(rule.operator || 'gt');
   const [threshold, setThreshold] = useState<number>(rule.threshold || 0);
-  
+
   // COMPOSITE fields
   const [conditions, setConditions] = useState<AlertCondition[]>(rule.conditions || []);
   const [logic, setLogic] = useState<ConditionLogic>(rule.logic || 'AND');
 
+  const availableMetrics = getMetricsForDevice(rule.device_id || '', devices, deviceTypes);
+
   const addCondition = () => {
-    setConditions([...conditions, { field: 'temperature', operator: 'gt', threshold: 0, weight: 1 }]);
+    const defaultField = availableMetrics[0] || 'temperature';
+    setConditions([...conditions, { field: defaultField, operator: 'gt', threshold: 0, weight: 1 }]);
   };
 
   const updateCondition = (idx: number, updates: Partial<AlertCondition>) => {
@@ -926,11 +991,12 @@ function EditRuleForm({
                   onChange={e => setMetric(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 >
-                  <option value="temperature">Temperature</option>
-                  <option value="humidity">Humidity</option>
-                  <option value="battery">Battery</option>
-                  <option value="rssi">RSSI</option>
-                  <option value="pressure">Pressure</option>
+                  {availableMetrics.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                  {metric && !availableMetrics.includes(metric) && (
+                    <option value={metric}>{metric}</option>
+                  )}
                 </select>
               </div>
               <div>
@@ -941,11 +1007,11 @@ function EditRuleForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
-                  <option value="gte">≥ Greater or equal</option>
+                  <option value="gte">&ge; Greater or equal</option>
                   <option value="lt">&lt; Less than</option>
-                  <option value="lte">≤ Less or equal</option>
+                  <option value="lte">&le; Less or equal</option>
                   <option value="eq">= Equal</option>
-                  <option value="neq">≠ Not equal</option>
+                  <option value="neq">&ne; Not equal</option>
                 </select>
               </div>
               <div>
@@ -994,11 +1060,12 @@ function EditRuleForm({
                     onChange={e => updateCondition(idx, { field: e.target.value })}
                     className="px-2 py-1 text-sm border border-gray-300 rounded"
                   >
-                    <option value="temperature">Temperature</option>
-                    <option value="humidity">Humidity</option>
-                    <option value="battery">Battery</option>
-                    <option value="rssi">RSSI</option>
-                    <option value="pressure">Pressure</option>
+                    {availableMetrics.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                    {!availableMetrics.includes(cond.field) && (
+                      <option value={cond.field}>{cond.field}</option>
+                    )}
                   </select>
                   <select
                     value={cond.operator}
@@ -1006,11 +1073,11 @@ function EditRuleForm({
                     className="px-2 py-1 text-sm border border-gray-300 rounded"
                   >
                     <option value="gt">&gt;</option>
-                    <option value="gte">≥</option>
+                    <option value="gte">&ge;</option>
                     <option value="lt">&lt;</option>
-                    <option value="lte">≤</option>
+                    <option value="lte">&le;</option>
                     <option value="eq">=</option>
-                    <option value="neq">≠</option>
+                    <option value="neq">&ne;</option>
                   </select>
                   <input
                     type="number"

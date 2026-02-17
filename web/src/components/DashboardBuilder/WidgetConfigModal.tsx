@@ -1,7 +1,7 @@
 "use client";
 
 import { X, Save, Link as LinkIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import DeviceBindingModal from "./DeviceBindingModal";
 
 interface WidgetConfigModalProps {
@@ -27,11 +27,13 @@ export default function WidgetConfigModal({
   const [title, setTitle] = useState(currentTitle || "");
   const [dataSources, setDataSources] = useState(currentDataSources || []);
   const [showDeviceBinding, setShowDeviceBinding] = useState(false);
+  const titleManuallyEdited = useRef(false);
 
   useEffect(() => {
     setConfig(currentConfig || {});
     setTitle(currentTitle || "");
     setDataSources(currentDataSources || []);
+    titleManuallyEdited.current = false;
   }, [currentConfig, currentTitle, currentDataSources]);
 
   if (!isOpen) return null;
@@ -41,9 +43,55 @@ export default function WidgetConfigModal({
     onClose();
   };
 
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    titleManuallyEdited.current = true;
+  };
+
+  const formatMetricName = (metric: string) =>
+    metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const generateTitle = (bindings: any[]): string => {
+    const deviceNames = [...new Set(bindings.map((b: any) => b.device_name).filter(Boolean))];
+    const metricNames = [...new Set(bindings.map((b: any) => b.metric))];
+
+    if (bindings.length === 1) {
+      const metric = formatMetricName(metricNames[0]);
+      return deviceNames[0] ? `${metric} - ${deviceNames[0]}` : metric;
+    }
+    if (deviceNames.length === 1) {
+      return `${deviceNames[0]} - ${metricNames.map(formatMetricName).join(', ')}`;
+    }
+    if (metricNames.length === 1) {
+      return `${formatMetricName(metricNames[0])} - ${deviceNames.join(' vs ')}`;
+    }
+    return `${deviceNames.join(', ')} - Comparison`;
+  };
+
   const handleSaveBindings = (bindings: any[]) => {
     setDataSources(bindings);
     setShowDeviceBinding(false);
+
+    // Auto-generate title unless the user has manually typed one
+    if (bindings.length > 0 && !titleManuallyEdited.current) {
+      setTitle(generateTitle(bindings));
+    }
+
+    // Auto-populate config from schema metadata (unit, min/max)
+    if (bindings.length === 1) {
+      const b = bindings[0];
+      const updates: Record<string, any> = {};
+
+      if (b.unit) updates.unit = b.unit;
+      if (widgetType === 'gauge') {
+        if (b.min !== undefined) updates.min = b.min;
+        if (b.max !== undefined) updates.max = b.max;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        setConfig((prev: any) => ({ ...prev, ...updates }));
+      }
+    }
   };
 
   const renderKPICardConfig = () => (
@@ -478,7 +526,7 @@ export default function WidgetConfigModal({
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter widget title"
             />

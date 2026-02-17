@@ -58,29 +58,3 @@ class DashboardWidget(BaseModel):
         CheckConstraint("width > 0 AND height > 0", name="check_positive_dimensions"),
         CheckConstraint("position_x >= 0 AND position_y >= 0", name="check_valid_position"),
     )
-
-
-class SolutionTemplate(BaseModel):
-    """Pre-built industry-specific dashboard templates."""
-    __tablename__ = "solution_templates"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(200), nullable=False, unique=True)
-    identifier = Column(String(100), nullable=False, unique=True)
-    category = Column(String(50), nullable=False)
-    description = Column(Text)
-    icon = Column(String(50), default="layout-dashboard")
-    color = Column(String(20), default="#0066CC")
-    target_device_types = Column(JSONB, default=[], nullable=False)
-    required_capabilities = Column(JSONB, default=[], nullable=False)
-    template_config = Column(JSONB, nullable=False)
-    preview_image_url = Column(Text)
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-
-    __table_args__ = (
-        Index("idx_solution_templates_category", "category"),
-        Index("idx_solution_templates_active", "is_active"),
-        Index("idx_solution_templates_identifier", "identifier"),
-    )

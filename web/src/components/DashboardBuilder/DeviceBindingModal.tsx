@@ -32,12 +32,14 @@ interface DeviceBindingModalProps {
   widgetType: string;
   currentBindings: Array<{
     device_id: string;
+    device_name?: string;
     metric: string;
     alias?: string;
   }>;
   onClose: () => void;
   onSave: (bindings: Array<{
     device_id: string;
+    device_name?: string;
     metric: string;
     alias?: string;
   }>) => void;
@@ -182,10 +184,15 @@ export default function DeviceBindingModal({
   const handleAddBinding = () => {
     if (!selectedDeviceId || !selectedMetric) return;
 
+    const metricDetails = getMetricDetails(selectedMetric);
     const newBinding = {
       device_id: selectedDeviceId,
+      device_name: selectedDevice?.name || '',
       metric: selectedMetric,
       alias: alias || selectedMetric,
+      unit: metricDetails.unit,
+      min: metricDetails.min,
+      max: metricDetails.max,
     };
 
     if (multiDevice) {

@@ -55,7 +55,7 @@ def downgrade() -> None:
         "group_devices",
         "dashboard_widgets",
         "dashboards",
-        "solution_templates",
+
         "composite_alert_rules",
         "alarms",
         "alert_events",

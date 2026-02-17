@@ -6,8 +6,6 @@ import {
   Activity,
   Clock,
   Wifi,
-  WifiOff,
-  Droplet,
   Zap,
   Gauge,
   Thermometer,
@@ -33,19 +31,10 @@ interface DeviceInfoWidgetProps {
   }>;
 }
 
-interface DeviceType {
-  id: string;
-  name: string;
-  category: string;
-  icon: string;
-  color: string;
-}
-
 interface DeviceData {
   id: string;
   name: string;
-  device_type_id?: string;
-  device_type?: DeviceType;
+  device_type?: string;
   status?: string;
   last_seen?: string;
   latitude?: number;
@@ -159,18 +148,35 @@ export default function DeviceInfoWidget({
     return `${diffDays}d ago`;
   };
 
-  const getDeviceIcon = (deviceType?: DeviceType) => {
+  const getDeviceIcon = (deviceType?: string) => {
     if (!deviceType) return <Activity className="w-8 h-8" />;
 
-    const type = (deviceType.name || deviceType.category || '').toLowerCase();
+    const type = deviceType.toLowerCase();
 
-    // Water meter - custom SVG illustration
+    // Water meter - custom ANIMATED SVG illustration
     if (type.includes("water") || type.includes("flow")) {
       return (
         <svg viewBox="0 0 120 120" className="w-full h-full">
+          <defs>
+            {/* Animated gradient for water flow */}
+            <linearGradient id="waterFlow" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.3">
+                <animate attributeName="offset" values="0;1;0" dur="2s" repeatCount="indefinite" />
+              </stop>
+              <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.8">
+                <animate attributeName="offset" values="0.5;1;0.5" dur="2s" repeatCount="indefinite" />
+              </stop>
+              <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.3">
+                <animate attributeName="offset" values="1;0;1" dur="2s" repeatCount="indefinite" />
+              </stop>
+            </linearGradient>
+          </defs>
+
           {/* Meter body */}
           <circle cx="60" cy="60" r="50" fill="#0ea5e9" opacity="0.2" />
-          <circle cx="60" cy="60" r="45" fill="white" stroke="#0ea5e9" strokeWidth="3" />
+          <circle cx="60" cy="60" r="45" fill="white" stroke="#0ea5e9" strokeWidth="3">
+            {online && <animate attributeName="stroke-opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite" />}
+          </circle>
 
           {/* Gauge face */}
           <circle cx="60" cy="60" r="35" fill="#f0f9ff" />
@@ -195,19 +201,52 @@ export default function DeviceInfoWidget({
             );
           })}
 
-          {/* Needle */}
-          <line x1="60" y1="60" x2="60" y2="30" stroke="#0ea5e9" strokeWidth="2" />
+          {/* Animated needle (swings when active) */}
+          <line x1="60" y1="60" x2="60" y2="30" stroke="#0ea5e9" strokeWidth="2">
+            {online && (
+              <animateTransform
+                attributeName="transform"
+                type="rotate"
+                values="0 60 60; 15 60 60; -5 60 60; 10 60 60; 0 60 60"
+                dur="4s"
+                repeatCount="indefinite"
+              />
+            )}
+          </line>
           <circle cx="60" cy="60" r="4" fill="#0ea5e9" />
 
-          {/* Water droplet icon */}
+          {/* Animated water droplet icon (pulses when active) */}
           <path
             d="M60 75 C 55 75, 50 70, 50 65 C 50 60, 60 50, 60 50 C 60 50, 70 60, 70 65 C 70 70, 65 75, 60 75 Z"
             fill="#0ea5e9"
-          />
+          >
+            {online && (
+              <animate attributeName="opacity" values="0.6;1;0.6" dur="1.5s" repeatCount="indefinite" />
+            )}
+          </path>
 
-          {/* Flow arrows */}
-          <path d="M 25 60 L 35 60 L 30 55 M 35 60 L 30 65" stroke="#0ea5e9" strokeWidth="2" fill="none" />
-          <path d="M 85 60 L 95 60 L 90 55 M 95 60 L 90 65" stroke="#0ea5e9" strokeWidth="2" fill="none" />
+          {/* Animated flow arrows (move when active) */}
+          <g opacity={online ? "1" : "0.3"}>
+            <path d="M 25 60 L 35 60 L 30 55 M 35 60 L 30 65" stroke={online ? "url(#waterFlow)" : "#0ea5e9"} strokeWidth="2" fill="none">
+              {online && <animate attributeName="opacity" values="0.3;1;0.3" dur="1s" repeatCount="indefinite" />}
+            </path>
+            <path d="M 85 60 L 95 60 L 90 55 M 95 60 L 90 65" stroke={online ? "url(#waterFlow)" : "#0ea5e9"} strokeWidth="2" fill="none">
+              {online && <animate attributeName="opacity" values="0.3;1;0.3" dur="1s" begin="0.5s" repeatCount="indefinite" />}
+            </path>
+            {/* Extra flowing water particles when active */}
+            {online && (
+              <>
+                <circle cx="20" cy="60" r="2" fill="#0ea5e9">
+                  <animate attributeName="cx" values="20;40;20" dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="80" cy="60" r="2" fill="#0ea5e9">
+                  <animate attributeName="cx" values="80;100;80" dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" />
+                </circle>
+              </>
+            )}
+          </g>
         </svg>
       );
     }
@@ -236,10 +275,10 @@ export default function DeviceInfoWidget({
     return <Activity className="w-8 h-8" />;
   };
 
-  const getDeviceColor = (deviceType?: DeviceType) => {
+  const getDeviceColor = (deviceType?: string) => {
     if (!deviceType) return "from-blue-500 to-blue-600";
 
-    const type = (deviceType.name || deviceType.category || '').toLowerCase();
+    const type = deviceType.toLowerCase();
     if (type.includes("water") || type.includes("flow")) {
       return "from-cyan-500 to-blue-600";
     }
@@ -256,39 +295,6 @@ export default function DeviceInfoWidget({
       return "from-green-500 to-emerald-600";
     }
     return "from-blue-500 to-blue-600";
-  };
-
-  const getDeviceImageUrl = (deviceType?: string) => {
-    if (!deviceType) return null;
-
-    const type = deviceType.toLowerCase();
-
-    // Water meter images
-    if (type.includes("water") || type.includes("flow")) {
-      return "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=300&fit=crop";
-    }
-
-    // Energy/Electric meter images
-    if (type.includes("energy") || type.includes("electric") || type.includes("power") || type.includes("meter")) {
-      return "https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=400&h=300&fit=crop";
-    }
-
-    // Temperature sensor images
-    if (type.includes("temperature") || type.includes("thermometer")) {
-      return "https://images.unsplash.com/photo-1607400201889-565b1ee75f8e?w=400&h=300&fit=crop";
-    }
-
-    // GPS tracker / Vehicle images
-    if (type.includes("gps") || type.includes("tracker") || type.includes("vehicle")) {
-      return "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=400&h=300&fit=crop";
-    }
-
-    // Gas/Air sensor images
-    if (type.includes("gas") || type.includes("air") || type.includes("environmental")) {
-      return "https://images.unsplash.com/photo-1534237710431-e2fc698436d0?w=400&h=300&fit=crop";
-    }
-
-    return null; // Fallback to icon
   };
 
   if (loading) {
@@ -311,126 +317,58 @@ export default function DeviceInfoWidget({
   }
 
   const online = isOnline();
+  const isWaterType = device.device_type?.toLowerCase().includes("water") || device.device_type?.toLowerCase().includes("flow");
+  const hasCustomSvg = isWaterType;
 
   return (
-    <div className="h-full p-4 flex gap-4 bg-white rounded-lg">
-      {/* Left Side - Device Image */}
-      <div className="w-32 flex-shrink-0 flex items-center justify-center">
-        <div
-          className={`w-28 h-28 bg-gradient-to-br ${getDeviceColor(
-            device.device_type
-          )} rounded-xl flex items-center justify-center text-white shadow-lg`}
-        >
-          {getDeviceIcon(device.device_type)}
-        </div>
-      </div>
-
-      {/* Right Side - Device Details */}
-      <div className="flex-1 flex flex-col">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 truncate">
+    <div className="h-full flex flex-col bg-white rounded-lg overflow-hidden">
+      {/* Header row - Device name + status */}
+      <div className="px-4 pt-4 pb-2 flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-semibold text-gray-900 truncate">
             {device.name || "Unknown Device"}
           </h3>
           {device.device_type && (
-            <p
-              className="text-sm font-medium px-2 py-0.5 rounded inline-block"
-              style={{
-                backgroundColor: device.device_type.color ? `${device.device_type.color}20` : '#f3f4f6',
-                color: device.device_type.color || '#6b7280'
-              }}
-            >
-              {device.device_type.name}
+            <p className="text-xs text-gray-500 capitalize mt-0.5">
+              {device.device_type.replace(/_/g, " ")}
             </p>
           )}
         </div>
-
-        {/* Device Details */}
-        <div className="space-y-3 flex-1">
-        {/* Status */}
         {show_status && (
-          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-            {online ? (
-              <>
-                <Wifi className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-medium text-green-600">
-                  Online
-                </span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-medium text-gray-500">
-                  Offline
-                </span>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Last Seen */}
-        {show_last_seen && device.last_seen && (
-          <div className="flex items-start gap-2 text-sm">
-            <Clock className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <div className="text-gray-500">Last seen</div>
-              <div className="text-gray-900 font-medium">
-                {formatLastSeen(device.last_seen)}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Location */}
-        {show_location && (device.latitude || device.location) && (
-          <div className="flex items-start gap-2 text-sm">
-            <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <div className="text-gray-500">Location</div>
-              {device.location ? (
-                <div className="text-gray-900 font-medium">
-                  {device.location}
-                </div>
-              ) : (
-                <div className="text-gray-900 font-medium">
-                  {device.latitude?.toFixed(6)}, {device.longitude?.toFixed(6)}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Device ID */}
-        {device.id && (
-          <div className="flex items-start gap-2 text-sm">
-            <Activity className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <div className="text-gray-500">Device ID</div>
-              <div className="text-gray-900 font-mono text-xs truncate">
-                {device.id.split("-")[0]}...
-              </div>
-            </div>
-          </div>
-        )}
-        </div>
-
-        {/* Status Badge at Bottom */}
-        <div className="mt-auto pt-3 border-t border-gray-200">
           <div
-            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
               online
-                ? "bg-green-100 text-green-700"
-                : "bg-gray-100 text-gray-600"
+                ? "bg-green-50 text-green-700"
+                : "bg-gray-100 text-gray-500"
             }`}
           >
             <div
-              className={`w-2 h-2 rounded-full mr-1.5 ${
+              className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
                 online ? "bg-green-500 animate-pulse" : "bg-gray-400"
               }`}
             ></div>
-            {online ? "Active" : "Inactive"}
+            {online ? "Online" : "Offline"}
           </div>
-        </div>
+        )}
       </div>
+
+      {/* SVG Visualization - hero section */}
+      <div className="flex-1 flex items-center justify-center px-4 py-2 min-h-0">
+        {hasCustomSvg ? (
+          <div className="w-full h-full max-w-[160px] max-h-[160px]">
+            {getDeviceIcon(device.device_type)}
+          </div>
+        ) : (
+          <div
+            className={`w-20 h-20 bg-gradient-to-br ${getDeviceColor(
+              device.device_type
+            )} rounded-xl flex items-center justify-center text-white`}
+          >
+            {getDeviceIcon(device.device_type)}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

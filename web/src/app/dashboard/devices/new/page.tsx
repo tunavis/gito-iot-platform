@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import ConnectionInstructionsModal from '@/components/ConnectionInstructionsModal';
 import {
   ArrowLeft,
   Plus,
@@ -69,12 +68,6 @@ interface DeviceGroup {
   site_id: string;
 }
 
-interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-}
-
 // Icon mapping
 const categoryIcons: Record<string, React.ReactNode> = {
   sensor: <Thermometer className="w-5 h-5" />,
@@ -104,14 +97,10 @@ export default function NewDevicePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdDevice, setCreatedDevice] = useState<any | null>(null);
-  const [showConnectionInstructions, setShowConnectionInstructions] = useState(false);
 
   // Data
   const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
-  const [allSites, setAllSites] = useState<Site[]>([]);
   const [deviceGroups, setDeviceGroups] = useState<DeviceGroup[]>([]);
 
   // Form State
@@ -130,7 +119,6 @@ export default function NewDevicePage() {
     mqtt_client_id: "",
   });
   const [placement, setPlacement] = useState({
-    organization_id: "",
     site_id: "",
     device_group_id: "",
     latitude: "",
@@ -149,14 +137,11 @@ export default function NewDevicePage() {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const tenant = payload.tenant_id;
 
-      const [typesRes, sitesRes, orgsRes] = await Promise.all([
+      const [typesRes, sitesRes] = await Promise.all([
         fetch(`/api/v1/tenants/${tenant}/device-types?is_active=true`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`/api/v1/tenants/${tenant}/sites`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`/api/v1/tenants/${tenant}/organizations`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -168,12 +153,7 @@ export default function NewDevicePage() {
 
       if (sitesRes.ok) {
         const sitesData = await sitesRes.json();
-        setAllSites(sitesData.data || []);
-      }
-
-      if (orgsRes.ok) {
-        const orgsData = await orgsRes.json();
-        setOrganizations(orgsData.data || []);
+        setSites(sitesData.data || []);
       }
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -186,17 +166,7 @@ export default function NewDevicePage() {
     fetchData();
   }, [fetchData]);
 
-  // Cascade: org → filter sites
-  useEffect(() => {
-    if (placement.organization_id) {
-      const filtered = allSites.filter(s => s.organization_id === placement.organization_id);
-      setSites(filtered);
-    } else {
-      setSites([]);
-    }
-  }, [placement.organization_id, allSites]);
-
-  // Cascade: site → load device groups
+  // Fetch device groups when site changes
   useEffect(() => {
     if (placement.site_id) {
       fetchDeviceGroups(placement.site_id);
@@ -252,22 +222,23 @@ export default function NewDevicePage() {
       const body: any = {
         name: deviceInfo.name,
         device_type_id: selectedType.id,
-        attributes: {
-          description: deviceInfo.description || undefined,
-          serial_number: deviceInfo.serial_number || undefined,
-          tags: deviceInfo.tags.length > 0 ? deviceInfo.tags : undefined,
-          latitude: placement.latitude ? parseFloat(placement.latitude) : undefined,
-          longitude: placement.longitude ? parseFloat(placement.longitude) : undefined,
-        },
-        organization_id: placement.organization_id,
-        site_id: placement.site_id,
-        device_group_id: placement.device_group_id,
+        device_type: selectedType.name,
+        description: deviceInfo.description || undefined,
+        serial_number: deviceInfo.serial_number || undefined,
+        tags: deviceInfo.tags.length > 0 ? deviceInfo.tags : undefined,
+        site_id: placement.site_id || undefined,
+        device_group_id: placement.device_group_id || undefined,
+        latitude: placement.latitude ? parseFloat(placement.latitude) : undefined,
+        longitude: placement.longitude ? parseFloat(placement.longitude) : undefined,
       };
 
       // Add connectivity based on protocol
       if (selectedType.connectivity?.protocol === 'lorawan') {
-        if (connectivity.dev_eui) body.lorawan_dev_eui = connectivity.dev_eui;
-        if (connectivity.ttn_app_id) body.chirpstack_app_id = connectivity.ttn_app_id;
+        if (connectivity.dev_eui) body.dev_eui = connectivity.dev_eui;
+        if (connectivity.app_key) body.app_key = connectivity.app_key;
+        if (connectivity.ttn_app_id) body.ttn_app_id = connectivity.ttn_app_id;
+      } else if (selectedType.connectivity?.protocol === 'mqtt') {
+        if (connectivity.mqtt_client_id) body.mqtt_client_id = connectivity.mqtt_client_id;
       }
 
       const response = await fetch(`/api/v1/tenants/${tenant}/devices`, {
@@ -281,23 +252,11 @@ export default function NewDevicePage() {
 
       if (!response.ok) {
         const err = await response.json();
-        const detail = err.detail;
-        if (Array.isArray(detail)) {
-          throw new Error(detail.map((e: any) => e.msg || JSON.stringify(e)).join('; '));
-        }
-        throw new Error(typeof detail === 'string' ? detail : "Failed to create device");
+        throw new Error(err.detail || "Failed to create device");
       }
 
       const result = await response.json();
-
-      // Store created device and show connection instructions
-      const deviceData = {
-        id: result.id || result.data?.id,
-        name: deviceInfo.name,
-        device_type: selectedType
-      };
-      setCreatedDevice(deviceData);
-      setShowConnectionInstructions(true);
+      router.push(`/dashboard/devices/${result.data?.id || ""}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create device");
     } finally {
@@ -331,7 +290,7 @@ export default function NewDevicePage() {
       case "connectivity":
         return true; // Optional
       case "placement":
-        return placement.organization_id !== "" && placement.site_id !== "" && placement.device_group_id !== "";
+        return true; // Optional
       case "review":
         return true;
       default:
@@ -645,8 +604,7 @@ export default function NewDevicePage() {
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-4">
-              {/* LoRaWAN Configuration */}
-              {selectedType?.connectivity?.protocol === "lorawan" && (
+              {selectedType?.connectivity?.protocol === "lorawan" ? (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -696,10 +654,7 @@ export default function NewDevicePage() {
                     />
                   </div>
                 </>
-              )}
-
-              {/* MQTT Configuration */}
-              {selectedType?.connectivity?.protocol === "mqtt" && (
+              ) : (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     MQTT Client ID
@@ -718,86 +673,6 @@ export default function NewDevicePage() {
                   </p>
                 </div>
               )}
-
-              {/* HTTP/REST Configuration */}
-              {selectedType?.connectivity?.protocol === "http" && (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800">
-                      <strong>HTTP REST API Device</strong><br />
-                      This device connects via HTTP REST API. The platform will provide an API endpoint and authentication token after device creation.
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    No additional configuration required at this step. API credentials will be generated automatically.
-                  </p>
-                </div>
-              )}
-
-              {/* Modbus Configuration */}
-              {selectedType?.connectivity?.protocol === "modbus" && (
-                <div className="space-y-4">
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <p className="text-sm text-purple-800">
-                      <strong>Modbus RTU/TCP Device</strong><br />
-                      Industrial protocol for connecting sensors and meters. Requires a Modbus gateway or bridge for cloud connectivity.
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Configure Modbus registers and gateway settings after device creation.
-                  </p>
-                </div>
-              )}
-
-              {/* OPC-UA Configuration */}
-              {selectedType?.connectivity?.protocol === "opcua" && (
-                <div className="space-y-4">
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                    <p className="text-sm text-orange-800">
-                      <strong>OPC-UA Industrial Device</strong><br />
-                      Industrial automation standard for PLCs and SCADA systems. Requires OPC-UA server endpoint configuration.
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Configure OPC-UA node mappings and security settings in device settings after creation.
-                  </p>
-                </div>
-              )}
-
-              {/* CoAP Configuration */}
-              {selectedType?.connectivity?.protocol === "coap" && (
-                <div className="space-y-4">
-                  <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
-                    <p className="text-sm text-teal-800">
-                      <strong>CoAP Low-Power Device</strong><br />
-                      Constrained Application Protocol for battery-powered IoT devices. Optimized for low bandwidth and power consumption.
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    CoAP endpoint and observe settings can be configured after device creation.
-                  </p>
-                </div>
-              )}
-
-              {/* Default/Other Protocols */}
-              {selectedType?.connectivity?.protocol &&
-               !['lorawan', 'mqtt', 'http', 'modbus', 'opcua', 'coap'].includes(selectedType.connectivity.protocol) && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <p className="text-sm text-gray-700">
-                    <strong>Custom Protocol: {selectedType.connectivity.protocol.toUpperCase()}</strong><br />
-                    This device type uses a custom connectivity protocol. Configuration options can be set after device creation.
-                  </p>
-                </div>
-              )}
-
-              {/* No Protocol Defined */}
-              {!selectedType?.connectivity?.protocol && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <p className="text-sm text-gray-600">
-                    No specific connectivity protocol configured for this device type. Standard platform connectivity will be used.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -808,39 +683,15 @@ export default function NewDevicePage() {
             <div>
               <h2 className="text-lg font-medium text-gray-900 mb-2">Device Placement</h2>
               <p className="text-sm text-gray-600">
-                Assign the device to an organization, site, and group. All three are required.
+                Assign the device to a site and group for organization.
               </p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-4">
-              {/* Organization (required) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Building className="w-4 h-4 inline mr-1" />
-                  Organization <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={placement.organization_id}
-                  onChange={(e) =>
-                    setPlacement({ ...placement, organization_id: e.target.value, site_id: "", device_group_id: "" })
-                  }
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  required
-                >
-                  <option value="">Select organization...</option>
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Site (required, filtered by org) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Building className="w-4 h-4 inline mr-1" />
-                  Site <span className="text-red-500">*</span>
+                  Site
                 </label>
                 <select
                   value={placement.site_id}
@@ -848,10 +699,8 @@ export default function NewDevicePage() {
                     setPlacement({ ...placement, site_id: e.target.value, device_group_id: "" })
                   }
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  disabled={!placement.organization_id}
-                  required
                 >
-                  <option value="">{placement.organization_id ? 'Select site...' : 'Select organization first'}</option>
+                  <option value="">No site assigned</option>
                   {sites.map((site) => (
                     <option key={site.id} value={site.id}>
                       {site.name}
@@ -860,29 +709,28 @@ export default function NewDevicePage() {
                 </select>
               </div>
 
-              {/* Device Group (required, filtered by site) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Layers className="w-4 h-4 inline mr-1" />
-                  Device Group <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={placement.device_group_id}
-                  onChange={(e) =>
-                    setPlacement({ ...placement, device_group_id: e.target.value })
-                  }
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  disabled={!placement.site_id}
-                  required
-                >
-                  <option value="">{placement.site_id ? 'Select device group...' : 'Select site first'}</option>
-                  {deviceGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {placement.site_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <Layers className="w-4 h-4 inline mr-1" />
+                    Device Group
+                  </label>
+                  <select
+                    value={placement.device_group_id}
+                    onChange={(e) =>
+                      setPlacement({ ...placement, device_group_id: e.target.value })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  >
+                    <option value="">No group assigned</option>
+                    {deviceGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-gray-200">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1027,12 +875,6 @@ export default function NewDevicePage() {
                 <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">Placement</h3>
                 <dl className="space-y-2">
                   <div className="flex justify-between">
-                    <dt className="text-gray-600">Organization</dt>
-                    <dd className="text-gray-900">
-                      {organizations.find((o) => o.id === placement.organization_id)?.name || "Not assigned"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
                     <dt className="text-gray-600">Site</dt>
                     <dd className="text-gray-900">
                       {sites.find((s) => s.id === placement.site_id)?.name || "Not assigned"}
@@ -1091,17 +933,6 @@ export default function NewDevicePage() {
         </div>
         </div>
       </main>
-
-      {/* Connection Instructions Modal */}
-      {showConnectionInstructions && createdDevice && (
-        <ConnectionInstructionsModal
-          device={createdDevice}
-          onClose={() => {
-            setShowConnectionInstructions(false);
-            router.push(`/dashboard/devices/${createdDevice.id}`);
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -98,8 +98,12 @@ CREATE TABLE IF NOT EXISTS devices (
     organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
     site_id UUID REFERENCES sites(id) ON DELETE SET NULL,
     device_group_id UUID,
+    device_type_id UUID REFERENCES device_types(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
     device_type VARCHAR(100) NOT NULL,
+    description TEXT,
+    serial_number VARCHAR(255),
+    tags JSONB DEFAULT '[]',
     dev_eui VARCHAR(16),
     status VARCHAR(50) NOT NULL DEFAULT 'offline',
     last_seen TIMESTAMPTZ,
@@ -113,6 +117,23 @@ CREATE TABLE IF NOT EXISTS devices (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT valid_device_status CHECK (status IN ('online', 'offline', 'idle', 'error', 'provisioning'))
 );
+
+-- Trigger: auto-sync device_type from device_types.name when device_type_id is set
+CREATE OR REPLACE FUNCTION sync_device_type()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.device_type_id IS NOT NULL THEN
+        SELECT name INTO NEW.device_type
+        FROM device_types WHERE id = NEW.device_type_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_sync_device_type ON devices;
+CREATE TRIGGER trigger_sync_device_type
+    BEFORE INSERT OR UPDATE OF device_type_id ON devices
+    FOR EACH ROW EXECUTE FUNCTION sync_device_type();
 
 -- Device Groups (logical groupings of devices)
 CREATE TABLE IF NOT EXISTS device_groups (
@@ -493,22 +514,6 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
     CONSTRAINT check_valid_position CHECK (position_x >= 0 AND position_y >= 0)
 );
 
-CREATE TABLE IF NOT EXISTS solution_templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(200) NOT NULL UNIQUE,
-    identifier VARCHAR(100) NOT NULL UNIQUE,
-    category VARCHAR(50) NOT NULL,
-    description TEXT,
-    icon VARCHAR(50) DEFAULT 'layout-dashboard',
-    color VARCHAR(20) DEFAULT '#0066CC',
-    target_device_types JSONB NOT NULL DEFAULT '[]',
-    required_capabilities JSONB NOT NULL DEFAULT '[]',
-    template_config JSONB NOT NULL,
-    preview_image_url TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 -- ============================================================================
 -- SECTION 8: INDEXES
@@ -583,6 +588,9 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_group') THEN
         CREATE INDEX idx_devices_group ON devices(device_group_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_devices_device_type_id') THEN
+        CREATE INDEX idx_devices_device_type_id ON devices(device_type_id);
     END IF;
 
     -- Device Groups
@@ -707,16 +715,6 @@ BEGIN
         CREATE INDEX idx_dashboard_widgets_type ON dashboard_widgets(widget_type);
     END IF;
 
-    -- Solution Templates
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_category') THEN
-        CREATE INDEX idx_solution_templates_category ON solution_templates(category);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_active') THEN
-        CREATE INDEX idx_solution_templates_active ON solution_templates(is_active);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_solution_templates_identifier') THEN
-        CREATE INDEX idx_solution_templates_identifier ON solution_templates(identifier);
-    END IF;
 
     -- Notification Templates
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notification_templates_tenant') THEN
@@ -979,7 +977,7 @@ DECLARE
         'notification_channels', 'notification_rules', 'notification_templates',
         'firmware_versions', 'ota_campaigns',
         'group_bulk_operations', 'dashboards', 'dashboard_widgets',
-        'solution_templates', 'notifications'
+        'notifications'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables_with_updated_at

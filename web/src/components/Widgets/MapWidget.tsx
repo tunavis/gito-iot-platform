@@ -44,6 +44,7 @@ interface DeviceLocation {
   latitude?: number;
   longitude?: number;
   location?: string;
+  attributes?: Record<string, any>;
 }
 
 export default function MapWidget({ config, dataSources }: MapWidgetProps) {
@@ -88,7 +89,13 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
 
           const result = await response.json();
           const allDevices = result.data || [];
-          const validDevices = allDevices.filter(
+          // Extract GPS from attributes JSONB or top-level fields
+          const devicesWithGPS = allDevices.map((d: any) => ({
+            ...d,
+            latitude: d.latitude ?? d.attributes?.latitude,
+            longitude: d.longitude ?? d.attributes?.longitude,
+          }));
+          const validDevices = devicesWithGPS.filter(
             (d: any) => d.latitude && d.longitude
           );
 
@@ -121,8 +128,16 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
         });
 
         const results = await Promise.all(devicePromises);
-        const validDevices = results.filter(
-          (d) => d && (d.latitude || d.longitude)
+        // Extract GPS from attributes JSONB or top-level fields
+        const devicesWithGPS = results
+          .filter((d) => d !== null)
+          .map((d: any) => ({
+            ...d,
+            latitude: d.latitude ?? d.attributes?.latitude,
+            longitude: d.longitude ?? d.attributes?.longitude,
+          }));
+        const validDevices = devicesWithGPS.filter(
+          (d) => d.latitude && d.longitude
         );
         setDevices(validDevices);
         setLoading(false);

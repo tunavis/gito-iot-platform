@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import { useToast } from '@/components/ToastProvider';
 import {
   Activity,
   Battery,
@@ -23,25 +22,61 @@ import {
   Trash2,
   Bell,
   BarChart3,
-  Calendar
+  Calendar,
+  Zap,
+  Droplets,
+  Thermometer,
+  Gauge,
+  Navigation,
+  Cpu,
+  HardDrive,
+  Package
 } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import HMIRenderer from '@/components/HMI/HMIRenderer';
 
-interface DeviceType {
-  id: string;
-  name: string;
-  category: string;
-  icon: string;
-  color: string;
-  manufacturer?: string;
-  model?: string;
-}
+// Icon mapping for common metrics (optional visual enhancement, NOT used for filtering)
+const METRIC_ICONS: Record<string, any> = {
+  battery: Battery,
+  rssi: Signal,
+  signal_strength: Signal,
+  temperature: Thermometer,
+  humidity: Droplets,
+  pressure: Gauge,
+  voltage: Zap,
+  current: Zap,
+  power: Zap,
+  energy: Zap,
+  speed: Navigation,
+  cpu_usage: Cpu,
+  memory_usage: HardDrive,
+  packets_received: Package,
+  packets_transmitted: Package
+};
+
+// Color mapping for common metrics (optional visual enhancement)
+const METRIC_COLORS: Record<string, string> = {
+  temperature: '#ef4444',
+  humidity: '#3b82f6',
+  battery: '#10b981',
+  rssi: '#8b5cf6',
+  signal_strength: '#8b5cf6',
+  pressure: '#f59e0b',
+  voltage: '#6366f1',
+  current: '#ec4899',
+  power: '#f59e0b',
+  energy: '#10b981',
+  speed: '#ef4444',
+  cpu_usage: '#f59e0b',
+  memory_usage: '#8b5cf6',
+  altitude: '#3b82f6',
+  flow_rate: '#3b82f6'
+};
 
 interface Device {
   id: string;
   name: string;
-  device_type_id: string;
-  device_type?: DeviceType;
+  device_type: string;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -51,19 +86,31 @@ interface Device {
   location?: { latitude: number; longitude: number } | null;
   firmware_version?: string | null;
   hardware_version?: string | null;
-  device_token?: string | null;
-  chirpstack_app_id?: string | null;
-  device_profile_id?: string | null;
 }
 
+interface DeviceType {
+  id: string;
+  name: string;
+  category: string;
+  telemetry_schema: Record<string, {
+    type: string;
+    unit?: string;
+    min?: number;
+    max?: number;
+    description?: string;
+  }>;
+  connectivity?: {
+    protocol?: string;
+    mqtt_topic_template?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+// Dynamic telemetry point - no hardcoded fields
 interface TelemetryPoint {
   timestamp: string;
-  temperature?: number | null;
-  humidity?: number | null;
-  battery?: number | null;
-  rssi?: number | null;
-  pressure?: number | null;
-  payload?: Record<string, any> | null;
+  [key: string]: any;
 }
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
@@ -72,29 +119,57 @@ export default function DeviceDetailPage() {
   const router = useRouter();
   const params = useParams();
   const deviceId = params?.id as string;
-  const toast = useToast();
 
   const [device, setDevice] = useState<Device | null>(null);
+  const [deviceType, setDeviceType] = useState<DeviceType | null>(null);
   const [loading, setLoading] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>([]);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('live');
+  const [tenantId, setTenantId] = useState<string>('');
   const [alarms, setAlarms] = useState<any[]>([]);
 
-  // Calculate time range
+  // Auto-discover metrics from telemetry data
+  const discoveredMetrics = useMemo(() => {
+    if (telemetryData.length === 0) return [];
+
+    // Get all keys from telemetry data (excluding system fields)
+    const systemFields = ['timestamp', 'device_id', 'tenant_id', 'id', 'ts', 'metric_key', 'metric_value', 'metric_value_str', 'metric_value_json'];
+    const metricSet = new Set<string>();
+
+    telemetryData.forEach(point => {
+      Object.keys(point).forEach(key => {
+        if (!systemFields.includes(key)) {
+          metricSet.add(key);
+        }
+      });
+    });
+
+    return Array.from(metricSet);
+  }, [telemetryData]);
+
+  // Filter numeric metrics for KPI cards
+  const numericMetrics = useMemo(() => {
+    return discoveredMetrics.filter(metric => {
+      const sample = telemetryData.find(d => d[metric] != null);
+      return sample && typeof sample[metric] === 'number';
+    });
+  }, [discoveredMetrics, telemetryData]);
+
   const getTimeRangeHours = (range: TimeRange): number => {
     const map = { '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720 };
     return map[range];
   };
 
-  // Load device and initial data
+  // Load device and device type
   useEffect(() => {
     const load = async () => {
       const token = localStorage.getItem('auth_token');
       if (!token) return router.push('/auth/login');
       const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+      setTenantId(tenant);
 
       try {
         // Load device details
@@ -102,7 +177,19 @@ export default function DeviceDetailPage() {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
-          setDevice((await res.json()).data);
+          const deviceData = (await res.json()).data;
+          setDevice(deviceData);
+
+          // Load device type if available
+          if (deviceData.device_type_id) {
+            const typeRes = await fetch(`/api/v1/tenants/${tenant}/device-types/${deviceData.device_type_id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (typeRes.ok) {
+              const typeData = await typeRes.json();
+              setDeviceType(typeData.data || typeData);
+            }
+          }
         }
 
         // Load recent alarms
@@ -154,47 +241,42 @@ export default function DeviceDetailPage() {
     loadTelemetry();
   }, [deviceId, device, timeRange]);
 
-  // WebSocket for real-time updates
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (!token || !deviceId) return;
+  // Get metric metadata from device type schema
+  const getMetricMetadata = (metricKey: string): {
+    type?: string;
+    unit?: string;
+    min?: number;
+    max?: number;
+    description?: string;
+  } => {
+    if (!deviceType?.telemetry_schema) return {};
+    return deviceType.telemetry_schema[metricKey] || {};
+  };
 
-    const ws = new WebSocket(`ws://localhost:8000/api/v1/ws/devices/${deviceId}?token=${token}`);
+  // Calculate trend for any metric
+  const calculateTrend = (metricKey: string) => {
+    if (telemetryData.length < 2) return null;
+    const recentData = telemetryData.slice(-10).filter(d => d[metricKey] != null && typeof d[metricKey] === 'number');
+    if (recentData.length < 2) return null;
 
-    ws.onopen = () => setWsConnected(true);
-    ws.onclose = () => setWsConnected(false);
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'telemetry' && data.data) {
-          setDevice(prev => prev ? {
-            ...prev,
-            last_seen: new Date().toISOString(),
-            battery_level: data.data.battery ?? prev.battery_level,
-            signal_strength: data.data.rssi ?? prev.signal_strength
-          } : null);
+    const values = recentData.map(d => d[metricKey] as number);
+    const avg1 = values.slice(0, Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(values.length / 2);
+    const avg2 = values.slice(Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.ceil(values.length / 2);
 
-          // Add to telemetry data — include payload for all dynamic metrics
-          const wsPayload = data.data.payload || data.data;
-          setTelemetryData(prev => [...prev, {
-            timestamp: new Date().toISOString(),
-            temperature: data.data.temperature ?? wsPayload.temperature ?? null,
-            humidity: data.data.humidity ?? wsPayload.humidity ?? null,
-            battery: data.data.battery ?? wsPayload.battery ?? null,
-            rssi: data.data.rssi ?? wsPayload.rssi ?? null,
-            pressure: data.data.pressure ?? wsPayload.pressure ?? null,
-            payload: wsPayload
-          }].slice(-100)); // Keep last 100 points
-        }
-      } catch (e) {
-        console.error('WebSocket message error:', e);
-      }
-    };
+    const change = ((avg2 - avg1) / avg1) * 100;
+    return { value: change, direction: change > 0 ? 'up' : 'down' };
+  };
 
-    return () => ws.close();
-  }, [deviceId]);
+  // Get current value for metric (latest/most recent)
+  const getCurrentValue = (metricKey: string) => {
+    // Get the LAST point with this metric (most recent), not the first
+    const pointsWithMetric = telemetryData.filter(d => d[metricKey] != null);
+    if (pointsWithMetric.length === 0) return null;
+    const latestPoint = pointsWithMetric[pointsWithMetric.length - 1];
+    return latestPoint[metricKey];
+  };
 
-  // Calculate device health score
+  // Calculate health score
   const healthScore = useMemo(() => {
     if (!device) return 0;
     let score = 100;
@@ -202,15 +284,11 @@ export default function DeviceDetailPage() {
     if (device.status === 'offline') score -= 50;
     else if (device.status === 'idle') score -= 20;
 
-    if (device.battery_level !== null) {
-      if (device.battery_level < 20) score -= 20;
-      else if (device.battery_level < 50) score -= 10;
-    }
+    if (device.battery_level !== null && device.battery_level < 20) score -= 20;
+    else if (device.battery_level !== null && device.battery_level < 50) score -= 10;
 
-    if (device.signal_strength !== null) {
-      if (device.signal_strength < -100) score -= 15;
-      else if (device.signal_strength < -80) score -= 5;
-    }
+    if (device.signal_strength !== null && device.signal_strength < -100) score -= 15;
+    else if (device.signal_strength !== null && device.signal_strength < -80) score -= 5;
 
     if (alarms.length > 0) score -= Math.min(alarms.length * 5, 20);
 
@@ -223,32 +301,14 @@ export default function DeviceDetailPage() {
     return 'text-red-600 bg-red-50 border-red-200';
   };
 
-  // Calculate trends
-  const calculateTrend = (metric: 'temperature' | 'humidity' | 'battery' | 'rssi') => {
-    if (telemetryData.length < 2) return null;
-    const recentData = telemetryData.slice(-10).filter(d => d[metric] !== null && d[metric] !== undefined);
-    if (recentData.length < 2) return null;
-
-    const values = recentData.map(d => d[metric]!);
-    const avg1 = values.slice(0, Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(values.length / 2);
-    const avg2 = values.slice(Math.floor(values.length / 2)).reduce((a, b) => a + b, 0) / Math.ceil(values.length / 2);
-
-    const change = ((avg2 - avg1) / avg1) * 100;
-    return { value: change, direction: change > 0 ? 'up' : 'down' };
-  };
-
   const exportTelemetry = () => {
-    if (telemetryData.length === 0) return;
+    if (telemetryData.length === 0 || discoveredMetrics.length === 0) return;
 
     const csv = [
-      ['Timestamp', 'Temperature (°C)', 'Humidity (%)', 'Battery (%)', 'RSSI (dBm)', 'Pressure (hPa)'].join(','),
+      ['Timestamp', ...discoveredMetrics].join(','),
       ...telemetryData.map(d => [
         d.timestamp,
-        d.temperature ?? '',
-        d.humidity ?? '',
-        d.battery ?? '',
-        d.rssi ?? '',
-        d.pressure ?? ''
+        ...discoveredMetrics.map(m => d[m] ?? '')
       ].join(','))
     ].join('\n');
 
@@ -325,7 +385,7 @@ export default function DeviceDetailPage() {
               <div className="flex items-center gap-3 text-sm text-gray-600">
                 <span className="font-mono bg-gray-100 px-2 py-1 rounded">{deviceId}</span>
                 <span>•</span>
-                <span>{device.device_type?.name || 'Unknown Type'}</span>
+                <span>{device.device_type}</span>
                 {device.location && (
                   <>
                     <span>•</span>
@@ -339,14 +399,6 @@ export default function DeviceDetailPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push(`/dashboard/devices/${deviceId}/edit`)}
-                className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700 font-medium"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit
-              </button>
-
               <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-semibold ${
                 device.status === 'online'
                   ? 'bg-green-50 text-green-700 border-green-200'
@@ -365,139 +417,40 @@ export default function DeviceDetailPage() {
           </div>
         </div>
 
-        {/* Quick Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Battery */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Battery className="w-5 h-5 text-green-600" />
-                </div>
-                <span className="text-sm font-medium text-gray-600">Battery Level</span>
-              </div>
-              {calculateTrend('battery') && (
-                <div className={`flex items-center gap-1 text-xs font-medium ${
-                  calculateTrend('battery')!.direction === 'up' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {calculateTrend('battery')!.direction === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {Math.abs(calculateTrend('battery')!.value).toFixed(1)}%
-                </div>
-              )}
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {device.battery_level !== null && device.battery_level !== undefined
-                ? `${Math.round(device.battery_level)}%`
-                : 'N/A'}
-            </p>
-            <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all ${
-                  device.battery_level && device.battery_level > 50
-                    ? 'bg-green-500'
-                    : device.battery_level && device.battery_level > 20
-                    ? 'bg-yellow-500'
-                    : 'bg-red-500'
-                }`}
-                style={{ width: `${device.battery_level || 0}%` }}
-              ></div>
-            </div>
-          </div>
-
-          {/* Signal Strength */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Signal className="w-5 h-5 text-blue-600" />
-                </div>
-                <span className="text-sm font-medium text-gray-600">Signal Strength</span>
-              </div>
-              {calculateTrend('rssi') && (
-                <div className={`flex items-center gap-1 text-xs font-medium ${
-                  calculateTrend('rssi')!.direction === 'up' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {calculateTrend('rssi')!.direction === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {Math.abs(calculateTrend('rssi')!.value).toFixed(1)}%
-                </div>
-              )}
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {device.signal_strength ? `${device.signal_strength} dBm` : 'N/A'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {device.signal_strength && device.signal_strength > -70 ? 'Excellent' :
-               device.signal_strength && device.signal_strength > -85 ? 'Good' :
-               device.signal_strength && device.signal_strength > -100 ? 'Fair' : 'Poor'}
-            </p>
-          </div>
-
-          {/* Last Seen */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Clock className="w-5 h-5 text-purple-600" />
-              </div>
-              <span className="text-sm font-medium text-gray-600">Last Seen</span>
-            </div>
-            <p className="text-lg font-semibold text-gray-900">
-              {device.last_seen
-                ? new Date(device.last_seen).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
-                : 'Never'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {device.last_seen
-                ? `${Math.round((Date.now() - new Date(device.last_seen).getTime()) / 1000 / 60)} min ago`
-                : 'Device has not reported'}
-            </p>
-          </div>
-
-          {/* Active Alarms */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                alarms.length > 0 ? 'bg-red-100' : 'bg-green-100'
-              }`}>
-                {alarms.length > 0 ? (
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                ) : (
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                )}
-              </div>
-              <span className="text-sm font-medium text-gray-600">Active Alarms</span>
-            </div>
-            <p className={`text-3xl font-bold ${alarms.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {alarms.length}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {alarms.length > 0 ? 'Requires attention' : 'All systems normal'}
-            </p>
-          </div>
-        </div>
-
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-6">
           <nav className="flex gap-6">
-            {['overview', 'telemetry', 'alarms', 'credentials', 'settings'].map(tab => (
+            {([
+              { key: 'live', label: 'Live Device' },
+              { key: 'overview', label: 'Overview' },
+              { key: 'telemetry', label: 'Telemetry' },
+              { key: 'alarms', label: 'Alarms' },
+              { key: 'settings', label: 'Settings' },
+            ] as const).map(tab => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`pb-3 px-2 border-b-2 capitalize font-medium transition-colors ${
-                  activeTab === tab
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`pb-3 px-2 border-b-2 font-medium transition-colors ${
+                  activeTab === tab.key
                     ? 'border-primary-600 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </nav>
         </div>
+
+        {/* Live Device Tab - HMI Renderer */}
+        {activeTab === 'live' && tenantId && (
+          <HMIRenderer
+            deviceId={deviceId}
+            tenantId={tenantId}
+            device={device}
+            deviceType={deviceType}
+          />
+        )}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (
@@ -512,16 +465,7 @@ export default function DeviceDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Device Type</p>
-                  <p
-                    className="text-sm font-medium px-3 py-2 rounded border"
-                    style={{
-                      backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f9fafb',
-                      borderColor: device.device_type?.color ? `${device.device_type.color}40` : '#e5e7eb',
-                      color: device.device_type?.color || '#111827'
-                    }}
-                  >
-                    {device.device_type?.name || 'Unknown Type'}
-                  </p>
+                  <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.device_type}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Status</p>
@@ -583,13 +527,10 @@ export default function DeviceDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        {point.temperature && (
-                          <p className="text-sm text-gray-600">Temp: {point.temperature.toFixed(1)}°C</p>
-                        )}
-                        {point.humidity && (
-                          <p className="text-xs text-gray-500">Humidity: {point.humidity.toFixed(1)}%</p>
-                        )}
+                      <div className="text-right text-xs text-gray-600">
+                        {discoveredMetrics.slice(0, 2).map(m => point[m] != null && (
+                          <p key={m}>{m}: {typeof point[m] === 'number' ? point[m].toFixed(1) : point[m]}</p>
+                        ))}
                       </div>
                     </div>
                   ))
@@ -659,213 +600,22 @@ export default function DeviceDetailPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Temperature Chart */}
-                {telemetryData.some(d => d.temperature !== null && d.temperature !== undefined) && (
-                  <TelemetryChartCard
-                    title="Temperature"
-                    data={telemetryData}
-                    dataKey="temperature"
-                    unit="°C"
-                    color="#ef4444"
-                  />
-                )}
+                {/* Dynamically generate charts for all numeric metrics */}
+                {numericMetrics.map(metricKey => {
+                  const metadata = getMetricMetadata(metricKey);
+                  const color = METRIC_COLORS[metricKey] || '#6366f1';
 
-                {/* Humidity Chart */}
-                {telemetryData.some(d => d.humidity !== null && d.humidity !== undefined) && (
-                  <TelemetryChartCard
-                    title="Humidity"
-                    data={telemetryData}
-                    dataKey="humidity"
-                    unit="%"
-                    color="#3b82f6"
-                  />
-                )}
-
-                {/* Battery Chart */}
-                {telemetryData.some(d => d.battery !== null && d.battery !== undefined) && (
-                  <TelemetryChartCard
-                    title="Battery Level"
-                    data={telemetryData}
-                    dataKey="battery"
-                    unit="%"
-                    color="#10b981"
-                  />
-                )}
-
-                {/* RSSI Chart */}
-                {telemetryData.some(d => d.rssi !== null && d.rssi !== undefined) && (
-                  <TelemetryChartCard
-                    title="Signal Strength (RSSI)"
-                    data={telemetryData}
-                    dataKey="rssi"
-                    unit="dBm"
-                    color="#8b5cf6"
-                  />
-                )}
-
-                {/* Pressure Chart */}
-                {telemetryData.some(d => d.pressure !== null && d.pressure !== undefined) && (
-                  <TelemetryChartCard
-                    title="Pressure"
-                    data={telemetryData}
-                    dataKey="pressure"
-                    unit="hPa"
-                    color="#f59e0b"
-                  />
-                )}
-
-                {/* Payload Charts - for device-specific telemetry */}
-                {/* Voltage Chart */}
-                {telemetryData.some(d => d.payload?.voltage !== null && d.payload?.voltage !== undefined) && (
-                  <TelemetryChartCard
-                    title="Voltage"
-                    data={telemetryData}
-                    payloadKey="voltage"
-                    unit="V"
-                    color="#6366f1"
-                  />
-                )}
-
-                {/* Current Chart */}
-                {telemetryData.some(d => d.payload?.current !== null && d.payload?.current !== undefined) && (
-                  <TelemetryChartCard
-                    title="Current"
-                    data={telemetryData}
-                    payloadKey="current"
-                    unit="A"
-                    color="#ec4899"
-                  />
-                )}
-
-                {/* Power Chart */}
-                {telemetryData.some(d => d.payload?.power !== null && d.payload?.power !== undefined) && (
-                  <TelemetryChartCard
-                    title="Power"
-                    data={telemetryData}
-                    payloadKey="power"
-                    unit="W"
-                    color="#f59e0b"
-                  />
-                )}
-
-                {/* Energy Chart */}
-                {telemetryData.some(d => d.payload?.energy !== null && d.payload?.energy !== undefined) && (
-                  <TelemetryChartCard
-                    title="Energy"
-                    data={telemetryData}
-                    payloadKey="energy"
-                    unit="kWh"
-                    color="#10b981"
-                  />
-                )}
-
-                {/* Flow Rate Chart */}
-                {telemetryData.some(d => d.payload?.flow_rate !== null && d.payload?.flow_rate !== undefined) && (
-                  <TelemetryChartCard
-                    title="Flow Rate"
-                    data={telemetryData}
-                    payloadKey="flow_rate"
-                    unit="L/min"
-                    color="#3b82f6"
-                  />
-                )}
-
-                {/* Total Volume Chart */}
-                {telemetryData.some(d => d.payload?.total_volume !== null && d.payload?.total_volume !== undefined) && (
-                  <TelemetryChartCard
-                    title="Total Volume"
-                    data={telemetryData}
-                    payloadKey="total_volume"
-                    unit="L"
-                    color="#8b5cf6"
-                  />
-                )}
-
-                {/* Speed Chart (GPS Trackers) */}
-                {telemetryData.some(d => d.payload?.speed !== null && d.payload?.speed !== undefined) && (
-                  <TelemetryChartCard
-                    title="Speed"
-                    data={telemetryData}
-                    payloadKey="speed"
-                    unit="km/h"
-                    color="#ef4444"
-                  />
-                )}
-
-                {/* CPU Usage Chart (Gateways) */}
-                {telemetryData.some(d => d.payload?.cpu_usage !== null && d.payload?.cpu_usage !== undefined) && (
-                  <TelemetryChartCard
-                    title="CPU Usage"
-                    data={telemetryData}
-                    payloadKey="cpu_usage"
-                    unit="%"
-                    color="#f59e0b"
-                  />
-                )}
-
-                {/* Memory Usage Chart (Gateways) */}
-                {telemetryData.some(d => d.payload?.memory_usage !== null && d.payload?.memory_usage !== undefined) && (
-                  <TelemetryChartCard
-                    title="Memory Usage"
-                    data={telemetryData}
-                    payloadKey="memory_usage"
-                    unit="%"
-                    color="#8b5cf6"
-                  />
-                )}
-
-                {/* Air Quality Chart */}
-                {telemetryData.some(d => d.payload?.air_quality !== null && d.payload?.air_quality !== undefined) && (
-                  <TelemetryChartCard
-                    title="Air Quality Index"
-                    data={telemetryData}
-                    payloadKey="air_quality"
-                    unit="AQI"
-                    color="#ef4444"
-                  />
-                )}
-
-                {/* Target Temperature Chart (Thermostats) */}
-                {telemetryData.some(d => d.payload?.target_temperature !== null && d.payload?.target_temperature !== undefined) && (
-                  <TelemetryChartCard
-                    title="Target Temperature"
-                    data={telemetryData}
-                    payloadKey="target_temperature"
-                    unit="°C"
-                    color="#10b981"
-                  />
-                )}
-
-                {/* Auto-discover remaining payload metrics not already charted above */}
-                {(() => {
-                  const knownKeys = new Set([
-                    'temperature', 'humidity', 'battery', 'rssi', 'pressure',
-                    'voltage', 'current', 'power', 'energy', 'flow_rate',
-                    'total_volume', 'speed', 'cpu_usage', 'memory_usage',
-                    'air_quality', 'target_temperature'
-                  ]);
-                  const dynamicColors = ['#0ea5e9', '#d946ef', '#84cc16', '#f97316', '#14b8a6', '#a855f7', '#e11d48', '#0891b2'];
-                  const discoveredKeys = new Set<string>();
-                  telemetryData.forEach(d => {
-                    if (d.payload && typeof d.payload === 'object') {
-                      Object.keys(d.payload).forEach(k => {
-                        if (!knownKeys.has(k) && typeof d.payload![k] === 'number') {
-                          discoveredKeys.add(k);
-                        }
-                      });
-                    }
-                  });
-                  return Array.from(discoveredKeys).map((key, i) => (
+                  return (
                     <TelemetryChartCard
-                      key={key}
-                      title={key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      key={metricKey}
+                      title={metadata.description || metricKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       data={telemetryData}
-                      payloadKey={key}
-                      unit=""
-                      color={dynamicColors[i % dynamicColors.length]}
+                      metricKey={metricKey}
+                      unit={metadata.unit || ''}
+                      color={color}
                     />
-                  ));
-                })()}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -874,55 +624,35 @@ export default function DeviceDetailPage() {
         {/* Alarms Tab */}
         {activeTab === 'alarms' && <DeviceAlarms deviceId={deviceId} />}
 
-        {/* Credentials Tab */}
-        {activeTab === 'credentials' && <DeviceCredentials deviceId={deviceId} />}
-
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} />
+          <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} discoveredMetrics={discoveredMetrics} />
         )}
       </main>
     </div>
   );
 }
 
-// Telemetry Chart Card Component
+// Dynamic Telemetry Chart Card
 function TelemetryChartCard({
   title,
   data,
-  dataKey,
+  metricKey,
   unit,
-  color,
-  payloadKey
+  color
 }: {
   title: string;
   data: TelemetryPoint[];
-  dataKey?: keyof TelemetryPoint;
+  metricKey: string;
   unit: string;
   color: string;
-  payloadKey?: string;
 }) {
   const chartData = data
-    .map(d => {
-      let value: number | null | undefined;
-
-      // Check payload first if payloadKey is provided
-      if (payloadKey && d.payload && typeof d.payload[payloadKey] === 'number') {
-        value = d.payload[payloadKey];
-      } else if (dataKey && d[dataKey] !== null && d[dataKey] !== undefined) {
-        value = d[dataKey] as number;
-      }
-      // Fallback: if dataKey was used but value is null, check payload too
-      if ((value === null || value === undefined) && dataKey && d.payload && typeof d.payload[dataKey as string] === 'number') {
-        value = d.payload[dataKey as string];
-      }
-
-      return {
-        time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        value
-      };
-    })
-    .filter(d => d.value !== null && d.value !== undefined) as { time: string; value: number }[];
+    .map(d => ({
+      time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      value: d[metricKey]
+    }))
+    .filter(d => d.value != null && typeof d.value === 'number') as { time: string; value: number }[];
 
   if (chartData.length === 0) return null;
 
@@ -943,7 +673,7 @@ function TelemetryChartCard({
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={chartData}>
           <defs>
-            <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`gradient-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.3} />
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
@@ -974,12 +704,11 @@ function TelemetryChartCard({
             stroke={color}
             strokeWidth={2}
             fillOpacity={1}
-            fill={`url(#gradient-${dataKey})`}
+            fill={`url(#gradient-${metricKey})`}
           />
         </AreaChart>
       </ResponsiveContainer>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200">
         <div>
           <p className="text-xs text-gray-500">Min</p>
@@ -998,7 +727,7 @@ function TelemetryChartCard({
   );
 }
 
-// Device Alarms Component
+// Device Alarms Component (unchanged from original)
 function DeviceAlarms({ deviceId }: { deviceId: string }) {
   type AlarmSeverity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'WARNING';
   type AlarmStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'CLEARED';
@@ -1215,344 +944,12 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
   );
 }
 
-// Device Credentials Component
-function DeviceCredentials({ deviceId }: { deviceId: string }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [masked, setMasked] = useState(true);
-  const [regenerating, setRegenerating] = useState(false);
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [device, setDevice] = useState<Device | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadDevice();
-  }, [deviceId]);
-
-  const loadDevice = async () => {
-    try {
-      const res = await fetch(`/api/v1/tenants/me/devices/${deviceId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const d = data.data || data;
-        setDevice(d);
-        if (d.device_token) setToken(d.device_token);
-      }
-    } catch (err) {
-      console.error('Failed to load device:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegenerate = async () => {
-    setRegenerating(true);
-    try {
-      const res = await fetch(`/api/v1/tenants/me/devices/${deviceId}/regenerate-token`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const newToken = data.data?.device_token || data.device_token;
-        setToken(newToken);
-        setMasked(false);
-        setConfirmRegenerate(false);
-      }
-    } catch (err) {
-      console.error('Failed to regenerate token:', err);
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const maskToken = (t: string) => {
-    if (t.length <= 8) return '•'.repeat(t.length);
-    return t.slice(0, 4) + '•'.repeat(t.length - 8) + t.slice(-4);
-  };
-
-  const mqttTopic = device ? `devices/${device.dev_eui || deviceId}/telemetry` : '';
-  const httpEndpoint = `/api/v1/devices/${deviceId}/telemetry`;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Device Token */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 bg-amber-50 rounded-lg">
-            <Activity className="w-5 h-5 text-amber-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Device Access Token</h3>
-            <p className="text-sm text-gray-500">Used for HTTP REST API authentication</p>
-          </div>
-        </div>
-
-        {token ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-gray-900 text-green-400 px-4 py-3 rounded-lg font-mono text-sm break-all">
-                {masked ? maskToken(token) : token}
-              </code>
-              <button
-                onClick={() => setMasked(!masked)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                title={masked ? 'Show token' : 'Hide token'}
-              >
-                {masked ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                )}
-              </button>
-              <button
-                onClick={() => copyToClipboard(token, 'token')}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Copy to clipboard"
-              >
-                {copied === 'token' ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
-                )}
-              </button>
-            </div>
-
-            {!confirmRegenerate ? (
-              <button
-                onClick={() => setConfirmRegenerate(true)}
-                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
-              >
-                Regenerate Token
-              </button>
-            ) : (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-800">Are you sure?</p>
-                    <p className="text-sm text-amber-700 mt-1">
-                      Regenerating the token will immediately invalidate the current one.
-                      Any devices using the old token will lose access.
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        onClick={handleRegenerate}
-                        disabled={regenerating}
-                        className="px-3 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-                      >
-                        {regenerating ? 'Regenerating...' : 'Yes, Regenerate'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmRegenerate(false)}
-                        className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500 italic">No token assigned. Token is generated when the device is created.</p>
-        )}
-      </div>
-
-      {/* Connection Details */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 bg-blue-50 rounded-lg">
-            <Wifi className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Connection Details</h3>
-            <p className="text-sm text-gray-500">Endpoints and topics for device communication</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {/* MQTT */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">MQTT Broker</label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
-                mqtt://localhost:1883
-              </code>
-              <button
-                onClick={() => copyToClipboard('mqtt://localhost:1883', 'mqtt')}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                {copied === 'mqtt' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* MQTT Topic */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">MQTT Publish Topic</label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
-                {mqttTopic}
-              </code>
-              <button
-                onClick={() => copyToClipboard(mqttTopic, 'topic')}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                {copied === 'topic' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* HTTP Endpoint */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">HTTP Telemetry Endpoint</label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
-                POST {httpEndpoint}
-              </code>
-              <button
-                onClick={() => copyToClipboard(httpEndpoint, 'http')}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                {copied === 'http' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* LoRaWAN DevEUI */}
-          {device?.dev_eui && (
-            <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">LoRaWAN DevEUI</label>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
-                  {device.dev_eui}
-                </code>
-                <button
-                  onClick={() => copyToClipboard(device.dev_eui!, 'deveui')}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  {copied === 'deveui' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ChirpStack App ID */}
-          {device?.chirpstack_app_id && (
-            <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">ChirpStack Application ID</label>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg font-mono text-sm text-gray-800">
-                  {device.chirpstack_app_id}
-                </code>
-                <button
-                  onClick={() => copyToClipboard(device.chirpstack_app_id!, 'appid')}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  {copied === 'appid' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth={2} /></svg>
-                    )}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Code Snippets */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 bg-purple-50 rounded-lg">
-            <BarChart3 className="w-5 h-5 text-purple-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Quick Start</h3>
-            <p className="text-sm text-gray-500">Example code to send telemetry from your device</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {/* cURL example */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">cURL</label>
-              <button
-                onClick={() => copyToClipboard(
-                  `curl -X POST ${httpEndpoint} \\\n  -H "Authorization: Bearer ${token || '<DEVICE_TOKEN>'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"temperature": 22.5, "humidity": 65}'`,
-                  'curl'
-                )}
-                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-              >
-                {copied === 'curl' ? '✓ Copied' : 'Copy'}
-              </button>
-            </div>
-            <pre className="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-xs overflow-x-auto">
-{`curl -X POST ${httpEndpoint} \\
-  -H "Authorization: Bearer ${token ? maskToken(token) : '<DEVICE_TOKEN>'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"temperature": 22.5, "humidity": 65}'`}
-            </pre>
-          </div>
-
-          {/* MQTT example */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">MQTT (mosquitto_pub)</label>
-              <button
-                onClick={() => copyToClipboard(
-                  `mosquitto_pub -h localhost -p 1883 -t "${mqttTopic}" -m '{"temperature": 22.5, "humidity": 65}'`,
-                  'mqttpub'
-                )}
-                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-              >
-                {copied === 'mqttpub' ? '✓ Copied' : 'Copy'}
-              </button>
-            </div>
-            <pre className="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-xs overflow-x-auto">
-{`mosquitto_pub -h localhost -p 1883 \\
-  -t "${mqttTopic}" \\
-  -m '{"temperature": 22.5, "humidity": 65}'`}
-            </pre>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Device Settings Component
-function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; deviceId: string; onUpdate: (d: Device) => void }) {
+// Device Settings Component - now dynamic
+function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { device: Device; deviceId: string; onUpdate: (d: Device) => void; discoveredMetrics: string[] }) {
   const router = useRouter();
-  const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [formData, setFormData] = useState({ name: device.name });
+  const [formData, setFormData] = useState({ name: device.name, device_type: device.device_type });
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [showNewRule, setShowNewRule] = useState(false);
 
@@ -1590,25 +987,12 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
-
-    try {
-      const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (res.ok) {
-        toast.success('Device deleted successfully');
-        router.push('/dashboard/devices');
-      } else {
-        const errorData = await res.json();
-        toast.error(errorData.detail || 'Failed to delete device');
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
-      toast.error('Failed to delete device');
-    } finally {
-      setDeleting(false);
+    const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      router.push('/dashboard/devices');
     }
   };
 
@@ -1652,7 +1036,7 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => { setEditing(false); setFormData({ name: device.name }); }} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={saveDevice} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">Save Changes</button>
             </div>
           )}
@@ -1668,17 +1052,11 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Device Type</label>
-            <p
-              className="text-sm font-medium px-3 py-2.5 rounded-lg border"
-              style={{
-                backgroundColor: device.device_type?.color ? `${device.device_type.color}20` : '#f9fafb',
-                borderColor: device.device_type?.color ? `${device.device_type.color}40` : '#e5e7eb',
-                color: device.device_type?.color || '#111827'
-              }}
-            >
-              {device.device_type?.name || 'Unknown Type'}
-            </p>
-            {editing && <p className="text-xs text-gray-500 mt-1">Device type cannot be changed after creation</p>}
+            {editing ? (
+              <input value={formData.device_type} onChange={e => setFormData(prev => ({ ...prev, device_type: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            ) : (
+              <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-200">{device.device_type}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Device ID</label>
@@ -1701,7 +1079,7 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
           <button onClick={() => setShowNewRule(!showNewRule)} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">+ Add Rule</button>
         </div>
 
-        {showNewRule && <NewAlertRuleForm deviceId={deviceId} onCreated={(rule) => { setAlertRules(prev => [rule, ...prev]); setShowNewRule(false); }} onCancel={() => setShowNewRule(false)} />}
+        {showNewRule && <NewAlertRuleForm deviceId={deviceId} discoveredMetrics={discoveredMetrics} onCreated={(rule) => { setAlertRules(prev => [rule, ...prev]); setShowNewRule(false); }} onCancel={() => setShowNewRule(false)} />}
 
         <div className="space-y-2">
           {alertRules.length === 0 ? (
@@ -1753,10 +1131,11 @@ function DeviceSettings({ device, deviceId, onUpdate }: { device: Device; device
   );
 }
 
-function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string; onCreated: (rule: any) => void; onCancel: () => void }) {
+// Dynamic New Alert Rule Form
+function NewAlertRuleForm({ deviceId, discoveredMetrics, onCreated, onCancel }: { deviceId: string; discoveredMetrics: string[]; onCreated: (rule: any) => void; onCancel: () => void }) {
   const [formData, setFormData] = useState({
     name: '',
-    metric: 'temperature',
+    metric: discoveredMetrics[0] || '',
     operator: 'gt',
     threshold: 0,
     cooldown_minutes: 5,
@@ -1799,11 +1178,13 @@ function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string;
         <div>
           <label className="block text-xs text-gray-600 mb-1">Metric</label>
           <select value={formData.metric} onChange={e => setFormData(prev => ({ ...prev, metric: e.target.value as any }))} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="temperature">Temperature</option>
-            <option value="humidity">Humidity</option>
-            <option value="battery">Battery</option>
-            <option value="rssi">RSSI</option>
-            <option value="pressure">Pressure</option>
+            {discoveredMetrics.length === 0 ? (
+              <option value="">No metrics available</option>
+            ) : (
+              discoveredMetrics.map(m => (
+                <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>
+              ))
+            )}
           </select>
         </div>
         <div>
@@ -1828,7 +1209,7 @@ function NewAlertRuleForm({ deviceId, onCreated, onCancel }: { deviceId: string;
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white transition-colors">Cancel</button>
-        <button onClick={create} disabled={submitting} className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">
+        <button onClick={create} disabled={submitting || discoveredMetrics.length === 0} className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">
           {submitting ? 'Creating...' : 'Create Rule'}
         </button>
       </div>

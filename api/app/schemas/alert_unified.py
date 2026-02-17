@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from uuid import UUID
-from typing import Optional, Literal, List, Any
+from typing import Optional, Literal, List
 from enum import Enum
 
 
@@ -43,9 +43,9 @@ class AlertRuleCreate(BaseModel):
     enabled: bool = Field(default=True, description="Whether rule is active")
     
     # For THRESHOLD rules - device-specific
-    device_id: Optional[UUID] = Field(None, description="Device ID (required for THRESHOLD rules)")
-    metric: Optional[Literal["temperature", "humidity", "battery", "rssi", "pressure"]] = Field(
-        None, description="Metric to monitor (for THRESHOLD rules)"
+    device_id: Optional[UUID] = Field(None, description="Device ID (null = global rule)")
+    metric: Optional[str] = Field(
+        None, max_length=255, description="Metric key to monitor (e.g. temperature, flow_rate)"
     )
     operator: Optional[Literal["gt", "gte", "lt", "lte", "eq", "neq"]] = Field(
         None, description="Comparison operator (for THRESHOLD rules)"
@@ -79,7 +79,7 @@ class AlertRuleUpdate(BaseModel):
     enabled: Optional[bool] = None
     
     # THRESHOLD fields
-    metric: Optional[Literal["temperature", "humidity", "battery", "rssi", "pressure"]] = None
+    metric: Optional[str] = Field(None, max_length=255)
     operator: Optional[Literal["gt", "gte", "lt", "lte", "eq", "neq"]] = None
     threshold: Optional[float] = None
     

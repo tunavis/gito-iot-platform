@@ -119,6 +119,89 @@ select:disabled {
   }
 }
 
+/* HMI Industrial Design Tokens */
+:root {
+  /* HMI Surface colors - muted, industrial */
+  --hmi-bg-primary: #f8fafc;
+  --hmi-bg-surface: #ffffff;
+  --hmi-bg-panel: #f1f5f9;
+  --hmi-bg-inset: #e2e8f0;
+
+  /* HMI Border colors */
+  --hmi-border: #cbd5e1;
+  --hmi-border-subtle: #e2e8f0;
+  --hmi-border-strong: #94a3b8;
+
+  /* HMI Text colors */
+  --hmi-text-primary: #0f172a;
+  --hmi-text-secondary: #475569;
+  --hmi-text-muted: #94a3b8;
+  --hmi-text-value: #1e293b;
+
+  /* HMI Status colors - desaturated industrial */
+  --hmi-status-online: #16a34a;
+  --hmi-status-ok: #16a34a;
+  --hmi-status-ok-bg: #f0fdf4;
+  --hmi-status-warn: #d97706;
+  --hmi-status-warn-bg: #fffbeb;
+  --hmi-status-alarm: #dc2626;
+  --hmi-status-alarm-bg: #fef2f2;
+  --hmi-status-offline: #64748b;
+  --hmi-status-offline-bg: #f1f5f9;
+  --hmi-status-idle: #f59e0b;
+
+  /* HMI Gauge colors */
+  --hmi-gauge-track: #e2e8f0;
+  --hmi-gauge-fill: #3b82f6;
+  --hmi-gauge-tick: #94a3b8;
+  --hmi-gauge-face: #f8fafc;
+
+  /* HMI Font for numeric readouts */
+  --hmi-font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', ui-monospace, monospace;
+
+  /* HMI Sizing */
+  --hmi-gauge-size-lg: 180px;
+  --hmi-gauge-size-md: 120px;
+  --hmi-gauge-size-sm: 64px;
+  --hmi-tile-height: 220px;
+
+  /* SVG HMI Card tokens */
+  --hmi-svg-card-bg: #f8fafc;
+  --hmi-svg-card-border: #e2e8f0;
+
+  /* Category accent colors */
+  --hmi-accent-meter: #0ea5e9;
+  --hmi-accent-sensor: #22c55e;
+  --hmi-accent-gateway: #8b5cf6;
+  --hmi-accent-controller: #f59e0b;
+  --hmi-accent-actuator: #ef4444;
+  --hmi-accent-tracker: #06b6d4;
+}
+
+@keyframes hmi-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.hmi-pulse {
+  animation: hmi-pulse 2s ease-in-out infinite;
+}
+
+/* SVG HMI transition class — GPU-accelerated value changes */
+.hmi-svg-transition {
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* SVG skeleton shimmer animation */
+@keyframes hmi-skeleton-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+.hmi-skeleton-pulse {
+  animation: hmi-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
 /* Dark mode (optional for future) */
 @media (prefers-color-scheme: dark) {
   /* Add dark mode styles here when needed */
