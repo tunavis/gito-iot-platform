@@ -105,13 +105,12 @@ jobs:
           docker compose -f docker-compose.staging.yml --env-file .env.staging pull
           echo "✅ Images pulled"
 
-      - name: Stop Current Services and Reset Database
+      - name: Stop Current Services
         run: |
           cd /opt/gito-iot
           echo "🛑 Stopping current services..."
-          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans --volumes || true
-          docker rm -f gito-api-staging gito-web-staging gito-nginx-staging gito-postgres-staging gito-redis-staging 2>/dev/null || true
-          echo "✅ Services stopped and DB volume removed for clean migration"
+          docker compose -f docker-compose.staging.yml --env-file .env.staging down --remove-orphans || true
+          echo "✅ Services stopped (DB volume preserved)"
 
       - name: Start All Services
         run: |
@@ -128,6 +127,13 @@ jobs:
           echo "📋 Checking migration status..."
           docker exec gito-api-staging alembic current || echo "⚠️ Could not get migration status"
           echo "✅ Migration verified"
+
+      - name: Seed Database
+        run: |
+          cd /opt/gito-iot
+          echo "🌱 Seeding database..."
+          docker exec -i gito-postgres-staging psql -U gito -d gito < scripts/seed.sql
+          echo "✅ Database seeded"
 
       - name: Health Check
         run: |
