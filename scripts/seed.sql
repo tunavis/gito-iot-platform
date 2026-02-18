@@ -256,6 +256,83 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
+-- DEFAULT DASHBOARD WITH PRE-CONFIGURED WIDGETS
+-- ============================================================================
+INSERT INTO dashboards (id, tenant_id, user_id, name, description, is_default)
+VALUES (
+    '80000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001',
+    'Lethabo Energy Overview',
+    'Plant-wide operational monitoring dashboard',
+    true
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Row 1: 4 KPI Cards (width=3, height=2 each)
+INSERT INTO dashboard_widgets (id, dashboard_id, widget_type, title, position_x, position_y, width, height, configuration, data_sources)
+VALUES
+(
+    '90000000-0000-0000-0000-000000000001',
+    '80000000-0000-0000-0000-000000000001',
+    'kpi_card', 'Active Power',
+    0, 0, 3, 2,
+    '{"metric": "active_power", "unit": "kW", "decimal_places": 0, "show_trend": true, "trend_period": "24h", "color": "#f59e0b", "threshold_warning": 4000, "threshold_critical": 4500}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000013", "metric": "active_power"}]'
+),
+(
+    '90000000-0000-0000-0000-000000000002',
+    '80000000-0000-0000-0000-000000000001',
+    'kpi_card', 'Boiler Temperature',
+    3, 0, 3, 2,
+    '{"metric": "temperature", "unit": "°C", "decimal_places": 1, "show_trend": true, "trend_period": "24h", "color": "#ef4444", "threshold_warning": 70, "threshold_critical": 80}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000003", "metric": "temperature"}]'
+),
+(
+    '90000000-0000-0000-0000-000000000003',
+    '80000000-0000-0000-0000-000000000001',
+    'kpi_card', 'Water Flow Rate',
+    6, 0, 3, 2,
+    '{"metric": "flow_rate", "unit": "m³/hr", "decimal_places": 1, "show_trend": true, "trend_period": "24h", "color": "#3b82f6", "threshold_warning": 80, "threshold_critical": 95}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000001", "metric": "flow_rate"}]'
+),
+(
+    '90000000-0000-0000-0000-000000000004',
+    '80000000-0000-0000-0000-000000000001',
+    'kpi_card', 'Vehicle Battery',
+    9, 0, 3, 2,
+    '{"metric": "battery", "unit": "%", "decimal_places": 0, "show_trend": true, "trend_period": "24h", "color": "#10b981", "threshold_warning": 30, "threshold_critical": 15}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000011", "metric": "battery"}]'
+),
+-- Row 2: Power trend chart (full width)
+(
+    '90000000-0000-0000-0000-000000000005',
+    '80000000-0000-0000-0000-000000000001',
+    'chart', 'Power Consumption Trend',
+    0, 2, 12, 4,
+    '{"chart_type": "area", "metrics": ["active_power"], "time_range": "24h", "colors": ["#f59e0b"]}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000013", "metric": "active_power"}]'
+),
+-- Row 3: Temperature chart + Flow chart side by side
+(
+    '90000000-0000-0000-0000-000000000006',
+    '80000000-0000-0000-0000-000000000001',
+    'chart', 'Boiler Temperature Trend',
+    0, 6, 6, 4,
+    '{"chart_type": "line", "metrics": ["temperature"], "time_range": "24h", "colors": ["#ef4444"]}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000003", "metric": "temperature"}]'
+),
+(
+    '90000000-0000-0000-0000-000000000007',
+    '80000000-0000-0000-0000-000000000001',
+    'chart', 'Water Flow Trend',
+    6, 6, 6, 4,
+    '{"chart_type": "line", "metrics": ["flow_rate"], "time_range": "24h", "colors": ["#3b82f6"]}',
+    '[{"device_id": "60000000-0000-0000-0000-000000000001", "metric": "flow_rate"}]'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
 -- TELEMETRY (48 points per device = 24 hours at 30-min intervals)
 -- Only runs if no telemetry exists for this tenant yet (idempotent)
 -- ============================================================================
@@ -427,5 +504,7 @@ UNION ALL SELECT 'Users',         COUNT(*) FROM users        WHERE tenant_id = '
 UNION ALL SELECT 'Organizations', COUNT(*) FROM organizations WHERE tenant_id = '10000000-0000-0000-0000-000000000001'
 UNION ALL SELECT 'Device Types',  COUNT(*) FROM device_types  WHERE tenant_id = '10000000-0000-0000-0000-000000000001'
 UNION ALL SELECT 'Devices',       COUNT(*) FROM devices       WHERE tenant_id = '10000000-0000-0000-0000-000000000001'
-UNION ALL SELECT 'Alert Rules',   COUNT(*) FROM alert_rules   WHERE tenant_id = '10000000-0000-0000-0000-000000000001'
-UNION ALL SELECT 'Telemetry',     COUNT(*) FROM telemetry     WHERE tenant_id = '10000000-0000-0000-0000-000000000001';
+UNION ALL SELECT 'Alert Rules',   COUNT(*) FROM alert_rules       WHERE tenant_id = '10000000-0000-0000-0000-000000000001'
+UNION ALL SELECT 'Dashboards',    COUNT(*) FROM dashboards        WHERE tenant_id = '10000000-0000-0000-0000-000000000001'
+UNION ALL SELECT 'Widgets',       COUNT(*) FROM dashboard_widgets WHERE dashboard_id = '80000000-0000-0000-0000-000000000001'
+UNION ALL SELECT 'Telemetry',     COUNT(*) FROM telemetry         WHERE tenant_id = '10000000-0000-0000-0000-000000000001';
