@@ -397,7 +397,7 @@ async def get_latest_telemetry(
     device_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
-    minutes: int = Query(60, ge=1, le=1440, description="Look back N minutes"),
+    minutes: int = Query(60, ge=1, le=43200, description="Look back N minutes (max 30 days)"),
     metrics: Optional[str] = Query(None, description="Comma-separated list of metrics"),
 ):
     """

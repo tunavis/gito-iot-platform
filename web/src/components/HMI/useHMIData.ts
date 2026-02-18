@@ -54,9 +54,9 @@ export default function useHMIData(deviceId: string, tenantId: string, enabled =
     if (!token || !tenantId || !deviceId) return;
 
     try {
-      // Use 1440 min (24h) lookback to find data even if device hasn't reported recently
+      // Use 43200 min (30d) lookback to find data even if device hasn't reported recently
       const res = await fetch(
-        `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry/latest?minutes=1440`,
+        `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry/latest?minutes=43200`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
