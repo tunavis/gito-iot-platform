@@ -5,7 +5,7 @@ import { formatMetricLabel, getMetricUnit, type HMIRendererProps } from '../inde
 import { classifyMetrics, GATEWAY_RULES } from '../classifyMetrics';
 
 // Simplified: Only renders Zone 2 (Primary Visualization)
-const VB_W = 1400;
+const VB_W = 800;
 const VB_H = 440;
 
 const NODE_CX = VB_W / 2;
@@ -22,26 +22,15 @@ export default function GatewayRenderer({
   const schema: Record<string, any> = deviceType?.telemetry_schema || {};
   const isOffline = device.status?.toLowerCase() === 'offline';
 
-  const { hero, groups, ungrouped } = classifyMetrics(schema, latestValues, GATEWAY_RULES);
+  const { hero, groups } = classifyMetrics(schema, latestValues, GATEWAY_RULES);
 
   const connectivityMetrics = groups['CONNECTIVITY'] || [];
   const networkMetrics = groups['NETWORK'] || [];
-  const resourceMetrics = groups['RESOURCES'] || [];
-  const infoMetrics = groups['INFO'] || [];
 
   // Connected device count from hero or connectivity metrics
   const connectedKey = hero?.key || connectivityMetrics.find(m => m.key.toLowerCase().includes('connected'))?.key;
   const connectedVal = connectedKey && typeof latestValues[connectedKey] === 'number'
     ? latestValues[connectedKey] as number : null;
-
-  // Collect all secondary metrics - unused in renderer, but kept for classification
-  const secondaryMetricsList = [
-    ...connectivityMetrics,
-    ...networkMetrics,
-    ...resourceMetrics,
-    ...infoMetrics,
-    ...ungrouped,
-  ].filter(m => m.key !== connectedKey);
 
   const hasContent = connectivityMetrics.length > 0 || networkMetrics.length > 0;
 

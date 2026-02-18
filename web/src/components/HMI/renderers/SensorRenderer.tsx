@@ -6,7 +6,7 @@ import { formatMetricLabel, getMetricUnit, type HMIRendererProps } from '../inde
 import { classifyMetrics, SENSOR_RULES } from '../classifyMetrics';
 
 // Simplified: Only renders Zone 2 (Primary Visualization)
-const VB_W = 1400;
+const VB_W = 800;
 const VB_H = 440;
 
 const GAUGE_R = 210;
@@ -32,17 +32,7 @@ export default function SensorRenderer({
   const schema: Record<string, any> = deviceType?.telemetry_schema || {};
   const isOffline = device.status?.toLowerCase() === 'offline';
 
-  const { hero, groups, ungrouped } = classifyMetrics(schema, latestValues, SENSOR_RULES);
-
-  const envMetrics = groups['ENVIRONMENT'] || [];
-  const healthMetrics = groups['DEVICE HEALTH'] || [];
-
-  // Collect all secondary metrics (not hero) - unused in renderer, but kept for classification
-  const secondaryMetricsList = [
-    ...envMetrics,
-    ...healthMetrics,
-    ...ungrouped,
-  ].filter(m => m.key !== hero?.key);
+  const { hero } = classifyMetrics(schema, latestValues, SENSOR_RULES);
 
   const heroIsTemp = hero && isTemperatureMetric(hero.key);
   const heroVal = hero ? latestValues[hero.key] : null;

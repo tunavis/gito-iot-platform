@@ -4,7 +4,7 @@ import SVGArcGauge from '../svg/SVGArcGauge';
 import { formatMetricLabel, getMetricUnit, type HMIRendererProps } from '../index';
 
 // Simplified: Only renders Zone 2 (Primary Visualization)
-const VB_W = 1400;
+const VB_W = 800;
 const VB_H = 440;
 
 const GAUGE_R = 210;
@@ -37,16 +37,8 @@ export default function GenericDeviceView({
   }
 
   const heroMetric = numericMetrics[0] || null;
-  const restNumeric = numericMetrics.slice(1);
-
   const heroVal = heroMetric ? latestValues[heroMetric.key] : null;
   const hasContent = numericMetrics.length > 0 || stringMetrics.length > 0;
-
-  // Collect all secondary metrics - unused in renderer, but kept for classification
-  const secondaryMetricsList = [
-    ...restNumeric,
-    ...stringMetrics,
-  ];
 
   if (!hasContent && !loading) {
     return (

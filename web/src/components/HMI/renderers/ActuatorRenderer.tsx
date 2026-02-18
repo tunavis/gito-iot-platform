@@ -6,7 +6,7 @@ import { formatMetricLabel, getMetricUnit, type HMIRendererProps } from '../inde
 import { classifyMetrics, ACTUATOR_RULES } from '../classifyMetrics';
 
 // Simplified: Only renders Zone 2 (Primary Visualization)
-const VB_W = 1400;
+const VB_W = 800;
 const VB_H = 440;
 
 const VALVE_CX = VB_W / 2;
@@ -23,30 +23,18 @@ export default function ActuatorRenderer({
   const schema: Record<string, any> = deviceType?.telemetry_schema || {};
   const isOffline = device.status?.toLowerCase() === 'offline';
 
-  const { groups, ungrouped } = classifyMetrics(schema, latestValues, ACTUATOR_RULES);
+  const { groups } = classifyMetrics(schema, latestValues, ACTUATOR_RULES);
 
   const stateMetrics = groups['STATE'] || [];
   const positionMetrics = groups['POSITION'] || [];
-  const electricalMetrics = groups['ELECTRICAL'] || [];
-  const operationalMetrics = groups['OPERATIONAL'] || [];
 
   const primaryState = stateMetrics[0] || null;
-  const secondaryStates = stateMetrics.slice(1);
   const primaryPosition = positionMetrics[0] || null;
   const positionVal = primaryPosition && typeof latestValues[primaryPosition.key] === 'number'
     ? latestValues[primaryPosition.key] as number : null;
   const stateVal = primaryState
     ? (latestValues[primaryState.key] !== null ? String(latestValues[primaryState.key]) : null)
     : null;
-
-  // Collect all secondary metrics - unused in renderer, but kept for classification
-  const secondaryMetricsList = [
-    ...positionMetrics,
-    ...secondaryStates,
-    ...electricalMetrics,
-    ...operationalMetrics,
-    ...ungrouped,
-  ];
 
   const hasContent = primaryState || positionMetrics.length > 0;
 

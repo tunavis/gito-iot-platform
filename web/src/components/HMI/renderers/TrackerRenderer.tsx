@@ -1,32 +1,30 @@
 'use client';
 
 import SVGCompassRose from '../svg/SVGCompassRose';
-import { formatMetricLabel, getMetricUnit, type HMIRendererProps } from '../index';
+import { getMetricUnit, type HMIRendererProps } from '../index';
 import { classifyMetrics, TRACKER_RULES } from '../classifyMetrics';
 
 // Simplified: Only renders Zone 2 (Primary Visualization)
-const VB_W = 1400;
+const VB_W = 800;
 const VB_H = 440;
 
 const COMPASS_CX = VB_W / 2;
 const COMPASS_CY = VB_H / 2;
-const COMPASS_R = 140;
+const COMPASS_R = 120;
 
 export default function TrackerRenderer({
   device,
   deviceType,
   latestValues,
   units,
-  loading,
 }: HMIRendererProps) {
   const schema: Record<string, any> = deviceType?.telemetry_schema || {};
   const isOffline = device.status?.toLowerCase() === 'offline';
 
-  const { groups, ungrouped } = classifyMetrics(schema, latestValues, TRACKER_RULES);
+  const { groups } = classifyMetrics(schema, latestValues, TRACKER_RULES);
 
   const positionMetrics = groups['POSITION'] || [];
   const motionMetrics = groups['MOTION'] || [];
-  const healthMetrics = groups['HEALTH'] || [];
 
   // Extract lat/lng
   let lat: number | null = null;
@@ -59,23 +57,6 @@ export default function TrackerRenderer({
       }
     }
   }
-
-  // Non-coordinate position metrics
-  const altitudeMetrics = positionMetrics.filter(m => {
-    const k = m.key.toLowerCase();
-    return !k.includes('lat') && !k.includes('lng') && !k.includes('lon');
-  });
-
-  // Collect all secondary metrics - unused in renderer, but kept for classification
-  const secondaryMetricsList = [
-    ...motionMetrics.filter(m => {
-      const k = m.key.toLowerCase();
-      return !k.includes('heading') && !k.includes('bearing') && !k.includes('course') && !k.includes('speed');
-    }),
-    ...altitudeMetrics,
-    ...healthMetrics,
-    ...ungrouped,
-  ];
 
   return (
     <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" height="auto" preserveAspectRatio="xMidYMid meet">

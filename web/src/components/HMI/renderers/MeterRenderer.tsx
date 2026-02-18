@@ -6,7 +6,7 @@ import { formatMetricLabel, getMetricUnit, type HMIRendererProps } from '../inde
 import { classifyMetrics, METER_RULES } from '../classifyMetrics';
 
 // Simplified: Only renders Zone 2 (Primary Visualization)
-const VB_W = 1400;
+const VB_W = 800;
 const VB_H = 440;
 
 const GAUGE_R = 210; // 420px diameter

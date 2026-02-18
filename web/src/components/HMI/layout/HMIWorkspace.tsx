@@ -20,7 +20,7 @@ export default function HMIWorkspace({ children }: HMIWorkspaceProps) {
       className="w-full flex-1 flex items-center justify-center"
       style={{ background: 'var(--hmi-bg-surface)' }}
     >
-      <div className="w-full max-w-full">
+      <div className="w-full" style={{ maxWidth: '800px' }}>
         {children}
       </div>
     </div>
