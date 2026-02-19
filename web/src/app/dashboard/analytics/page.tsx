@@ -28,7 +28,7 @@ interface AlertTrends {
   total_alarms: number;
   severity_distribution: Record<string, number>;
   status_distribution: Record<string, number>;
-  top_alerting_devices: Array<{ device_id: string; alarm_count: number }>;
+  top_alerting_devices: Array<{ device_id: string; device_name: string; alarm_count: number }>;
   daily_trend: Array<{ date: string; count: number }>;
 }
 
@@ -334,7 +334,7 @@ export default function AnalyticsPage() {
                 <div key={device.device_id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-gray-500">#{idx + 1}</span>
-                    <span className="text-sm text-gray-700 font-mono">{device.device_id.substring(0, 8)}...</span>
+                    <span className="text-sm text-gray-700 font-medium">{device.device_name}</span>
                   </div>
                   <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
                     {device.alarm_count} alerts

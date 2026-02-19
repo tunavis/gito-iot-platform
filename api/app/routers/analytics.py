@@ -151,16 +151,22 @@ async def get_alert_trends(
     status_result = await session.execute(status_query)
     status_dist = {row[0]: row[1] for row in status_result.fetchall()}
 
-    # Top alerting devices
+    # Top alerting devices (with device name via join)
     top_devices_query = select(
         Alarm.device_id,
+        Device.name,
         func.count(Alarm.id).label('count')
+    ).join(
+        Device, Device.id == Alarm.device_id, isouter=True
     ).where(
         Alarm.tenant_id == tenant_id,
         Alarm.fired_at >= start_date
-    ).group_by(Alarm.device_id).order_by(func.count(Alarm.id).desc()).limit(10)
+    ).group_by(Alarm.device_id, Device.name).order_by(func.count(Alarm.id).desc()).limit(10)
     top_devices_result = await session.execute(top_devices_query)
-    top_devices = [{"device_id": str(row[0]), "alarm_count": row[1]} for row in top_devices_result.fetchall()]
+    top_devices = [
+        {"device_id": str(row[0]), "device_name": row[1] or str(row[0]), "alarm_count": row[2]}
+        for row in top_devices_result.fetchall()
+    ]
 
     # Daily alarm trend (last 30 days)
     daily_query = text("""
