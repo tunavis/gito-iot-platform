@@ -9,10 +9,11 @@ Uses key-value storage pattern (industry-standard like ThingsBoard/Cumulocity):
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from sqlalchemy import select, func, and_, text, desc
-from typing import Annotated, Literal, Optional, List
+from typing import Annotated, Literal, Optional, List, Any, Dict
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 import logging
+import json as _json
 
 from app.database import get_session, RLSSession
 from app.models.base import Device, Telemetry
@@ -599,3 +600,97 @@ async def list_available_metrics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Query error: {type(e).__name__}: {str(e)}",
         )
+
+
+@router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
+async def ingest_telemetry(
+    tenant_id: UUID,
+    device_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+    payload: Dict[str, Any] = None,
+):
+    """
+    Ingest telemetry data for a device.
+
+    Accepts a flat JSON object where keys are metric names and values are
+    numeric, string, or JSON values. Each metric is stored as a separate
+    key-value row (industry-standard pattern).
+
+    After storing, publishes to Redis pub/sub for real-time WebSocket delivery.
+
+    Example body:
+        {"temperature": 25.5, "humidity": 65.2, "status": "online"}
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty payload")
+
+    await session.set_tenant_context(tenant_id)
+
+    # Verify device exists and belongs to tenant
+    device_result = await session.execute(
+        select(Device).where(Device.tenant_id == tenant_id, Device.id == device_id)
+    )
+    device = device_result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    ts = datetime.now(timezone.utc)
+    system_keys = {"timestamp", "ts", "device_id", "tenant_id", "id"}
+
+    rows = []
+    for key, value in payload.items():
+        if key in system_keys:
+            continue
+        row = Telemetry(
+            tenant_id=tenant_id,
+            device_id=device_id,
+            metric_key=key,
+            ts=ts,
+        )
+        if isinstance(value, (int, float)):
+            row.metric_value = float(value)
+        elif isinstance(value, str):
+            row.metric_value_str = value
+        elif isinstance(value, (dict, list)):
+            row.metric_value_json = value
+        else:
+            row.metric_value_str = str(value)
+        rows.append(row)
+
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload")
+
+    session.add_all(rows)
+    await session.commit()
+
+    # Update device last_seen
+    await session.execute(
+        text("UPDATE devices SET last_seen_at = :ts WHERE id = :device_id AND tenant_id = :tenant_id"),
+        {"ts": ts, "device_id": str(device_id), "tenant_id": str(tenant_id)},
+    )
+    await session.commit()
+
+    # Publish to Redis for WebSocket real-time delivery
+    try:
+        from app.config import get_settings
+        import redis.asyncio as aioredis
+        settings = get_settings()
+        redis_client = await aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+        channel = f"telemetry:{tenant_id}:{device_id}"
+        message = _json.dumps({
+            "device_id": str(device_id),
+            "payload": {k: v for k, v in payload.items() if k not in system_keys},
+            "timestamp": ts.isoformat(),
+        })
+        await redis_client.publish(channel, message)
+        await redis_client.aclose()
+    except Exception as e:
+        # Redis publish failure is non-critical — data is already stored in DB
+        logger.warning(f"Failed to publish telemetry to Redis: {e}")
+
+    logger.info(f"Ingested {len(rows)} metrics for device {device_id}")
+    return SuccessResponse(data={"ingested": len(rows), "timestamp": ts.isoformat()})

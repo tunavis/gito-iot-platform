@@ -16,6 +16,7 @@ interface LiveDeviceLayoutProps {
   activeAlarmCount: number;
   loading: boolean;
   secondaryMetrics: ClassifiedMetric[];
+  wsConnected?: boolean;
   children: ReactNode; // The renderer component
 }
 
@@ -35,6 +36,7 @@ export default function LiveDeviceLayout({
   activeAlarmCount,
   loading,
   secondaryMetrics,
+  wsConnected = false,
   children,
 }: LiveDeviceLayoutProps) {
   const schema: Record<string, any> = deviceType?.telemetry_schema || {};
@@ -55,6 +57,7 @@ export default function LiveDeviceLayout({
         status={device.status}
         lastSeen={device.last_seen}
         isLoading={loading}
+        wsConnected={wsConnected}
       />
 
       {/* Zone 2: Primary Visualization (Renderer) */}

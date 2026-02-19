@@ -4,6 +4,7 @@ interface DeviceHeaderProps {
   status: string;
   lastSeen: string | null;
   isLoading?: boolean;
+  wsConnected?: boolean;
 }
 
 function formatTimeAgo(isoString: string | null): string {
@@ -20,7 +21,7 @@ function formatTimeAgo(isoString: string | null): string {
   return `${days}d ago`;
 }
 
-export default function DeviceHeader({ status, lastSeen, isLoading = false }: DeviceHeaderProps) {
+export default function DeviceHeader({ status, lastSeen, isLoading = false, wsConnected = false }: DeviceHeaderProps) {
   const statusColor = status?.toLowerCase() === 'online' ? 'var(--hmi-status-online)' : 'var(--hmi-status-offline)';
 
   return (
@@ -47,10 +48,10 @@ export default function DeviceHeader({ status, lastSeen, isLoading = false }: De
         Last seen: <span className="font-medium">{formatTimeAgo(lastSeen)}</span>
       </div>
 
-      {/* Right: Auto-refresh indicator */}
+      {/* Right: Connection status */}
       <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--hmi-text-muted)' }}>
-        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-        <span>Auto-refresh 15s</span>
+        <div className={wsConnected ? 'w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse' : 'w-1.5 h-1.5 rounded-full bg-yellow-400'} />
+        <span>{wsConnected ? 'Live' : 'Polling 15s'}</span>
       </div>
     </div>
   );

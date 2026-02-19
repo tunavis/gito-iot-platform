@@ -10,9 +10,13 @@ export interface HMIData {
   lastUpdated: string | null;
   loading: boolean;
   error: string | null;
+  wsConnected: boolean;
 }
 
 const POLL_INTERVAL = 15000;
+const WS_RECONNECT_DELAY = 5000;
+const WS_MAX_ATTEMPTS = 10;
+
 const SYSTEM_FIELDS = new Set([
   'timestamp', 'device_id', 'tenant_id', 'id', 'ts',
   'metric_key', 'metric_value', 'metric_value_str', 'metric_value_json',
@@ -43,7 +47,11 @@ export default function useHMIData(deviceId: string, tenantId: string, enabled =
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
   const sparklineLoadedRef = useRef(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsAttemptsRef = useRef(0);
+  const wsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getToken = useCallback(() => {
     return localStorage.getItem('auth_token');
@@ -189,6 +197,68 @@ export default function useHMIData(deviceId: string, tenantId: string, enabled =
     }
   }, [deviceId, tenantId, getToken]);
 
+  // Apply a real-time WebSocket telemetry push to latestValues
+  const applyWsTelemetry = useCallback((wsPayload: Record<string, unknown>, timestamp: string) => {
+    setLatestValues(prev => {
+      const next = { ...prev };
+      for (const [key, val] of Object.entries(wsPayload)) {
+        if (SYSTEM_FIELDS.has(key)) continue;
+        next[key] = parseValue(val);
+      }
+      return next;
+    });
+    setLastUpdated(timestamp);
+  }, []);
+
+  // WebSocket connection management
+  const connectWs = useCallback(() => {
+    const token = getToken();
+    if (!token || !tenantId || !deviceId) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      const wsUrl = `${protocol}//${host}/api/v1/ws/devices/${deviceId}?token=${encodeURIComponent(token)}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setWsConnected(true);
+        wsAttemptsRef.current = 0;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'telemetry' && msg.data?.payload) {
+            applyWsTelemetry(msg.data.payload as Record<string, unknown>, msg.data.timestamp);
+          }
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+        wsRef.current = null;
+        // Exponential back-off reconnect
+        if (wsAttemptsRef.current < WS_MAX_ATTEMPTS) {
+          wsAttemptsRef.current += 1;
+          const delay = WS_RECONNECT_DELAY * Math.min(wsAttemptsRef.current, 4);
+          wsTimerRef.current = setTimeout(connectWs, delay);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+
+      wsRef.current = ws;
+    } catch {
+      // WebSocket not available or blocked — polling fallback handles data
+    }
+  }, [deviceId, tenantId, getToken, applyWsTelemetry]);
+
   // Initial load
   useEffect(() => {
     if (!enabled || !deviceId || !tenantId) return;
@@ -208,17 +278,30 @@ export default function useHMIData(deviceId: string, tenantId: string, enabled =
     load();
   }, [enabled, deviceId, tenantId, fetchLatest, fetchAlarms, fetchSparklines]);
 
-  // Polling
+  // WebSocket connection (real-time push)
+  useEffect(() => {
+    if (!enabled || !deviceId || !tenantId) return;
+    connectWs();
+    return () => {
+      if (wsTimerRef.current) clearTimeout(wsTimerRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
+    };
+  }, [enabled, deviceId, tenantId, connectWs]);
+
+  // Polling fallback — only polls when WebSocket is disconnected
   useEffect(() => {
     if (!enabled || !deviceId || !tenantId) return;
 
     const interval = setInterval(() => {
-      fetchLatest();
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        fetchLatest();
+      }
       fetchAlarms();
     }, POLL_INTERVAL);
 
     return () => clearInterval(interval);
   }, [enabled, deviceId, tenantId, fetchLatest, fetchAlarms]);
 
-  return { latestValues, units, sparklineData, activeAlarmCount, lastUpdated, loading, error };
+  return { latestValues, units, sparklineData, activeAlarmCount, lastUpdated, loading, error, wsConnected };
 }

@@ -38,7 +38,7 @@ export default function HMIRenderer({
   deviceType,
   enabled = true,
 }: HMIRendererProps) {
-  const { latestValues, units, sparklineData, activeAlarmCount, lastUpdated, loading, error } = useHMIData(
+  const { latestValues, units, sparklineData, activeAlarmCount, lastUpdated, loading, error, wsConnected } = useHMIData(
     deviceId,
     tenantId,
     enabled
@@ -99,6 +99,7 @@ export default function HMIRenderer({
       activeAlarmCount={activeAlarmCount}
       loading={loading}
       secondaryMetrics={secondaryMetricsList}
+      wsConnected={wsConnected}
     >
       <Renderer
         device={device}
