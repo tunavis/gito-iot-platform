@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import { useToast } from "@/components/ToastProvider";
 import DashboardGrid from "@/components/DashboardBuilder/DashboardGrid";
 import WidgetLibrary from "@/components/DashboardBuilder/WidgetLibrary";
 import WidgetConfigModal from "@/components/DashboardBuilder/WidgetConfigModal";
@@ -29,6 +30,7 @@ interface Dashboard {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const toast = useToast();
 
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -188,10 +190,10 @@ export default function DashboardPage() {
         }
       }
 
-      alert("Dashboard saved successfully!");
+      toast.success('Dashboard saved', 'Dashboard saved successfully!');
     } catch (error: any) {
       console.error("Error saving dashboard:", error);
-      alert(`Failed to save dashboard: ${error.message || error}`);
+      toast.error('Failed to save dashboard', error.message || String(error));
     } finally {
       setSaving(false);
     }
@@ -248,7 +250,7 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error("Error adding widget:", error);
-      alert("Failed to add widget");
+      toast.error('Failed to add widget');
     }
   };
 
@@ -300,7 +302,8 @@ export default function DashboardPage() {
 
   const handleWidgetRemove = async (widgetId: string) => {
     if (!dashboard) return;
-    if (!confirm("Are you sure you want to remove this widget?")) return;
+    const ok = await toast.confirm('Are you sure you want to remove this widget?', { title: 'Remove Widget', variant: 'danger', confirmLabel: 'Remove' });
+    if (!ok) return;
 
     try {
       const token = localStorage.getItem("auth_token");
@@ -329,7 +332,7 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error("Error removing widget:", error);
-      alert("Failed to remove widget");
+      toast.error('Failed to remove widget');
     }
   };
 
@@ -378,7 +381,7 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error("Error updating widget:", error);
-      alert("Failed to update widget configuration");
+      toast.error('Failed to update widget configuration');
     }
   };
 

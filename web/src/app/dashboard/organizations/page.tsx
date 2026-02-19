@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 
 interface Organization {
   id: string;
@@ -19,6 +20,7 @@ interface Organization {
 }
 
 export default function OrganizationsPage() {
+  const toast = useToast();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -45,7 +47,8 @@ export default function OrganizationsPage() {
   };
 
   const deleteOrganization = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this organization? This will affect all associated sites and devices.')) return;
+    const ok = await toast.confirm('Are you sure you want to delete this organization? This will affect all associated sites and devices.', { title: 'Delete Organization', variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
     
     const token = localStorage.getItem('auth_token');
     if (!token) return;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 
 interface NotificationChannel {
   id: string;
@@ -598,6 +599,7 @@ function AddNotificationRuleForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [alertRuleId, setAlertRuleId] = useState('');
   const [channelId, setChannelId] = useState('');
 
@@ -616,7 +618,7 @@ function AddNotificationRuleForm({
       onSuccess();
     } else {
       const err = await res.json();
-      alert(`Failed to create rule: ${err.detail || 'Unknown error'}`);
+      toast.error('Failed to create rule', err.detail || 'Unknown error');
     }
   };
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 
 // ============================================================================
 // TYPES - Unified Alert Rules (THRESHOLD + COMPOSITE)
@@ -504,6 +505,7 @@ function NewRuleForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [ruleType, setRuleType] = useState<RuleType>('THRESHOLD');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -543,12 +545,12 @@ function NewRuleForm({
 
     // Validation
     if (!name.trim()) {
-      alert('Please enter a rule name');
+      toast.warning('Validation', 'Please enter a rule name');
       return;
     }
-    
+
     if (ruleType === 'COMPOSITE' && conditions.length === 0) {
-      alert('Please add at least one condition');
+      toast.warning('Validation', 'Please add at least one condition');
       return;
     }
 
@@ -581,7 +583,7 @@ function NewRuleForm({
       onSuccess();
     } else {
       const err = await res.json();
-      alert(`Failed to create rule: ${err.detail || 'Unknown error'}`);
+      toast.error('Failed to create rule', err.detail || 'Unknown error');
     }
   };
 
@@ -873,6 +875,7 @@ function EditRuleForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [name, setName] = useState(rule.name);
   const [description, setDescription] = useState(rule.description || '');
   const [severity, setSeverity] = useState<Severity>(rule.severity);
@@ -933,7 +936,7 @@ function EditRuleForm({
       onSuccess();
     } else {
       const err = await res.json();
-      alert(`Failed to update rule: ${err.detail || 'Unknown error'}`);
+      toast.error('Failed to update rule', err.detail || 'Unknown error');
     }
   };
 

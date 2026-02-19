@@ -154,7 +154,8 @@ export default function DeviceTypesPage() {
   }, [fetchDeviceTypes]);
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+    const ok = await toast.confirm(`Are you sure you want to delete "${name}"?`, { title: 'Delete Device Type', variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
 
     try {
       const token = localStorage.getItem('auth_token');

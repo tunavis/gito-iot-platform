@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 
 interface Site {
   id: string;
@@ -24,6 +25,7 @@ interface Organization {
 }
 
 export default function SitesPage() {
+  const toast = useToast();
   const [sites, setSites] = useState<Site[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,8 @@ export default function SitesPage() {
   }, [loadData]);
 
   const deleteSite = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this site? This will affect all associated devices.')) return;
+    const ok = await toast.confirm('Are you sure you want to delete this site? This will affect all associated devices.', { title: 'Delete Site', variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
     
     const token = localStorage.getItem('auth_token');
     if (!token) return;

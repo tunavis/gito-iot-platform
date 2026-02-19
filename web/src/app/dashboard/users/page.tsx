@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import { Mail, Edit2, Trash2, UserPlus, Key } from 'lucide-react';
 
 interface User {
@@ -17,6 +18,7 @@ interface User {
 }
 
 export default function UsersPage() {
+  const toast = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -53,7 +55,8 @@ export default function UsersPage() {
   }, [loadUsers]);
 
   const deleteUser = async (id: string) => {
-    if (!confirm('Are you sure you want to suspend this user? They will no longer be able to access the system.')) return;
+    const ok = await toast.confirm('Are you sure you want to suspend this user? They will no longer be able to access the system.', { title: 'Suspend User', variant: 'danger', confirmLabel: 'Suspend' });
+    if (!ok) return;
 
     const token = localStorage.getItem('auth_token');
     if (!token) return;
@@ -68,14 +71,14 @@ export default function UsersPage() {
       loadUsers(); // Reload to show updated status
     } else {
       const error = await res.json();
-      alert(error.detail || 'Failed to suspend user');
+      toast.error('Failed to suspend user', error.detail);
     }
   };
 
   const changePassword = async () => {
     if (!changingPasswordUser || !newPassword) return;
     if (newPassword.length < 8) {
-      alert('Password must be at least 8 characters');
+      toast.warning('Invalid password', 'Password must be at least 8 characters');
       return;
     }
 
@@ -93,12 +96,12 @@ export default function UsersPage() {
     });
 
     if (res.ok) {
-      alert('Password changed successfully');
+      toast.success('Password changed', 'Password changed successfully');
       setChangingPasswordUser(null);
       setNewPassword('');
     } else {
       const error = await res.json();
-      alert(error.detail || 'Failed to change password');
+      toast.error('Failed to change password', error.detail);
     }
   };
 

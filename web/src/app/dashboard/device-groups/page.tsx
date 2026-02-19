@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 
 interface DeviceGroup {
   id: string;
@@ -29,6 +30,7 @@ interface Site {
 }
 
 export default function DeviceGroupsPage() {
+  const toast = useToast();
   const [groups, setGroups] = useState<DeviceGroup[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -81,7 +83,8 @@ export default function DeviceGroupsPage() {
   }, [loadData]);
 
   const deleteGroup = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this device group?')) return;
+    const ok = await toast.confirm('Are you sure you want to delete this device group?', { title: 'Delete Group', variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
     
     const token = localStorage.getItem('auth_token');
     if (!token) return;
@@ -233,19 +236,20 @@ export default function DeviceGroupsPage() {
   );
 }
 
-function DeviceGroupForm({ 
+function DeviceGroupForm({
   group,
   organizations,
   sites,
-  onSuccess, 
-  onCancel 
-}: { 
+  onSuccess,
+  onCancel
+}: {
   group?: DeviceGroup;
   organizations: Organization[];
   sites: Site[];
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [formData, setFormData] = useState({
     name: group?.name || '',
     description: group?.description || '',
@@ -263,7 +267,7 @@ function DeviceGroupForm({
     e.preventDefault();
     
     if (!formData.organization_id || !formData.site_id) {
-      alert('Organization and Site are required.');
+      toast.warning('Validation', 'Organization and Site are required.');
       return;
     }
 

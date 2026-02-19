@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import {
   Cpu,
   CheckCircle2,
@@ -53,6 +54,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function DevicesPage() {
   const router = useRouter();
+  const toast = useToast();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,9 +117,8 @@ export default function DevicesPage() {
 
   // Bulk delete devices
   const handleBulkDelete = async () => {
-    if (!confirm(`Are you sure you want to delete ${selectedDevices.size} device(s)? This action cannot be undone.`)) {
-      return;
-    }
+    const ok = await toast.confirm(`Are you sure you want to delete ${selectedDevices.size} device(s)? This action cannot be undone.`, { title: 'Delete Devices', variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -143,11 +144,11 @@ export default function DevicesPage() {
 
       // Reload devices and clear selection
       const data = await response.json();
-      alert(data.data.message);
+      toast.success('Success', data.data.message);
       setSelectedDevices(new Set());
       window.location.reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete devices');
+      toast.error('Failed to delete devices', err instanceof Error ? err.message : undefined);
     }
   };
 
@@ -775,12 +776,12 @@ export default function DevicesPage() {
                 }
 
                 const data = await response.json();
-                alert(data.data.message);
+                toast.success('Success', data.data.message);
                 setShowBulkAssignModal(false);
                 setSelectedDevices(new Set());
                 window.location.reload();
               } catch (err) {
-                alert(err instanceof Error ? err.message : 'Failed to assign devices');
+                toast.error('Failed to assign devices', err instanceof Error ? err.message : undefined);
               }
             }}
             onCancel={() => setShowBulkAssignModal(false)}

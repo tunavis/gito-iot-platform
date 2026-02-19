@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import { User, Clock, Search, Download, Eye, Activity } from 'lucide-react';
 
 interface AuditLog {
@@ -30,6 +31,7 @@ interface AuditStats {
 }
 
 export default function AuditLogsPage() {
+  const toast = useToast();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [stats, setStats] = useState<AuditStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ export default function AuditLogsPage() {
       setLogs(json.data || []);
       setTotalLogs(json.meta?.total || 0);
     } else if (res.status === 403) {
-      alert('You do not have permission to view audit logs. Contact your administrator.');
+      toast.error('Permission denied', 'You do not have permission to view audit logs. Contact your administrator.');
     }
     setLoading(false);
   }, [currentPage, filterAction, filterResourceType, searchTerm, perPage]);

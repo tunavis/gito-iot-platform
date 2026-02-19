@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
-import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2 } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -13,6 +13,14 @@ interface Toast {
   duration?: number;
 }
 
+interface ConfirmState {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  confirmVariant?: 'danger' | 'default';
+  resolve: (value: boolean) => void;
+}
+
 interface ToastContextType {
   toasts: Toast[];
   addToast: (toast: Omit<Toast, 'id'>) => void;
@@ -21,6 +29,7 @@ interface ToastContextType {
   error: (title: string, message?: string) => void;
   warning: (title: string, message?: string) => void;
   info: (title: string, message?: string) => void;
+  confirm: (message: string, options?: { title?: string; confirmLabel?: string; variant?: 'danger' | 'default' }) => Promise<boolean>;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -49,6 +58,7 @@ const STYLES: Record<ToastType, string> = {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const counterRef = useRef(0);
 
   const removeToast = useCallback((id: string) => {
@@ -78,9 +88,73 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     addToast({ type: 'info', title, message });
   }, [addToast]);
 
+  const confirm = useCallback((
+    message: string,
+    options?: { title?: string; confirmLabel?: string; variant?: 'danger' | 'default' }
+  ): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        title: options?.title ?? 'Confirm',
+        message,
+        confirmLabel: options?.confirmLabel ?? 'Confirm',
+        confirmVariant: options?.variant ?? 'default',
+        resolve,
+      });
+    });
+  }, []);
+
+  const handleConfirm = (result: boolean) => {
+    if (confirmState) {
+      confirmState.resolve(result);
+      setConfirmState(null);
+    }
+  };
+
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast, success, error, warning, info }}>
+    <ToastContext.Provider value={{ toasts, addToast, removeToast, success, error, warning, info, confirm }}>
       {children}
+
+      {/* Confirm Dialog */}
+      {confirmState && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => handleConfirm(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                confirmState.confirmVariant === 'danger' ? 'bg-red-100' : 'bg-amber-100'
+              }`}>
+                {confirmState.confirmVariant === 'danger'
+                  ? <Trash2 className="w-5 h-5 text-red-600" />
+                  : <AlertTriangle className="w-5 h-5 text-amber-600" />
+                }
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">{confirmState.title}</h3>
+                <p className="text-sm text-gray-500 mt-1">{confirmState.message}</p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => handleConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleConfirm(true)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  confirmState.confirmVariant === 'danger'
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {confirmState.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Container - fixed bottom-right */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
         {toasts.map((toast) => (

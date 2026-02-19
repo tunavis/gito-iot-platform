@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { useToast } from '@/components/ToastProvider';
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight, Shield, Mail, Globe } from 'lucide-react';
 
 interface NotificationRule {
@@ -30,6 +31,7 @@ interface NotificationChannel {
 }
 
 export default function NotificationRulesPage() {
+  const toast = useToast();
   const [rules, setRules] = useState<NotificationRule[]>([]);
   const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
@@ -96,7 +98,8 @@ export default function NotificationRulesPage() {
   };
 
   const deleteRule = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this alert route?')) return;
+    const ok = await toast.confirm('Are you sure you want to delete this alert route?', { title: 'Delete Alert Route', variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
 
     const token = localStorage.getItem('auth_token');
     if (!token) return;
