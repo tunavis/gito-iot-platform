@@ -255,6 +255,9 @@ export default function WidgetConfigModal({
           <option value="line">Line Chart</option>
           <option value="area">Area Chart</option>
           <option value="bar">Bar Chart</option>
+          <option value="stacked_bar">Stacked Bar Chart</option>
+          <option value="composed">Composed (Bar + Line)</option>
+          <option value="radar">Radar Chart</option>
         </select>
       </div>
 
@@ -472,6 +475,163 @@ export default function WidgetConfigModal({
     </div>
   );
 
+  const renderPieChartConfig = () => (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="donut"
+          checked={config.donut ?? true}
+          onChange={(e) => setConfig({ ...config, donut: e.target.checked })}
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+        />
+        <label htmlFor="donut" className="text-sm font-medium text-gray-700">Donut style (hollow center)</label>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="show_legend"
+          checked={config.show_legend ?? true}
+          onChange={(e) => setConfig({ ...config, show_legend: e.target.checked })}
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+        />
+        <label htmlFor="show_legend" className="text-sm font-medium text-gray-700">Show legend</label>
+      </div>
+      {dataSources && dataSources.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="text-sm font-medium text-blue-900 mb-1">Data Sources ({dataSources.length}):</div>
+          {dataSources.map((ds: any, i: number) => (
+            <div key={i} className="text-sm text-blue-800">• {ds.alias || ds.metric} → 1 slice</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStatGroupConfig = () => (
+    <div className="space-y-4">
+      {dataSources && dataSources.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+          <span className="font-medium">Metric:</span> {dataSources[0].alias || dataSources[0].metric}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
+          <input
+            type="text"
+            value={config.unit ?? ""}
+            onChange={(e) => setConfig({ ...config, unit: e.target.value })}
+            placeholder="e.g. °C"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Decimal Places</label>
+          <input
+            type="number" min="0" max="6"
+            value={config.decimal_places ?? 2}
+            onChange={(e) => setConfig({ ...config, decimal_places: parseInt(e.target.value) })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+        <select
+          value={config.time_range || "24h"}
+          onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="1h">Last Hour</option>
+          <option value="6h">Last 6 Hours</option>
+          <option value="24h">Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Accent Color</label>
+        <div className="flex gap-2">
+          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer" />
+          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAlarmSummaryConfig = () => (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+        This widget automatically shows active alarms for all devices in your tenant. No device binding required.
+      </div>
+    </div>
+  );
+
+  const renderScatterPlotConfig = () => (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+        Bind <strong>two metrics</strong>: the first becomes the X axis, the second becomes the Y axis.
+      </div>
+      {dataSources && dataSources.length > 0 && (
+        <div className="space-y-1">
+          {dataSources.slice(0, 2).map((ds: any, i: number) => (
+            <div key={i} className="text-sm text-gray-700 bg-gray-50 px-3 py-1.5 rounded border border-gray-200">
+              <span className="font-medium text-gray-500">{i === 0 ? "X axis" : "Y axis"}:</span> {ds.alias || ds.metric}
+            </div>
+          ))}
+        </div>
+      )}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+        <select
+          value={config.time_range || "24h"}
+          onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="1h">Last Hour</option>
+          <option value="6h">Last 6 Hours</option>
+          <option value="24h">Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Dot Color</label>
+        <div className="flex gap-2">
+          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer" />
+          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderHeatmapConfig = () => (
+    <div className="space-y-4">
+      {dataSources && dataSources.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+          <span className="font-medium">Device:</span> {dataSources[0].alias || dataSources[0].metric || "Any metric"}
+        </div>
+      )}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+        <select
+          value={config.time_range || "7d"}
+          onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Heat Color</label>
+        <div className="flex gap-2">
+          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer" />
+          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+      </div>
+    </div>
+  );
+
   const renderConfigForm = () => {
     switch (widgetType) {
       case "kpi_card":
@@ -480,6 +640,16 @@ export default function WidgetConfigModal({
         return renderChartConfig();
       case "gauge":
         return renderGaugeConfig();
+      case "pie_chart":
+        return renderPieChartConfig();
+      case "stat_group":
+        return renderStatGroupConfig();
+      case "alarm_summary":
+        return renderAlarmSummaryConfig();
+      case "scatter_plot":
+        return renderScatterPlotConfig();
+      case "heatmap":
+        return renderHeatmapConfig();
       default:
         return (
           <div className="text-center py-8 text-gray-500">

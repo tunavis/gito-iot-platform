@@ -8,6 +8,12 @@ import {
   Area,
   BarChart,
   Bar,
+  ComposedChart,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -18,7 +24,7 @@ import {
 
 interface ChartWidgetProps {
   config: {
-    chart_type?: "line" | "area" | "bar";
+    chart_type?: "line" | "area" | "bar" | "stacked_bar" | "radar" | "composed";
     metrics?: string[];
     time_range?: string;
     colors?: string[];
@@ -389,6 +395,105 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
                 />
               ))}
             </BarChart>
+          </ResponsiveContainer>
+        );
+
+      case "stacked_bar":
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.375rem",
+                  fontSize: "12px",
+                }}
+              />
+              {effectiveKeys.length > 1 && <Legend wrapperStyle={{ fontSize: "12px" }} />}
+              {effectiveKeys.map((key, index) => (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  stackId="stack"
+                  fill={chartColors[index % chartColors.length]}
+                  radius={index === effectiveKeys.length - 1 ? [4, 4, 0, 0] : undefined}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        );
+
+      case "composed":
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.375rem",
+                  fontSize: "12px",
+                }}
+              />
+              {effectiveKeys.length > 1 && <Legend wrapperStyle={{ fontSize: "12px" }} />}
+              {effectiveKeys.map((key, index) =>
+                index === 0 ? (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    fill={chartColors[index % chartColors.length]}
+                    fillOpacity={0.7}
+                    radius={[4, 4, 0, 0]}
+                  />
+                ) : (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    stroke={chartColors[index % chartColors.length]}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                )
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        );
+
+      case "radar":
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart data={chartData} margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
+              <PolarGrid stroke="#e5e7eb" />
+              <PolarAngleAxis dataKey="time" stroke="#9ca3af" fontSize={10} />
+              <PolarRadiusAxis stroke="#9ca3af" fontSize={10} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "0.375rem",
+                  fontSize: "12px",
+                }}
+              />
+              {effectiveKeys.length > 1 && <Legend wrapperStyle={{ fontSize: "12px" }} />}
+              {effectiveKeys.map((key, index) => (
+                <Radar
+                  key={key}
+                  name={key}
+                  dataKey={key}
+                  stroke={chartColors[index % chartColors.length]}
+                  fill={chartColors[index % chartColors.length]}
+                  fillOpacity={0.2}
+                />
+              ))}
+            </RadarChart>
           </ResponsiveContainer>
         );
 

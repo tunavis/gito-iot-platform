@@ -12,6 +12,11 @@ import GaugeWidget from "../Widgets/GaugeWidget";
 import DeviceInfoWidget from "../Widgets/DeviceInfoWidget";
 import MapWidget from "../Widgets/MapWidget";
 import TableWidget from "../Widgets/TableWidget";
+import PieChartWidget from "../Widgets/PieChartWidget";
+import StatGroupWidget from "../Widgets/StatGroupWidget";
+import AlarmSummaryWidget from "../Widgets/AlarmSummaryWidget";
+import ScatterPlotWidget from "../Widgets/ScatterPlotWidget";
+import HeatmapWidget from "../Widgets/HeatmapWidget";
 import WidgetWrapper from "../Widgets/WidgetWrapper";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -174,6 +179,86 @@ export default function DashboardGrid({
             onRemove={() => onWidgetRemove?.(widget.id)}
           >
             <TableWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "pie_chart":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Pie Chart"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <PieChartWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "stat_group":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Stat Group"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <StatGroupWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "alarm_summary":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Alarm Summary"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <AlarmSummaryWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "scatter_plot":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Scatter Plot"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <ScatterPlotWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "heatmap":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Activity Heatmap"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <HeatmapWidget
               config={widget.configuration}
               dataSources={widget.data_sources}
             />

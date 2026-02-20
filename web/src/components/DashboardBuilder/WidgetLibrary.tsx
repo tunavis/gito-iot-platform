@@ -1,6 +1,19 @@
 "use client";
 
-import { X, TrendingUp, BarChart3, Gauge, Map, Table, Info } from "lucide-react";
+import {
+  X,
+  TrendingUp,
+  BarChart3,
+  Gauge,
+  Map,
+  Table,
+  PieChart,
+  LayoutGrid,
+  Bell,
+  ScatterChart,
+  Grid3X3,
+  Info,
+} from "lucide-react";
 import { useState } from "react";
 
 interface WidgetType {
@@ -10,15 +23,20 @@ interface WidgetType {
   icon: React.ReactNode;
   category: string;
   defaultConfig: any;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 const WIDGET_TYPES: WidgetType[] = [
+  // ── Metrics & KPIs ──────────────────────────────────────────────────────────
   {
     id: "kpi_card",
     name: "KPI Card",
-    description: "Display a single metric with trend indicator",
+    description: "Single metric with trend indicator and threshold alerts",
     icon: <TrendingUp className="w-6 h-6" />,
     category: "Metrics & KPIs",
+    defaultWidth: 3,
+    defaultHeight: 2,
     defaultConfig: {
       metric: "temperature",
       unit: "°C",
@@ -31,24 +49,13 @@ const WIDGET_TYPES: WidgetType[] = [
     },
   },
   {
-    id: "chart",
-    name: "Chart",
-    description: "Line, area, or bar chart for time-series data",
-    icon: <BarChart3 className="w-6 h-6" />,
-    category: "Charts",
-    defaultConfig: {
-      chart_type: "line",
-      metrics: ["temperature"],
-      time_range: "24h",
-      colors: ["#3b82f6"],
-    },
-  },
-  {
     id: "gauge",
     name: "Gauge",
-    description: "Circular gauge for single metrics with color zones",
+    description: "Circular gauge with safe / warning / critical color zones",
     icon: <Gauge className="w-6 h-6" />,
     category: "Metrics & KPIs",
+    defaultWidth: 2,
+    defaultHeight: 3,
     defaultConfig: {
       min: 0,
       max: 100,
@@ -62,23 +69,123 @@ const WIDGET_TYPES: WidgetType[] = [
       show_value: true,
     },
   },
-  // TODO: Add more widget types in Iteration 3
-  // {
-  //   id: "map",
-  //   name: "Map",
-  //   description: "Device location map",
-  //   icon: <Map className="w-6 h-6" />,
-  //   category: "Maps & Location",
-  //   defaultConfig: {},
-  // },
-  // {
-  //   id: "table",
-  //   name: "Table",
-  //   description: "Data table with sorting and filtering",
-  //   icon: <Table className="w-6 h-6" />,
-  //   category: "Data Display",
-  //   defaultConfig: {},
-  // },
+  {
+    id: "stat_group",
+    name: "Stat Group",
+    description: "Min / Max / Avg / Latest for a single metric in one card",
+    icon: <LayoutGrid className="w-6 h-6" />,
+    category: "Metrics & KPIs",
+    defaultWidth: 4,
+    defaultHeight: 2,
+    defaultConfig: {
+      unit: "",
+      time_range: "24h",
+      decimal_places: 2,
+      color: "#3b82f6",
+    },
+  },
+
+  // ── Charts ──────────────────────────────────────────────────────────────────
+  {
+    id: "chart",
+    name: "Time-Series Chart",
+    description: "Line, area, bar, stacked bar, radar or composed chart",
+    icon: <BarChart3 className="w-6 h-6" />,
+    category: "Charts",
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultConfig: {
+      chart_type: "line",
+      metrics: ["temperature"],
+      time_range: "24h",
+      colors: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"],
+    },
+  },
+  {
+    id: "pie_chart",
+    name: "Pie / Donut Chart",
+    description: "Proportional breakdown — one slice per data source",
+    icon: <PieChart className="w-6 h-6" />,
+    category: "Charts",
+    defaultWidth: 3,
+    defaultHeight: 4,
+    defaultConfig: {
+      donut: true,
+      show_legend: true,
+      colors: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"],
+    },
+  },
+  {
+    id: "scatter_plot",
+    name: "Scatter Plot",
+    description: "Correlation between two metrics across time",
+    icon: <ScatterChart className="w-6 h-6" />,
+    category: "Charts",
+    defaultWidth: 4,
+    defaultHeight: 4,
+    defaultConfig: {
+      x_label: "",
+      y_label: "",
+      color: "#3b82f6",
+      time_range: "24h",
+    },
+  },
+
+  // ── Activity ─────────────────────────────────────────────────────────────────
+  {
+    id: "heatmap",
+    name: "Activity Heatmap",
+    description: "Hour × day grid showing when devices report most data",
+    icon: <Grid3X3 className="w-6 h-6" />,
+    category: "Activity",
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultConfig: {
+      color: "#3b82f6",
+      time_range: "7d",
+    },
+  },
+  {
+    id: "alarm_summary",
+    name: "Alarm Summary",
+    description: "Active alarm counts by severity for the whole tenant",
+    icon: <Bell className="w-6 h-6" />,
+    category: "Activity",
+    defaultWidth: 3,
+    defaultHeight: 3,
+    defaultConfig: {},
+  },
+
+  // ── Data Display ─────────────────────────────────────────────────────────────
+  {
+    id: "table",
+    name: "Data Table",
+    description: "Paginated telemetry table with configurable columns",
+    icon: <Table className="w-6 h-6" />,
+    category: "Data Display",
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultConfig: {
+      page_size: 10,
+      auto_refresh: true,
+      time_range: "24h",
+    },
+  },
+
+  // ── Maps & Location ──────────────────────────────────────────────────────────
+  {
+    id: "map",
+    name: "Device Map",
+    description: "Interactive map showing device GPS locations",
+    icon: <Map className="w-6 h-6" />,
+    category: "Maps & Location",
+    defaultWidth: 6,
+    defaultHeight: 4,
+    defaultConfig: {
+      zoom: 12,
+      show_label: true,
+    },
+  },
 ];
 
 interface WidgetLibraryProps {
@@ -107,17 +214,15 @@ export default function WidgetLibrary({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+        className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              Widget Library
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Select a widget type to add to your dashboard
+            <h2 className="text-xl font-semibold text-gray-900">Widget Library</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {WIDGET_TYPES.length} widget types available
             </p>
           </div>
           <button
@@ -128,36 +233,39 @@ export default function WidgetLibrary({
           </button>
         </div>
 
-        {/* Categories */}
+        {/* Category tabs */}
         <div className="flex gap-2 px-6 py-3 border-b border-gray-200 overflow-x-auto">
           <button
             onClick={() => setSelectedCategory(null)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
               selectedCategory === null
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            All Widgets
+            All ({WIDGET_TYPES.length})
           </button>
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => setSelectedCategory(category)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                selectedCategory === category
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+          {categories.map((cat) => {
+            const count = WIDGET_TYPES.filter((w) => w.category === cat).length;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                  selectedCategory === cat
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {cat} ({count})
+              </button>
+            );
+          })}
         </div>
 
-        {/* Widget Grid */}
-        <div className="p-6 overflow-y-auto max-h-[calc(80vh-180px)]">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Widget grid */}
+        <div className="p-6 overflow-y-auto max-h-[calc(80vh-160px)]">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredWidgets.map((widget) => (
               <button
                 key={widget.id}
@@ -165,17 +273,22 @@ export default function WidgetLibrary({
                   onSelectWidget(widget);
                   onClose();
                 }}
-                className="group p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all text-left"
+                className="group p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-md transition-all text-left"
               >
                 <div className="flex items-start gap-3">
-                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
                     {widget.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                      {widget.name}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors text-sm">
+                        {widget.name}
+                      </h3>
+                      <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                        {widget.defaultWidth ?? 3}×{widget.defaultHeight ?? 2}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                       {widget.description}
                     </p>
                   </div>
@@ -187,18 +300,9 @@ export default function WidgetLibrary({
           {filteredWidgets.length === 0 && (
             <div className="text-center py-12">
               <Info className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-500">
-                No widgets found in this category
-              </p>
+              <p className="text-gray-500">No widgets in this category</p>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <p className="text-xs text-gray-500">
-            More widget types will be available in future updates
-          </p>
         </div>
       </div>
     </div>
