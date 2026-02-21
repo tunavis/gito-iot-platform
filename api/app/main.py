@@ -119,6 +119,7 @@ def create_app() -> FastAPI:
     from app.routers import auth, devices, websocket, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications, device_types, users, audit_logs, notification_rules, analytics
     from app.routers import alert_rules_unified  # Unified alert rules (THRESHOLD + COMPOSITE)
     from app.routers import dashboards, dashboard_widgets  # Dashboard builder system
+    from app.routers import device_credentials, device_ingest  # Device token provisioning
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
@@ -137,6 +138,8 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_widgets.router, prefix="/api/v1")  # Dashboard widgets
     app.include_router(telemetry.router, prefix="/api/v1")
     app.include_router(telemetry_aggregate.router, prefix="/api/v1")
+    app.include_router(device_credentials.router, prefix="/api/v1")  # Token CRUD
+    app.include_router(device_ingest.router, prefix="/api/v1")        # Token-based ingest
     app.include_router(websocket.router, prefix="/api/v1")
     
     # Disabled routers (superseded by unified systems):

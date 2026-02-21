@@ -953,6 +953,13 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [showNewRule, setShowNewRule] = useState(false);
 
+  // API Credentials state
+  const [tokens, setTokens] = useState<any[]>([]);
+  const [generatingToken, setGeneratingToken] = useState(false);
+  const [newTokenName, setNewTokenName] = useState('');
+  const [revealedToken, setRevealedToken] = useState<{ token: string; name: string } | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+
   useEffect(() => {
     const loadRules = async () => {
       const token = localStorage.getItem('auth_token');
@@ -964,7 +971,18 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
         setAlertRules(json.data || []);
       }
     };
+    const loadTokens = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+      const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}/credentials`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const json = await res.json();
+        setTokens(json.data || []);
+      }
+    };
     loadRules();
+    loadTokens();
   }, [deviceId]);
 
   const saveDevice = async () => {
@@ -1021,6 +1039,46 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
     if (res.ok) {
       setAlertRules(prev => prev.filter(r => r.id !== ruleId));
     }
+  };
+
+  const generateToken = async () => {
+    setGeneratingToken(true);
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name: newTokenName || 'Default' }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const created = json.data;
+      setTokens(prev => [created, ...prev]);
+      setRevealedToken({ token: created.token, name: created.name });
+      setNewTokenName('');
+      setCopiedToken(false);
+    }
+    setGeneratingToken(false);
+  };
+
+  const revokeToken = async (credId: string) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}/credentials/${credId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setTokens(prev => prev.filter(t => t.id !== credId));
+    }
+  };
+
+  const copyToken = (plainToken: string) => {
+    navigator.clipboard.writeText(plainToken);
+    setCopiedToken(true);
+    setTimeout(() => setCopiedToken(false), 2000);
   };
 
   return (
@@ -1106,6 +1164,79 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
             ))
           )}
         </div>
+      </div>
+
+      {/* API Credentials */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">API Credentials</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Device tokens let hardware push telemetry without a user account.</p>
+          </div>
+        </div>
+
+        {/* One-time token reveal */}
+        {revealedToken && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm font-semibold text-amber-800 mb-2">⚠ Save this token — it will not be shown again</p>
+            <div className="flex items-center gap-2 mb-3">
+              <code className="flex-1 text-xs font-mono bg-white border border-amber-300 rounded px-3 py-2 text-gray-900 break-all">{revealedToken.token}</code>
+              <button onClick={() => copyToken(revealedToken.token)} className="px-3 py-2 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors whitespace-nowrap">
+                {copiedToken ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-xs text-amber-700 font-medium mb-1">Usage:</p>
+            <pre className="text-xs bg-gray-900 text-green-300 rounded p-2 overflow-x-auto">{`curl -X POST /api/v1/ingest \\
+  -H "X-Device-Token: ${revealedToken.token}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"temperature": 25.5}'`}</pre>
+            <button onClick={() => setRevealedToken(null)} className="mt-2 text-xs text-amber-700 hover:underline">Dismiss</button>
+          </div>
+        )}
+
+        {/* Generate new token */}
+        <div className="flex gap-2 mb-4">
+          <input
+            value={newTokenName}
+            onChange={e => setNewTokenName(e.target.value)}
+            placeholder="Token name (e.g. Factory Floor Sensor)"
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <button
+            onClick={generateToken}
+            disabled={generatingToken}
+            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            {generatingToken ? 'Generating…' : '+ Generate Token'}
+          </button>
+        </div>
+
+        {/* Token list */}
+        {tokens.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-4">No tokens yet — generate one above</p>
+        ) : (
+          <div className="space-y-2">
+            {tokens.map((t: any) => (
+              <div key={t.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                  <p className="text-xs text-gray-500">
+                    Created {new Date(t.created_at).toLocaleDateString()}
+                    {t.expires_at ? ` · Expires ${new Date(t.expires_at).toLocaleDateString()}` : ' · Never expires'}
+                    {' · '}
+                    <span className={t.status === 'active' ? 'text-green-600' : 'text-gray-400'}>{t.status}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => revokeToken(t.id)}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Danger Zone */}
