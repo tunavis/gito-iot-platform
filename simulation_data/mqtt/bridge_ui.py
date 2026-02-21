@@ -502,4 +502,5 @@ if __name__ == "__main__":
     print(f"  Local Mosquitto : {local_cfg['host']}:{local_cfg['port']}")
     print("  Open  →  http://localhost:5555")
     print("=" * 62 + "\n")
-    socketio.run(app, host="0.0.0.0", port=5555, debug=False)
+    ui_port = bridge_cfg.get("ui_port", 5555)
+    socketio.run(app, host="0.0.0.0", port=ui_port, debug=False, allow_unsafe_werkzeug=True)
