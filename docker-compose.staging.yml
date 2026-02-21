@@ -79,6 +79,61 @@ services:
     networks:
       - gito-staging-network
 
+  # Mosquitto MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: gito-mosquitto-staging
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_staging_data:/mosquitto/data
+    networks:
+      - gito-staging-network
+
+  # MQTT Processor
+  processor:
+    build:
+      context: ./processor
+      dockerfile: Dockerfile
+    container_name: gito-processor-staging
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      # Processor uses psycopg2 (sync) — must use postgresql:// not postgresql+asyncpg://
+      DATABASE_URL: postgresql://gito_user:${DB_PASSWORD}@postgres:5432/gito_iot_staging
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - gito-staging-network
+
+  # MQTT Bridge UI (staging testing tool)
+  mqtt-bridge:
+    build:
+      context: ./simulation_data/mqtt
+    container_name: gito-mqtt-bridge-staging
+    restart: unless-stopped
+    environment:
+      GITO_API_URL: http://api:8000
+      MQTT_LOCAL_HOST: mosquitto
+      MQTT_LOCAL_PORT: "1883"
+      UI_PORT: "5555"
+    ports:
+      - "5555:5555"
+    depends_on:
+      - mosquitto
+      - api
+    networks:
+      - gito-staging-network
+
   # Nginx Reverse Proxy (Gateway)
   nginx:
     image: nginx:1.27-alpine
@@ -102,3 +157,4 @@ networks:
 
 volumes:
   postgres_staging_data:
+  mosquitto_staging_data:

@@ -102,8 +102,15 @@ jobs:
         run: |
           cd /opt/gito-iot
           echo "📦 Pulling latest Docker images..."
-          docker compose -f docker-compose.staging.yml --env-file .env.staging pull
+          docker compose -f docker-compose.staging.yml --env-file .env.staging pull --ignore-buildable
           echo "✅ Images pulled"
+
+      - name: Build Local Images
+        run: |
+          cd /opt/gito-iot
+          echo "🔨 Building processor and mqtt-bridge images..."
+          docker compose -f docker-compose.staging.yml --env-file .env.staging build processor mqtt-bridge
+          echo "✅ Local images built"
 
       - name: Stop Current Services
         run: |
@@ -132,7 +139,7 @@ jobs:
         run: |
           cd /opt/gito-iot
           echo "🌱 Seeding database..."
-          docker exec -i gito-postgres-staging psql -U gito -d gito < scripts/seed.sql
+          docker exec -i gito-postgres-staging psql -U gito_user -d gito_iot_staging < scripts/seed.sql
           echo "✅ Database seeded"
 
       - name: Health Check

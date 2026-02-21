@@ -19,7 +19,7 @@ class DeviceStatus(str, Enum):
 class DeviceCreate(BaseModel):
     """Create device request."""
     name: str = Field(min_length=1, max_length=255, description="Device name")
-    device_type: str = Field(min_length=1, max_length=100, description="Device type string")
+    device_type: Optional[str] = Field(None, max_length=100, description="Device type string")
     device_type_id: Optional[UUID] = Field(None, description="Device type template UUID")
     description: Optional[str] = Field(None, description="Device description")
     serial_number: Optional[str] = Field(None, max_length=255, description="Serial number")

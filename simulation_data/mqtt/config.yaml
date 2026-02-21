@@ -10,15 +10,29 @@ database:
 
 # MQTT brokers
 mqtt:
-  # Local mosquitto (publish simulated data here)
+  # Local Mosquitto (bridge re-publishes real device data here → mqtt_processor picks it up)
   local:
-    host: localhost
+    host: 127.0.0.1
     port: 1883
+    username: ""   # leave blank if Mosquitto allows anonymous connections
+    password: ""
   
   # Demo broker (test.mosquitto.org - for future use/inspiration)
   demo:
     host: test.mosquitto.org
     port: 1883
+
+# ── MQTT Bridge UI ─────────────────────────────────────────────────────────────
+# Settings for bridge_ui.py (the web-based device import tool)
+bridge:
+  # Your Gito instance URL
+  gito_api_url: http://127.0.0.1
+
+  # Pre-fill the login form (leave blank to type each time)
+  gito_email: ""
+
+  # Which port to run the Bridge UI on
+  ui_port: 5555
 
 # Simulator settings
 simulator:
