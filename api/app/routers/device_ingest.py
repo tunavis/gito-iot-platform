@@ -117,7 +117,7 @@ async def ingest_with_token(
     # Update device status + last_seen
     await session.execute(
         text(
-            "UPDATE devices SET last_seen_at = :ts, status = 'online', updated_at = now() "
+            "UPDATE devices SET last_seen = :ts, status = 'online', updated_at = now() "
             "WHERE id = :device_id AND tenant_id = :tenant_id"
         ),
         {"ts": ts, "device_id": str(device_id), "tenant_id": str(tenant_id)},

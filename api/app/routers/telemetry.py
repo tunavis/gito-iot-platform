@@ -671,9 +671,9 @@ async def ingest_telemetry(
     session.add_all(rows)
     await session.commit()
 
-    # Update device last_seen
+    # Update device last_seen + flip online
     await session.execute(
-        text("UPDATE devices SET last_seen_at = :ts WHERE id = :device_id AND tenant_id = :tenant_id"),
+        text("UPDATE devices SET last_seen = :ts, status = 'online', updated_at = now() WHERE id = :device_id AND tenant_id = :tenant_id"),
         {"ts": ts, "device_id": str(device_id), "tenant_id": str(tenant_id)},
     )
     await session.commit()
