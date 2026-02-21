@@ -187,6 +187,26 @@ def _connect_local_mqtt():
         socketio.emit("local_status", {"connected": False, "message": str(exc)})
 
 
+def _topic_last_key(topic: str) -> str:
+    """Extract the last segment of an MQTT topic and sanitize it as a metric key."""
+    part = topic.rstrip("/").split("/")[-1]
+    clean = re.sub(r"[^a-zA-Z0-9_]", "_", part).strip("_")
+    return clean or "value"
+
+
+def _coerce_to_dict(parsed, topic: str) -> dict:
+    """
+    Ensure the payload is a dict of metrics.
+    Plain numeric payloads (e.g. a sensor publishing just '22.5') are wrapped using
+    the last segment of the topic as the key: {'SensorTemperature': 22.5}.
+    """
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+        return {_topic_last_key(topic): parsed}
+    return {}
+
+
 def _publish_to_local(bridge: dict, parsed: dict | None):
     """Re-publish sanitized metrics to local Mosquitto in Gito topic format."""
     if not local_client or not local_connected:
@@ -196,7 +216,7 @@ def _publish_to_local(bridge: dict, parsed: dict | None):
         )
         return
 
-    metrics = _sanitize_metrics(parsed or {})
+    metrics = _sanitize_metrics(_coerce_to_dict(parsed, bridge["topic"]))
     if not metrics:
         return  # nothing numeric to forward
 
@@ -268,7 +288,7 @@ def _on_ext_message(client, userdata, msg):
             "count":       entry["count"],
             "last_seen":   now,
             "is_new":      is_new,
-            "metrics":     _sanitize_metrics(parsed or {}),
+            "metrics":     _sanitize_metrics(_coerce_to_dict(parsed, topic)),
         })
 
     # Forward to local Mosquitto if topic is actively bridged
@@ -356,7 +376,7 @@ def list_topics():
             "last_payload": d["last_payload"],
             "last_seen":    d["last_seen"],
             "parsed":       d["parsed"],
-            "metrics":      _sanitize_metrics(d["parsed"] or {}),
+            "metrics":      _sanitize_metrics(_coerce_to_dict(d["parsed"], t)),
         }
         for t, d in sorted(discovered.items(), key=lambda x: -x[1]["count"])
     ])
