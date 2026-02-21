@@ -434,6 +434,41 @@
       </div>
     </template>
 
+    <!-- Saved bridges strip ───────────────────────────────────────────────── -->
+    <div x-show="savedBridges.length > 0" class="border-t border-gray-800 flex-shrink-0">
+      <div class="px-5 py-2 flex items-center gap-2 border-b border-gray-800">
+        <span class="text-xs font-bold uppercase tracking-widest text-gray-500">Saved Bridges</span>
+        <span class="text-xs rounded-full px-1.5 bg-gray-700 text-gray-300 font-bold"
+              x-text="savedBridges.length"></span>
+        <span class="text-xs text-gray-600">Previously bridged devices — click Resume to restart</span>
+      </div>
+      <div class="flex gap-3 px-5 py-3 overflow-x-auto">
+        <template x-for="s in savedBridges" :key="s.topic">
+          <div class="flex-shrink-0 card rounded px-4 py-3 min-w-64"
+               :class="s.active ? 'border-emerald-800/60' : 'border-gray-700'">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="min-w-0">
+                <p class="text-white font-semibold text-xs truncate" x-text="s.device_name"></p>
+                <p class="text-gray-500 text-xs truncate" x-text="s.topic"></p>
+                <p class="text-gray-700 text-xs" x-text="s.broker_host + ':' + s.broker_port"></p>
+              </div>
+              <span x-show="s.active" class="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full pulse mt-0.5"></span>
+              <span x-show="!s.active" class="flex-shrink-0 w-2 h-2 bg-gray-600 rounded-full mt-0.5"></span>
+            </div>
+            <div class="flex items-center justify-between text-xs gap-2">
+              <button x-show="!s.active" @click="resumeBridge(s.topic)"
+                      :disabled="!ext.connected || !gito.loggedIn"
+                      class="btn btn-green px-3 py-1 text-xs disabled:opacity-40 disabled:cursor-not-allowed">
+                ▶ Resume
+              </button>
+              <span x-show="s.active" class="text-emerald-400 text-xs font-bold">● Active</span>
+              <button @click="deleteSaved(s.topic)" class="text-gray-700 hover:text-red-500 text-xs ml-auto">✕</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- Active bridges strip ──────────────────────────────────────────────── -->
     <div x-show="bridges.length > 0" class="border-t border-gray-800 flex-shrink-0">
       <div class="px-5 py-2 flex items-center gap-2 border-b border-gray-800">
@@ -514,6 +549,7 @@ function bridge() {
 
     // Bridges
     bridges: [],
+    savedBridges: [],
 
     // ── Computed ──────────────────────────────────────────────────────────
     get filteredTopics() {
@@ -657,6 +693,7 @@ function bridge() {
           this.newDevice = { name: '', deviceTypeId: '', description: '', location: '' };
           this.panels.broker = false;
           this.panels.gito   = false;
+          await this.loadSaved();
         } else {
           this.createError = bd.message;
         }
@@ -757,6 +794,43 @@ function bridge() {
       try {
         const r = await fetch('/api/bridges');
         this.bridges = await r.json();
+      } catch (_) {}
+      // Load saved bridges from disk
+      await this.loadSaved();
+    },
+
+    async loadSaved() {
+      try {
+        const r = await fetch('/api/bridge/saved');
+        this.savedBridges = await r.json();
+      } catch (_) {}
+    },
+
+    async resumeBridge(topic) {
+      try {
+        const r = await fetch('/api/bridge/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          this.bridges.push(d.bridge);
+          await this.loadSaved();
+        } else {
+          alert(d.message);
+        }
+      } catch (e) { alert(e); }
+    },
+
+    async deleteSaved(topic) {
+      try {
+        await fetch('/api/bridge/saved/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic }),
+        });
+        await this.loadSaved();
       } catch (_) {}
     },
   };

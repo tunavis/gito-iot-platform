@@ -79,6 +79,26 @@ bridges: dict[str, dict] = {}
 gito_token:     str | None = None
 gito_tenant_id: str | None = None
 
+# ── Saved bridges persistence ───────────────────────────────────────────────────
+_SAVED_FILE = Path(__file__).parent / "saved_bridges.json"
+
+def _load_saved() -> dict:
+    try:
+        if _SAVED_FILE.exists():
+            return json.loads(_SAVED_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+def _save_to_disk(saved: dict):
+    try:
+        _SAVED_FILE.write_text(json.dumps(saved, indent=2))
+    except Exception as e:
+        logger.warning("Could not save bridges: %s", e)
+
+# Load saved bridges on startup
+saved_bridges: dict = _load_saved()   # key → {topic, device_id, device_name, tenant_id, broker_host, broker_port, created_at}
+
 
 # ── Payload helpers ────────────────────────────────────────────────────────────
 def _parse_payload(raw: bytes) -> tuple[str, dict | None]:
@@ -470,6 +490,18 @@ def start_bridge():
     if ext_client and ext_connected:
         ext_client.subscribe(data["topic"], qos=0)
 
+    # Persist to saved_bridges.json
+    saved_bridges[data["topic"]] = {
+        "topic":       data["topic"],
+        "device_id":   data["device_id"],
+        "device_name": data["device_name"],
+        "tenant_id":   gito_tenant_id,
+        "broker_host": data.get("broker_host", demo_cfg["host"]),
+        "broker_port": data.get("broker_port", demo_cfg["port"]),
+        "created_at":  datetime.utcnow().isoformat(),
+    }
+    _save_to_disk(saved_bridges)
+
     logger.info(
         "Bridge started: %s → local/%s/devices/%s/telemetry",
         data["topic"], gito_tenant_id, data["device_id"],
@@ -490,6 +522,67 @@ def stop_bridge():
 @app.route("/api/bridges")
 def list_bridges():
     return jsonify(list(bridges.values()))
+
+
+@app.route("/api/bridge/saved")
+def list_saved():
+    """Return persisted saved bridges with active status overlay."""
+    active_topics = {b["topic"] for b in bridges.values() if b["active"]}
+    result = []
+    for entry in saved_bridges.values():
+        result.append({**entry, "active": entry["topic"] in active_topics})
+    return jsonify(result)
+
+
+@app.route("/api/bridge/saved/delete", methods=["POST"])
+def delete_saved():
+    topic = (request.json or {}).get("topic")
+    if topic in saved_bridges:
+        del saved_bridges[topic]
+        _save_to_disk(saved_bridges)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "message": "Not found"}), 404
+
+
+@app.route("/api/bridge/resume", methods=["POST"])
+def resume_bridge():
+    """Re-activate a saved bridge (must be logged in + ext broker connected)."""
+    if not gito_token or not gito_tenant_id:
+        return jsonify({"ok": False, "message": "Not logged in to Gito"}), 401
+    if not local_connected:
+        return jsonify({"ok": False, "message": "Local Mosquitto not connected"}), 503
+    if not ext_connected:
+        return jsonify({"ok": False, "message": "External broker not connected — connect first"}), 503
+
+    topic = (request.json or {}).get("topic")
+    saved = saved_bridges.get(topic)
+    if not saved:
+        return jsonify({"ok": False, "message": "Saved bridge not found"}), 404
+
+    # Don't create duplicate active bridge for same topic
+    for b in bridges.values():
+        if b["topic"] == topic and b["active"]:
+            return jsonify({"ok": True, "bridge": b})
+
+    bridge_id = f"bridge_{random.randint(10000, 99999)}"
+    bridge = {
+        "id":          bridge_id,
+        "topic":       saved["topic"],
+        "device_id":   saved["device_id"],
+        "device_name": saved["device_name"],
+        "tenant_id":   saved["tenant_id"],
+        "active":      True,
+        "count":       0,
+        "last_value":  None,
+        "last_forward": None,
+        "status":      "ok",
+        "started_at":  datetime.utcnow().isoformat(),
+    }
+    bridges[bridge_id] = bridge
+    ext_client.subscribe(saved["topic"], qos=0)
+    logger.info("Bridge resumed: %s → local/%s/devices/%s/telemetry",
+                saved["topic"], saved["tenant_id"], saved["device_id"])
+    return jsonify({"ok": True, "bridge": bridge})
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
