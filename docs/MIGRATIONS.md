@@ -242,6 +242,51 @@ def downgrade() -> None:
 
 ---
 
+## Bridge Device Auto-Discovery (Migration 005)
+
+### Context
+
+The MQTT bridge (`simulation_data/mqtt/bridge_ui.py`) auto-creates devices when it receives
+telemetry from an external MQTT broker. It does **not** require a `device_type_id` — the
+device type is optional and can be assigned later via the UI.
+
+### What Migration 005 Does
+
+`005_nullable_device_hierarchy` makes four columns nullable on the `devices` table:
+
+| Column | Before | After |
+|---|---|---|
+| `organization_id` | NOT NULL | NULL allowed |
+| `site_id` | NOT NULL | NULL allowed |
+| `device_group_id` | NOT NULL | NULL allowed |
+| `device_type_id` | NOT NULL | NULL allowed |
+
+Without this migration, the bridge `POST /devices` call fails with:
+```
+null value in column "device_type_id" of relation "devices" violates not-null constraint
+```
+
+### Staging Deploy
+
+Migrations **004 and 005** are applied automatically on the next staging deploy because
+`api/entrypoint.sh` runs `alembic upgrade head` on every container start.
+
+```bash
+# Verify after deploy
+docker exec gito-api alembic current
+# Expected: 005_nullable_device_hierarchy (head)
+```
+
+### Bridge Device Creation Flow
+
+1. Bridge receives message on external MQTT topic (e.g. `SDE11/JAX/UTILITIES/BOILER/OPT_G/CHIMNEY_TEMP`)
+2. Bridge calls `POST /tenants/{id}/devices` — sets `device_type` (varchar) from topic prefix, leaves `device_type_id` as `null`
+3. Bridge re-publishes to local Mosquitto as `{tenant}/devices/{device_id}/telemetry`
+4. `mqtt_processor` picks it up → writes to `telemetry` table → triggers alerts → WebSocket push
+5. Operator assigns `device_type_id` later via the UI to enable schema-driven dashboards
+
+---
+
 ## Emergency Procedures
 
 ### Need to Rollback Migration in Production

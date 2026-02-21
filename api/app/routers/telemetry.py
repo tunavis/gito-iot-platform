@@ -112,9 +112,13 @@ async def query_telemetry(
             detail="Device not found",
         )
 
-    # Set default end_time to now if not provided
+    # Normalise to UTC-aware datetimes so comparisons don't raise TypeError
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
     if end_time is None:
         end_time = datetime.now(timezone.utc)
+    elif end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
 
     # Validate time range
     if start_time >= end_time:
