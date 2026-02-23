@@ -206,3 +206,18 @@ select:disabled {
 @media (prefers-color-scheme: dark) {
   /* Add dark mode styles here when needed */
 }
+
+/* ─── Visualization Layer — Flow Animation Keyframes ─────────────────────────
+ * Used by FlowLine component (web/src/components/visualization/FlowLine.tsx).
+ * stroke-dashoffset of 200 covers all dash patterns (max patternLength ≈ 15px).
+ * Speed is controlled via animation-duration set inline per component.
+ * ─────────────────────────────────────────────────────────────────────────── */
+@keyframes viz-flow-fwd {
+  from { stroke-dashoffset: 200; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes viz-flow-rev {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: 200; }
+}

@@ -116,9 +116,11 @@ def _sanitize_metrics(obj, prefix: str = "", out: dict | None = None) -> dict:
     """
     Flatten and sanitize a parsed payload for mqtt_processor.
 
-    Rules (from TelemetryValidator in mqtt_processor.py):
-      - Keys: alphanumeric + underscore only
-      - Values: numeric (int/float) only  ← strings are dropped
+    Rules:
+      - Keys: alphanumeric + underscore only (spaces/hyphens → underscore)
+      - Values: numbers, strings, booleans and nested dicts/lists all accepted
+        (mqtt_processor handles all types — only system keys like 'timestamp'
+         are stripped by the processor itself)
     """
     if out is None:
         out = {}
@@ -129,11 +131,18 @@ def _sanitize_metrics(obj, prefix: str = "", out: dict | None = None) -> dict:
                 continue
             new_prefix = f"{prefix}_{clean}" if prefix else clean
             _sanitize_metrics(v, new_prefix, out)
-    elif isinstance(obj, (int, float)) and not isinstance(obj, bool):
+    elif isinstance(obj, bool):
         key = prefix.rstrip("_")
         if key and re.fullmatch(r"[a-zA-Z0-9_]+", key):
             out[key] = obj
-    # Strings and booleans are intentionally dropped — processor rejects them
+    elif isinstance(obj, (int, float)):
+        key = prefix.rstrip("_")
+        if key and re.fullmatch(r"[a-zA-Z0-9_]+", key):
+            out[key] = obj
+    elif isinstance(obj, str):
+        key = prefix.rstrip("_")
+        if key and re.fullmatch(r"[a-zA-Z0-9_]+", key):
+            out[key] = obj
     return out
 
 
@@ -291,10 +300,18 @@ def _on_ext_message(client, userdata, msg):
             "metrics":     _sanitize_metrics(_coerce_to_dict(parsed, topic)),
         })
 
-    # Forward to local Mosquitto if topic is actively bridged
+    # Forward to local Mosquitto if topic is actively bridged.
+    # Use first matching bridge only — prevents duplicates if the same topic
+    # is bridged more than once (e.g. after UI restart without stopping bridges).
+    published = False
     for bridge in bridges.values():
         if bridge["active"] and bridge["topic"] == topic:
-            _publish_to_local(bridge, parsed)
+            if not published:
+                _publish_to_local(bridge, parsed)
+                published = True
+            else:
+                # Keep stats in sync for any extra bridge entries, but don't re-publish
+                bridge["count"] = bridge.get("count", 0) + 1
 
 
 # ── Flask routes ───────────────────────────────────────────────────────────────
@@ -440,6 +457,26 @@ def get_device_types():
             data  = resp.json()
             items = data.get("data", data) if isinstance(data, dict) else data
             return jsonify({"ok": True, "device_types": items})
+        return jsonify({"ok": False, "message": f"API {resp.status_code}"}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/gito/devices")
+def list_gito_devices():
+    """List devices already registered in Gito — map a topic to an existing device."""
+    if not gito_token or not gito_tenant_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    try:
+        resp = requests.get(
+            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices?per_page=200",
+            headers={"Authorization": f"Bearer {gito_token}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            body  = resp.json()
+            items = body.get("data", body) if isinstance(body, dict) else body
+            return jsonify({"ok": True, "devices": items})
         return jsonify({"ok": False, "message": f"API {resp.status_code}"}), 500
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500

@@ -4,6 +4,7 @@ Subscribes to device telemetry, validates, inserts to TimescaleDB, and updates R
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from smtplib import SMTP_SSL, SMTP
 import aiomqtt
 import redis.asyncio as aioredis
 from psycopg_pool import AsyncConnectionPool
+from psycopg.rows import dict_row
 import psycopg
 
 # Configure structured logging
@@ -47,6 +49,9 @@ SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
 MAX_PAYLOAD_SIZE = 256 * 1024  # 256KB
 MAX_TELEMETRY_VALUE = 1e10  # Prevent overflow
 MIN_TELEMETRY_VALUE = -1e10
+
+# Metadata keys devices commonly include — strip before storing as metrics
+SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id", "time", "datetime"}
 
 
 class EmailService:
@@ -156,27 +161,24 @@ class TelemetryValidator:
         """
         Validate telemetry payload structure.
         Expected format: { "metric_name": value, ... }
+        Values can be numeric, string, bool (stored as string), dict/list (stored as JSON), or null.
         """
         if not isinstance(payload, dict):
             return False
-        
+
         if not payload:  # Empty dict
             return False
-        
+
         for key, value in payload.items():
-            # Metric names must be valid identifiers
-            if not isinstance(key, str) or not key.replace('_', '').isalnum():
+            # Metric names must be non-empty strings
+            if not isinstance(key, str) or not key:
                 return False
-            
-            # Values must be numeric or null
-            if value is not None and not isinstance(value, (int, float)):
-                return False
-            
-            # Numeric values must be within range
-            if isinstance(value, (int, float)):
+
+            # Numeric values must be within range (prevent overflow)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
                 if value > MAX_TELEMETRY_VALUE or value < MIN_TELEMETRY_VALUE:
                     return False
-        
+
         return True
 
     @staticmethod
@@ -202,7 +204,8 @@ class DatabaseService:
             self.conn_pool = AsyncConnectionPool(
                 self.db_url,
                 min_size=5,
-                max_size=20
+                max_size=20,
+                kwargs={"row_factory": dict_row},
             )
             await self.conn_pool.open()
             logger.info("Database connection pool created")
@@ -233,9 +236,9 @@ class DatabaseService:
         """
         try:
             async with self.conn_pool.connection() as conn:
-                # Set tenant context for RLS
+                # Set tenant context for RLS (must match current_setting('app.current_tenant_id') in RLS policies)
                 await conn.execute(
-                    "SELECT set_config('app.tenant_id', %s, false)",
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
                     (tenant_id,)
                 )
 
@@ -310,7 +313,7 @@ class DatabaseService:
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.tenant_id', %s, false)",
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
                     (tenant_id,)
                 )
                 
@@ -346,7 +349,7 @@ class DatabaseService:
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.tenant_id', %s, false)",
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
                     (tenant_id,)
                 )
                 
@@ -381,7 +384,7 @@ class DatabaseService:
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.tenant_id', %s, false)",
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
                     (tenant_id,)
                 )
                 
@@ -448,7 +451,7 @@ class DatabaseService:
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.tenant_id', %s, false)",
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
                     (tenant_id,)
                 )
                 
@@ -663,7 +666,15 @@ class MQTTProcessor:
                 logger.warning(f"Invalid device_id: {device_id}")
                 return
 
-            # Parse and validate payload
+            # Deduplication: skip exact-duplicate messages within 5 seconds.
+            # Devices or bridges may publish the same payload twice in quick succession.
+            payload_hash = hashlib.sha256(payload_bytes).hexdigest()[:16]
+            dedup_key = f"dedup:{device_id}:{payload_hash}"
+            if await self.redis_service.redis.set(dedup_key, 1, nx=True, ex=5) is None:
+                logger.debug("Duplicate message skipped for device %s", device_id)
+                return
+
+            # Parse payload
             try:
                 payload = json.loads(payload_bytes.decode('utf-8'))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
@@ -676,6 +687,10 @@ class MQTTProcessor:
                     }
                 )
                 return
+
+            # Strip metadata keys devices commonly include (timestamp, ts, device_id, etc.)
+            if isinstance(payload, dict):
+                payload = {k: v for k, v in payload.items() if k not in SYSTEM_KEYS}
 
             if not self.validator.validate_payload(payload):
                 logger.warning(
@@ -819,7 +834,7 @@ class MQTTProcessor:
             # Queue the notification for processing by API background task
             async with self.db_service.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.tenant_id', %s, false)",
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
                     (tenant_id,)
                 )
                 

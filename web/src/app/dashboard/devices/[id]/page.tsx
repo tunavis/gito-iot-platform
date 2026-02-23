@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import {
   Activity,
@@ -33,7 +33,7 @@ import {
   Package
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import HMIRenderer from '@/components/HMI/HMIRenderer';
+import { DeviceVisualization } from '@/components/visualization';
 
 // Icon mapping for common metrics (optional visual enhancement, NOT used for filtering)
 const METRIC_ICONS: Record<string, any> = {
@@ -118,6 +118,7 @@ type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 export default function DeviceDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const deviceId = params?.id as string;
 
   const [device, setDevice] = useState<Device | null>(null);
@@ -127,7 +128,10 @@ export default function DeviceDetailPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>([]);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('live');
+  const VALID_TABS = ['live', 'overview', 'telemetry', 'alarms', 'settings'] as const;
+  type TabId = typeof VALID_TABS[number];
+  const _tabParam = searchParams?.get('tab') ?? 'live';
+  const [activeTab, setActiveTab] = useState<TabId>(VALID_TABS.includes(_tabParam as TabId) ? (_tabParam as TabId) : 'live');
   const [tenantId, setTenantId] = useState<string>('');
   const [alarms, setAlarms] = useState<any[]>([]);
 
@@ -442,14 +446,15 @@ export default function DeviceDetailPage() {
           </nav>
         </div>
 
-        {/* Live Device Tab - HMI Renderer */}
+        {/* Live Device Tab — Visualization Layer */}
         {activeTab === 'live' && tenantId && (
-          <HMIRenderer
-            deviceId={deviceId}
-            tenantId={tenantId}
-            device={device}
-            deviceType={deviceType}
-          />
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+            <DeviceVisualization
+              deviceId={deviceId}
+              tenantId={tenantId}
+              telemetrySchema={deviceType?.telemetry_schema ?? {}}
+            />
+          </div>
         )}
 
         {/* Overview Tab */}
