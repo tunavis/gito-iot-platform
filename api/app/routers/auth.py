@@ -7,7 +7,7 @@ from typing import Annotated
 import logging
 
 from app.database import get_session
-from app.models.base import User
+from app.models.base import User, Tenant
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from app.schemas.common import SuccessResponse, ErrorDetail, ErrorResponse
 from app.security import verify_password, create_access_token, decode_token
@@ -52,12 +52,19 @@ async def login(
             detail="User account is inactive",
         )
 
+    # Fetch tenant name for JWT claims
+    tenant_result = await session.execute(select(Tenant).where(Tenant.id == user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+
     # Create JWT token
     settings = get_settings()
     access_token = create_access_token(
         tenant_id=user.tenant_id,
         user_id=user.id,
         user_role=user.role,
+        email=user.email or "",
+        name=user.full_name or "",
+        tenant_name=tenant.name if tenant else "",
     )
 
     # Determine cookie security based on environment and proxy headers
@@ -133,12 +140,19 @@ async def refresh_token(
             detail="User not found or inactive",
         )
 
+    # Fetch tenant name for JWT claims
+    tenant_result = await session.execute(select(Tenant).where(Tenant.id == user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+
     # Create new token
     settings = get_settings()
     access_token = create_access_token(
         tenant_id=tenant_id,
         user_id=user_id,
         user_role=user.role,
+        email=user.email or "",
+        name=user.full_name or "",
+        tenant_name=tenant.name if tenant else "",
     )
 
     # Update cookie

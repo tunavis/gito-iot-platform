@@ -32,35 +32,41 @@ def create_access_token(
     tenant_id: UUID | str,
     user_id: UUID | str,
     user_role: str,
+    email: str = "",
+    name: str = "",
+    tenant_name: str = "",
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """Create JWT access token."""
     settings = get_settings()
-    
+
     if isinstance(tenant_id, UUID):
         tenant_id = str(tenant_id)
     if isinstance(user_id, UUID):
         user_id = str(user_id)
-    
+
     if expires_delta is None:
         expires_delta = timedelta(hours=settings.JWT_EXPIRATION_HOURS)
-    
+
     expire = datetime.now(timezone.utc) + expires_delta
-    
+
     payload = {
-        "sub": user_id,
-        "tenant_id": tenant_id,
-        "role": user_role,
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
+        "sub":         user_id,
+        "tenant_id":   tenant_id,
+        "role":        user_role,
+        "email":       email,
+        "name":        name,
+        "tenant_name": tenant_name,
+        "exp":         expire,
+        "iat":         datetime.now(timezone.utc),
     }
-    
+
     token = jwt.encode(
         payload,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
     )
-    
+
     return token
 
 

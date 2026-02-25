@@ -2,8 +2,35 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
+
+interface JwtUser {
+  name: string;
+  email: string;
+  tenant_name?: string;
+  role?: string;
+}
+
+function useCurrentUser(): JwtUser | null {
+  const [user, setUser] = useState<JwtUser | null>(null);
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      setUser({
+        name:        payload.name        || payload.full_name || payload.username || 'User',
+        email:       payload.email       || '',
+        tenant_name: payload.tenant_name || payload.organization || '',
+        role:        payload.role        || '',
+      });
+    } catch {
+      // token missing or malformed — ignore
+    }
+  }, []);
+  return user;
+}
 
 interface NavGroup {
   label: string;
@@ -20,6 +47,7 @@ interface NavItem {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const user = useCurrentUser();
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Devices', 'Overviews']));
 
   const toggleGroup = (label: string) => {
@@ -188,32 +216,32 @@ export default function Sidebar() {
       </nav>
 
       {/* User Profile & Footer */}
-      <div className="px-4 py-3 bg-white border-t border-gray-300">
+      <div className="px-4 py-3 bg-white border-t border-gray-200">
         {/* User Info */}
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center">
-            <span className="text-sm font-bold text-blue-700">AD</span>
+          <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold text-primary-700">
+              {user ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '…'}
+            </span>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-800">Admin User</p>
-            <p className="text-xs text-gray-500">admin@gito.demo</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate">{user?.name ?? '—'}</p>
+            <p className="text-xs text-gray-500 truncate">{user?.email ?? ''}</p>
           </div>
-          <button className="text-gray-500 hover:text-gray-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          </button>
+          <Link href="/dashboard/users" className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0" title="Settings">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          </Link>
         </div>
-        
-        {/* Footer */}
+
+        {/* Tenant / powered-by */}
         <div className="text-center">
-          <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
-            <span>powered by</span>
-            <span className="font-semibold text-gray-700 uppercase tracking-wider">GITO IoT</span>
-          </div>
-          <div className="flex items-center justify-center gap-1 mt-1">
-            {[...Array(7)].map((_, i) => (
-              <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === 3 ? 'bg-blue-600' : 'bg-gray-400'}`}></div>
-            ))}
-          </div>
+          <p className="text-[10px] text-gray-400">
+            {user?.tenant_name ? (
+              <span className="font-medium text-gray-500">{user.tenant_name}</span>
+            ) : (
+              <span>powered by <span className="font-semibold text-gray-600 uppercase tracking-wide">Gito IoT</span></span>
+            )}
+          </p>
         </div>
       </div>
     </aside>
