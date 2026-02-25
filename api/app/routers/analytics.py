@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_session, RLSSession
 from app.models.base import Device, AuditLog
@@ -268,44 +271,56 @@ async def get_telemetry_summary(
 
     await session.set_tenant_context(tenant_id)
 
-    # Query telemetry stats
-    query = text("""
-        SELECT
-            COUNT(*)::integer as message_count,
-            ROUND(AVG(temperature)::numeric, 1) as avg_temperature,
-            ROUND(AVG(humidity)::numeric, 1) as avg_humidity,
-            ROUND(AVG(battery)::numeric, 1) as avg_battery,
-            ROUND(AVG(rssi)::numeric, 0) as avg_rssi,
-            COUNT(DISTINCT device_id)::integer as active_devices
-        FROM telemetry_hot
-        WHERE tenant_id = :tenant_id
-          AND timestamp >= NOW() - INTERVAL ':hours hours'
-    """)
-
     try:
-        result = await session.execute(query, {
+        # Count total messages and unique active devices
+        count_query = text("""
+            SELECT
+                COUNT(*)::integer AS message_count,
+                COUNT(DISTINCT device_id)::integer AS active_devices
+            FROM telemetry
+            WHERE tenant_id = :tenant_id
+              AND ts >= NOW() - make_interval(hours => :hours)
+        """)
+        count_row = (await session.execute(count_query, {
             "tenant_id": str(tenant_id),
-            "hours": hours
-        })
-        row = result.fetchone()
+            "hours": hours,
+        })).fetchone()
+
+        # Get top numeric metrics with their fleet-wide averages
+        metrics_query = text("""
+            SELECT
+                metric_key,
+                ROUND(AVG(metric_value)::numeric, 2) AS avg_value,
+                COUNT(*)::integer AS sample_count
+            FROM telemetry
+            WHERE tenant_id = :tenant_id
+              AND ts >= NOW() - make_interval(hours => :hours)
+              AND metric_value IS NOT NULL
+            GROUP BY metric_key
+            ORDER BY sample_count DESC
+            LIMIT 8
+        """)
+        metrics_rows = (await session.execute(metrics_query, {
+            "tenant_id": str(tenant_id),
+            "hours": hours,
+        })).fetchall()
+
+        top_metrics = [
+            {"key": row[0], "avg": float(row[1]) if row[1] is not None else 0.0, "count": row[2]}
+            for row in metrics_rows
+        ]
 
         return SuccessResponse(data={
             "period_hours": hours,
-            "message_count": row[0] if row else 0,
-            "avg_temperature": float(row[1]) if row and row[1] else None,
-            "avg_humidity": float(row[2]) if row and row[2] else None,
-            "avg_battery": float(row[3]) if row and row[3] else None,
-            "avg_signal_strength": int(row[4]) if row and row[4] else None,
-            "active_devices": row[5] if row else 0,
+            "message_count": count_row[0] if count_row else 0,
+            "active_devices": count_row[1] if count_row else 0,
+            "top_metrics": top_metrics,
         })
     except Exception as e:
-        # If telemetry table doesn't exist or query fails, return zeros
+        logger.error(f"Telemetry summary failed: {e}", exc_info=True)
         return SuccessResponse(data={
             "period_hours": hours,
             "message_count": 0,
-            "avg_temperature": None,
-            "avg_humidity": None,
-            "avg_battery": None,
-            "avg_signal_strength": None,
             "active_devices": 0,
+            "top_metrics": [],
         })

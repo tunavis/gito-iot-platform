@@ -17,7 +17,15 @@ import {
   ChevronDown,
   Battery,
   BatteryLow,
-  BatteryWarning
+  BatteryWarning,
+  Thermometer,
+  Droplets,
+  Zap,
+  Wifi,
+  Gauge,
+  Wind,
+  Radio,
+  Plus,
 } from 'lucide-react';
 
 interface Device {
@@ -41,6 +49,32 @@ type ViewMode = 'grid' | 'list';
 type StatusFilter = 'all' | 'online' | 'offline' | 'idle';
 type SortField = 'name' | 'device_type' | 'status' | 'battery_level' | 'last_seen';
 type SortDirection = 'asc' | 'desc';
+
+function getRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return 'Never';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 5) return 'Just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function DeviceTypeIcon({ deviceType, className = 'w-5 h-5' }: { deviceType: string; className?: string }) {
+  const t = deviceType.toLowerCase();
+  if (t.includes('temp') || t.includes('thermal')) return <Thermometer className={className} />;
+  if (t.includes('humid') || t.includes('moisture') || t.includes('water') || t.includes('flow')) return <Droplets className={className} />;
+  if (t.includes('energy') || t.includes('power') || t.includes('electric') || t.includes('volt')) return <Zap className={className} />;
+  if (t.includes('gateway') || t.includes('router') || t.includes('wifi') || t.includes('bridge')) return <Wifi className={className} />;
+  if (t.includes('pressure') || t.includes('gauge')) return <Gauge className={className} />;
+  if (t.includes('air') || t.includes('wind') || t.includes('co2') || t.includes('gas')) return <Wind className={className} />;
+  if (t.includes('lora') || t.includes('sigfox') || t.includes('nbiot') || t.includes('cellular')) return <Radio className={className} />;
+  return <Cpu className={className} />;
+}
 
 export default function DevicesPage() {
   const router = useRouter();
@@ -240,66 +274,51 @@ export default function DevicesPage() {
       
       <main className="flex-1 ml-64 p-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Device Management</h1>
-              <p className="text-gray-600 mt-2">Monitor and manage all your IoT devices</p>
+              <h1 className="text-2xl font-bold text-gray-900">Devices</h1>
+              <p className="text-sm text-gray-500 mt-0.5">Monitor and manage your IoT fleet</p>
             </div>
-            <button 
+            <button
               onClick={() => router.push('/dashboard/devices/new')}
-              className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-sm"
+              className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-sm text-sm"
             >
-              <span className="text-lg">+</span> Add Device
+              <Plus className="w-4 h-4" /> Add Device
             </button>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-            <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Total Devices</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.total}</p>
-                </div>
-                <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                  <Cpu className="w-6 h-6 text-slate-600" />
-                </div>
-              </div>
+          {/* Fleet status bar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm">
+              <Cpu className="w-4 h-4 text-gray-400" />
+              <span className="text-sm font-semibold text-gray-900">{stats.total}</span>
+              <span className="text-sm text-gray-400">devices</span>
             </div>
-            <div className="bg-white rounded-lg p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Online</p>
-                  <p className="text-3xl font-bold text-green-600">{stats.online}</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle2 className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
+            <div className="flex items-center gap-2 bg-white border border-green-200 rounded-lg px-4 py-2.5 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-sm font-semibold text-green-700">{stats.online}</span>
+              <span className="text-sm text-gray-400">online</span>
             </div>
-            <div className="bg-white rounded-lg p-6 border border-red-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Offline</p>
-                  <p className="text-3xl font-bold text-red-600">{stats.offline}</p>
-                </div>
-                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
-                </div>
+            {stats.offline > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-red-200 rounded-lg px-4 py-2.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-sm font-semibold text-red-600">{stats.offline}</span>
+                <span className="text-sm text-gray-400">offline</span>
               </div>
-            </div>
-            <div className="bg-white rounded-lg p-6 border border-yellow-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Idle</p>
-                  <p className="text-3xl font-bold text-yellow-600">{stats.idle}</p>
-                </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-yellow-600" />
-                </div>
+            )}
+            {stats.idle > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-yellow-200 rounded-lg px-4 py-2.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                <span className="text-sm font-semibold text-yellow-600">{stats.idle}</span>
+                <span className="text-sm text-gray-400">idle</span>
               </div>
-            </div>
+            )}
+            {stats.total > 0 && (
+              <div className="ml-auto text-xs text-gray-400">
+                {Math.round((stats.online / stats.total) * 100)}% fleet online
+              </div>
+            )}
           </div>
         </div>
 
@@ -452,97 +471,115 @@ export default function DevicesPage() {
           </div>
         ) : viewMode === 'grid' ? (
           /* Grid View */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredDevices.map((device) => (
-              <div
-                key={device.id}
-                className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 group"
-              >
-                {/* Card Header */}
-                <div className="p-5 border-b border-slate-100">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={selectedDevices.has(device.id)}
-                        onChange={() => toggleDeviceSelection(device.id)}
-                        className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="w-11 h-11 bg-primary-600 rounded-lg flex items-center justify-center text-white font-bold text-base flex-shrink-0">
-                        {device.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <Link 
-                          href={`/dashboard/devices/${device.id}`}
-                          className="block"
-                        >
-                          <h3 className="font-semibold text-slate-900 group-hover:text-primary-600 transition-colors truncate text-base">
+              <Link key={device.id} href={`/dashboard/devices/${device.id}`} className="group block">
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200 overflow-hidden h-full">
+
+                  {/* Coloured status stripe at top */}
+                  <div className={`h-1 w-full ${
+                    device.status === 'online' ? 'bg-green-400' :
+                    device.status === 'offline' ? 'bg-red-400' : 'bg-yellow-400'
+                  }`} />
+
+                  <div className="p-4">
+                    {/* Top row: icon + name + status dot */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {/* Checkbox for bulk select */}
+                        <input
+                          type="checkbox"
+                          checked={selectedDevices.has(device.id)}
+                          onChange={() => toggleDeviceSelection(device.id)}
+                          className="w-3.5 h-3.5 text-primary-600 border-slate-300 rounded focus:ring-primary-500 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        {/* Device type icon */}
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          device.status === 'online'
+                            ? 'bg-green-50 text-green-600'
+                            : device.status === 'offline'
+                            ? 'bg-red-50 text-red-400'
+                            : 'bg-gray-50 text-gray-400'
+                        }`}>
+                          <DeviceTypeIcon deviceType={device.device_type} className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900 group-hover:text-primary-600 transition-colors truncate leading-tight">
                             {device.name}
-                          </h3>
-                          <p className="text-xs text-slate-500 truncate">{device.id.substring(0, 8)}</p>
-                        </Link>
+                          </p>
+                          <p className="text-xs text-gray-400 truncate">{device.device_type}</p>
+                        </div>
+                      </div>
+                      {/* Status indicator */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        <span className={`w-2 h-2 rounded-full ${
+                          device.status === 'online' ? 'bg-green-500 animate-pulse' :
+                          device.status === 'offline' ? 'bg-red-500' : 'bg-yellow-400'
+                        }`} />
                       </div>
                     </div>
+
+                    {/* Metrics */}
+                    <div className="space-y-2.5 mt-3">
+                      {/* Last seen */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-400">Last seen</span>
+                        <span className={`text-xs font-semibold ${
+                          device.status === 'online' ? 'text-green-600' :
+                          device.status === 'offline' ? 'text-red-500' : 'text-gray-500'
+                        }`}>
+                          {getRelativeTime(device.last_seen)}
+                        </span>
+                      </div>
+
+                      {/* Battery bar */}
+                      {device.battery_level !== null ? (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-gray-400">Battery</span>
+                            <span className={`text-xs font-semibold ${
+                              device.battery_level > 50 ? 'text-green-600' :
+                              device.battery_level > 20 ? 'text-yellow-600' : 'text-red-600'
+                            }`}>{Math.round(device.battery_level)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                            <div
+                              className={`h-1.5 rounded-full ${
+                                device.battery_level > 50 ? 'bg-green-400' :
+                                device.battery_level > 20 ? 'bg-yellow-400' : 'bg-red-400'
+                              }`}
+                              style={{ width: `${Math.min(device.battery_level, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-400">Battery</span>
+                          <span className="text-xs text-gray-300">—</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  
-                  {/* Status Badge */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border ${getStatusColor(device.status)}`}>
-                      <span className={`w-2 h-2 rounded-full ${getStatusDotColor(device.status)} ${device.status === 'online' ? 'animate-pulse' : ''}`}></span>
-                      {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
-                    </span>
-                    <span className="text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
-                      {device.device_type}
+
+                  {/* Footer */}
+                  <div className={`px-4 py-2.5 border-t flex items-center justify-between ${
+                    device.status === 'online'
+                      ? 'bg-green-50 border-green-100'
+                      : device.status === 'offline'
+                      ? 'bg-red-50 border-red-100'
+                      : 'bg-gray-50 border-gray-100'
+                  }`}>
+                    <span className={`text-xs font-semibold capitalize ${
+                      device.status === 'online' ? 'text-green-700' :
+                      device.status === 'offline' ? 'text-red-600' : 'text-yellow-700'
+                    }`}>{device.status}</span>
+                    <span className="text-xs text-gray-400 group-hover:text-primary-600 transition-colors">
+                      View →
                     </span>
                   </div>
                 </div>
-
-                {/* Card Body */}
-                <div className="p-5 space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 flex items-center gap-2">
-                      {getBatteryIcon(device.battery_level)}
-                      Battery
-                    </span>
-                    <span className={`font-semibold ${
-                      device.battery_level !== null 
-                        ? device.battery_level > 50 ? 'text-green-600' 
-                          : device.battery_level > 20 ? 'text-yellow-600' 
-                          : 'text-red-600'
-                        : 'text-slate-400'
-                    }`}>
-                      {device.battery_level !== null ? `${Math.round(device.battery_level)}%` : 'N/A'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Last Seen</span>
-                    <span className="text-slate-900 text-xs font-medium">
-                      {device.last_seen 
-                        ? new Date(device.last_seen).toLocaleDateString()
-                        : 'Never'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Created</span>
-                    <span className="text-slate-900 text-xs font-medium">
-                      {new Date(device.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Card Footer */}
-                <div className="p-4 border-t border-slate-100 bg-slate-50">
-                  <Link
-                    href={`/dashboard/devices/${device.id}`}
-                    className="block w-full text-center px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
-                  >
-                    View Details →
-                  </Link>
-                </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

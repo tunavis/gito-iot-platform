@@ -134,6 +134,7 @@ export default function DeviceDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>(VALID_TABS.includes(_tabParam as TabId) ? (_tabParam as TabId) : 'live');
   const [tenantId, setTenantId] = useState<string>('');
   const [alarms, setAlarms] = useState<any[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Auto-discover metrics from telemetry data
   const discoveredMetrics = useMemo(() => {
@@ -225,15 +226,19 @@ export default function DeviceDetailPage() {
       try {
         const hours = getTimeRangeHours(timeRange);
         const startTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+        // Use avg aggregation for >1h to get meaningful coverage across the full range
+        const aggregation = hours > 1 ? 'avg' : 'raw';
 
         const res = await fetch(
-          `/api/v1/tenants/${tenant}/devices/${deviceId}/telemetry?start_time=${startTime}&per_page=100`,
+          `/api/v1/tenants/${tenant}/devices/${deviceId}/telemetry?start_time=${startTime}&per_page=500&aggregation=${aggregation}`,
           { headers: { Authorization: `Bearer ${token}` }}
         );
 
         if (res.ok) {
           const json = await res.json();
-          setTelemetryData(json.data || []);
+          // API returns DESC (newest first) — reverse to ASC for left→right chart display
+          const data = (json.data || []).slice().reverse();
+          setTelemetryData(data);
         }
       } catch (err) {
         console.error('Failed to load telemetry:', err);
@@ -243,7 +248,7 @@ export default function DeviceDetailPage() {
     };
 
     loadTelemetry();
-  }, [deviceId, device, timeRange]);
+  }, [deviceId, device, timeRange, refreshKey]);
 
   // Get metric metadata from device type schema
   const getMetricMetadata = (metricKey: string): {
@@ -370,53 +375,110 @@ export default function DeviceDetailPage() {
         <div className="mb-6">
           <button
             onClick={() => router.push('/dashboard/devices')}
-            className="text-gray-600 hover:text-gray-900 font-medium mb-4 transition-colors flex items-center gap-2"
+            className="text-sm text-gray-400 hover:text-gray-700 font-medium mb-4 transition-colors flex items-center gap-1.5"
           >
-            ← Back to Devices
+            ← Devices
           </button>
 
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-gray-900">{device.name}</h1>
-                {wsConnected && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    <span className="text-sm font-medium text-green-700">Live</span>
+          {/* Hero card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* Status stripe */}
+            <div className={`h-1 w-full ${
+              device.status === 'online' ? 'bg-green-400' :
+              device.status === 'offline' ? 'bg-red-400' : 'bg-yellow-400'
+            }`} />
+
+            <div className="p-5">
+              {/* Top row */}
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <h1 className="text-xl font-bold text-gray-900 truncate">{device.name}</h1>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border flex-shrink-0 ${
+                      device.status === 'online'
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : device.status === 'offline'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        device.status === 'online' ? 'bg-green-500 animate-pulse' :
+                        device.status === 'offline' ? 'bg-red-500' : 'bg-yellow-500'
+                      }`} />
+                      {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
+                    </span>
+                    {wsConnected && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 flex-shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        Live
+                      </span>
+                    )}
                   </div>
-                )}
+                  <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
+                    <span className="font-mono bg-gray-50 border border-gray-100 px-2 py-0.5 rounded">{deviceId.substring(0, 16)}…</span>
+                    <span>·</span>
+                    <span>{device.device_type}</span>
+                    {device.location && (
+                      <>
+                        <span>·</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {device.location.latitude.toFixed(4)}, {device.location.longitude.toFixed(4)}
+                        </span>
+                      </>
+                    )}
+                    {device.last_seen && (
+                      <>
+                        <span>·</span>
+                        <span className={device.status === 'online' ? 'text-green-600 font-medium' : ''}>
+                          {(() => {
+                            const diff = Date.now() - new Date(device.last_seen).getTime();
+                            const s = Math.floor(diff / 1000);
+                            if (s < 5) return 'Just now';
+                            if (s < 60) return `${s}s ago`;
+                            const m = Math.floor(s / 60);
+                            if (m < 60) return `${m}m ago`;
+                            const h = Math.floor(m / 60);
+                            if (h < 24) return `${h}h ago`;
+                            return `${Math.floor(h / 24)}d ago`;
+                          })()}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className={`flex-shrink-0 px-3 py-2 rounded-lg border text-xs font-semibold ${getHealthColor(healthScore)}`}>
+                  Health {healthScore}%
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <span className="font-mono bg-gray-100 px-2 py-1 rounded">{deviceId}</span>
-                <span>•</span>
-                <span>{device.device_type}</span>
-                {device.location && (
-                  <>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-4 h-4" />
-                      <span>{device.location.latitude.toFixed(4)}, {device.location.longitude.toFixed(4)}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-semibold ${
-                device.status === 'online'
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : device.status === 'offline'
-                  ? 'bg-red-50 text-red-700 border-red-200'
-                  : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-              }`}>
-                {device.status === 'online' ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
-                <span className="capitalize">{device.status}</span>
-              </div>
-
-              <div className={`px-4 py-2.5 rounded-lg border font-semibold ${getHealthColor(healthScore)}`}>
-                Health: {healthScore}%
-              </div>
+              {/* Live metrics strip — shown when telemetry data is available */}
+              {numericMetrics.length > 0 && (
+                <div className="flex items-stretch gap-0 border border-gray-100 rounded-lg overflow-hidden">
+                  {numericMetrics.slice(0, 6).map((metric, i) => {
+                    const value = getCurrentValue(metric);
+                    const trend = calculateTrend(metric);
+                    const meta = getMetricMetadata(metric);
+                    const isUp = trend && trend.direction === 'up';
+                    return (
+                      <div key={metric} className={`flex-1 px-4 py-3 text-center ${i > 0 ? 'border-l border-gray-100' : ''} bg-gray-50`}>
+                        <p className="text-xs text-gray-400 capitalize mb-1 truncate">
+                          {metric.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-lg font-bold text-gray-900 leading-none">
+                          {typeof value === 'number' ? value.toFixed(1) : '—'}
+                          {meta.unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{meta.unit}</span>}
+                        </p>
+                        {trend && (
+                          <p className={`text-xs font-medium mt-0.5 ${isUp ? 'text-orange-500' : 'text-green-500'}`}>
+                            {isUp ? '↑' : '↓'} {Math.abs(trend.value).toFixed(1)}%
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -571,10 +633,10 @@ export default function DeviceDetailPage() {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setTimeRange(timeRange)}
+                  onClick={() => setRefreshKey(k => k + 1)}
                   className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={`w-4 h-4 ${telemetryLoading ? 'animate-spin' : ''}`} />
                   Refresh
                 </button>
                 <button
@@ -604,7 +666,7 @@ export default function DeviceDetailPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6">
                 {/* Dynamically generate charts for all numeric metrics */}
                 {numericMetrics.map(metricKey => {
                   const metadata = getMetricMetadata(metricKey);
@@ -618,6 +680,7 @@ export default function DeviceDetailPage() {
                       metricKey={metricKey}
                       unit={metadata.unit || ''}
                       color={color}
+                      timeRangeHours={getTimeRangeHours(timeRange)}
                     />
                   );
                 })}
@@ -644,22 +707,47 @@ function TelemetryChartCard({
   data,
   metricKey,
   unit,
-  color
+  color,
+  timeRangeHours,
 }: {
   title: string;
   data: TelemetryPoint[];
   metricKey: string;
   unit: string;
   color: string;
+  timeRangeHours: number;
 }) {
+  // Support both raw (timestamp) and aggregated (time_bucket) response formats
   const chartData = data
-    .map(d => ({
-      time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      value: d[metricKey]
-    }))
-    .filter(d => d.value != null && typeof d.value === 'number') as { time: string; value: number }[];
+    .map(d => {
+      const rawTime = d.timestamp || d.time_bucket;
+      if (!rawTime) return null;
+      const date = new Date(rawTime);
+      let label: string;
+      if (timeRangeHours <= 6) {
+        label = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      } else if (timeRangeHours <= 48) {
+        label = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } else {
+        label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+      return { time: label, value: d[metricKey], _ts: date.getTime() };
+    })
+    .filter((d): d is { time: string; value: number; _ts: number } =>
+      d !== null && d.value != null && typeof d.value === 'number'
+    );
 
-  if (chartData.length === 0) return null;
+  if (chartData.length === 0) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center min-h-[320px]">
+        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: `${color}15` }}>
+          <BarChart3 className="w-6 h-6" style={{ color }} />
+        </div>
+        <p className="text-sm font-medium text-gray-700">{title}</p>
+        <p className="text-xs text-gray-400 mt-1">No data in selected range</p>
+      </div>
+    );
+  }
 
   const latestValue = chartData[chartData.length - 1]?.value;
   const minValue = Math.min(...chartData.map(d => d.value));
@@ -669,39 +757,45 @@ function TelemetryChartCard({
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
         <span className="text-2xl font-bold" style={{ color }}>
-          {latestValue?.toFixed(1)} {unit}
+          {typeof latestValue === 'number' ? latestValue.toFixed(1) : '—'} <span className="text-sm font-normal text-gray-500">{unit}</span>
         </span>
       </div>
 
-      <ResponsiveContainer width="100%" height={250}>
-        <AreaChart data={chartData}>
+      <ResponsiveContainer width="100%" height={280}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id={`gradient-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="5%" stopColor={color} stopOpacity={0.25} />
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis
             dataKey="time"
-            stroke="#64748b"
-            style={{ fontSize: '12px' }}
-            tick={{ fill: '#64748b' }}
+            stroke="#94a3b8"
+            tick={{ fill: '#94a3b8', fontSize: 11 }}
+            interval="preserveStartEnd"
+            tickLine={false}
           />
           <YAxis
-            stroke="#64748b"
-            style={{ fontSize: '12px' }}
-            tick={{ fill: '#64748b' }}
+            stroke="#94a3b8"
+            tick={{ fill: '#94a3b8', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            width={45}
+            tickFormatter={(v) => `${v}${unit ? ` ${unit}` : ''}`}
           />
           <Tooltip
             contentStyle={{
               backgroundColor: 'white',
               border: '1px solid #e2e8f0',
               borderRadius: '8px',
-              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+              fontSize: '13px',
             }}
+            formatter={(value: number) => [`${value.toFixed(2)} ${unit}`, title]}
           />
           <Area
             type="monotone"
@@ -710,22 +804,24 @@ function TelemetryChartCard({
             strokeWidth={2}
             fillOpacity={1}
             fill={`url(#gradient-${metricKey})`}
+            dot={chartData.length <= 20 ? { r: 3, fill: color } : false}
+            activeDot={{ r: 5, fill: color }}
           />
         </AreaChart>
       </ResponsiveContainer>
 
-      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200">
-        <div>
-          <p className="text-xs text-gray-500">Min</p>
-          <p className="text-sm font-semibold text-gray-900">{minValue.toFixed(1)} {unit}</p>
+      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+        <div className="text-center">
+          <p className="text-xs text-gray-400 mb-0.5">Min</p>
+          <p className="text-sm font-semibold text-gray-800">{minValue.toFixed(1)} <span className="font-normal text-gray-400">{unit}</span></p>
         </div>
-        <div>
-          <p className="text-xs text-gray-500">Avg</p>
-          <p className="text-sm font-semibold text-gray-900">{avgValue.toFixed(1)} {unit}</p>
+        <div className="text-center">
+          <p className="text-xs text-gray-400 mb-0.5">Avg</p>
+          <p className="text-sm font-semibold text-gray-800">{avgValue.toFixed(1)} <span className="font-normal text-gray-400">{unit}</span></p>
         </div>
-        <div>
-          <p className="text-xs text-gray-500">Max</p>
-          <p className="text-sm font-semibold text-gray-900">{maxValue.toFixed(1)} {unit}</p>
+        <div className="text-center">
+          <p className="text-xs text-gray-400 mb-0.5">Max</p>
+          <p className="text-sm font-semibold text-gray-800">{maxValue.toFixed(1)} <span className="font-normal text-gray-400">{unit}</span></p>
         </div>
       </div>
     </div>
