@@ -5,7 +5,7 @@ from typing import Optional, List, Any, Dict
 from uuid import UUID
 from enum import Enum
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 class DeviceCategory(str, Enum):
@@ -32,10 +32,33 @@ class DeviceCapability(str, Enum):
     EDGE_COMPUTE = "edge_compute"
 
 
+class FieldType(str, Enum):
+    """Supported telemetry field types (matches frontend FIELD_TYPES)."""
+    FLOAT = "float"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    STRING = "string"
+    TIMESTAMP = "timestamp"
+    JSON = "json"
+    ARRAY = "array"
+
+
+class ProtocolType(str, Enum):
+    """Supported connectivity protocols (matches frontend ProtocolSelector)."""
+    MQTT = "mqtt"
+    LORAWAN = "lorawan"
+    HTTP = "http"
+    MODBUS = "modbus"
+    OPCUA = "opcua"
+    COAP = "coap"
+    WEBSOCKET = "websocket"
+    CUSTOM = "custom"
+
+
 class DataModelField(BaseModel):
     """A field in the device type's data model."""
     name: str = Field(..., description="Field name (e.g., 'temperature')")
-    type: str = Field(default="float", description="Data type: float, int, string, boolean, json")
+    type: FieldType = Field(default=FieldType.FLOAT, description="Data type")
     unit: Optional[str] = Field(None, description="Unit of measurement (e.g., '°C', '%')")
     description: Optional[str] = Field(None, description="Human-readable description")
     min_value: Optional[float] = Field(None, alias="min", description="Minimum valid value")
@@ -44,14 +67,18 @@ class DataModelField(BaseModel):
 
     class Config:
         populate_by_name = True
+        use_enum_values = True
 
 
 class ConnectivityConfig(BaseModel):
     """Connectivity/protocol configuration."""
-    protocol: str = Field(default="mqtt", description="Protocol: mqtt, lorawan, http, coap")
+    protocol: ProtocolType = Field(default=ProtocolType.MQTT, description="Communication protocol")
     mqtt_topic_template: Optional[str] = Field(None, description="MQTT topic template")
     lorawan_class: Optional[str] = Field(None, description="LoRaWAN class: A, B, C")
     http_endpoint: Optional[str] = Field(None, description="HTTP webhook endpoint")
+
+    class Config:
+        use_enum_values = True
 
 
 class DefaultSettings(BaseModel):
@@ -69,15 +96,24 @@ class DeviceTypeCreate(BaseModel):
     manufacturer: Optional[str] = Field(None, max_length=255, description="Manufacturer name")
     model: Optional[str] = Field(None, max_length=255, description="Model number/name")
     category: DeviceCategory = Field(default=DeviceCategory.SENSOR, description="Device category")
-    
+
     icon: Optional[str] = Field(default="cpu", description="Lucide icon name")
     color: Optional[str] = Field(default="#6366f1", description="Hex color code")
-    
+
     data_model: Optional[List[DataModelField]] = Field(default=[], description="Telemetry data model")
     capabilities: Optional[List[DeviceCapability]] = Field(default=[DeviceCapability.TELEMETRY], description="Device capabilities")
     default_settings: Optional[DefaultSettings] = Field(default=None, description="Default device settings")
     connectivity: Optional[ConnectivityConfig] = Field(default=None, description="Connectivity configuration")
     metadata: Optional[dict] = Field(default={}, description="Custom metadata")
+
+    @model_validator(mode="after")
+    def validate_unique_field_names(self) -> "DeviceTypeCreate":
+        if self.data_model:
+            names = [f.name for f in self.data_model]
+            if len(names) != len(set(names)):
+                duplicates = [n for n in set(names) if names.count(n) > 1]
+                raise ValueError(f"Data model field names must be unique. Duplicates: {duplicates}")
+        return self
 
     class Config:
         use_enum_values = True
@@ -90,16 +126,25 @@ class DeviceTypeUpdate(BaseModel):
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     category: Optional[DeviceCategory] = None
-    
+
     icon: Optional[str] = None
     color: Optional[str] = None
-    
+
     data_model: Optional[List[DataModelField]] = None
     capabilities: Optional[List[DeviceCapability]] = None
     default_settings: Optional[DefaultSettings] = None
     connectivity: Optional[ConnectivityConfig] = None
     metadata: Optional[dict] = None
     is_active: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_unique_field_names(self) -> "DeviceTypeUpdate":
+        if self.data_model:
+            names = [f.name for f in self.data_model]
+            if len(names) != len(set(names)):
+                duplicates = [n for n in set(names) if names.count(n) > 1]
+                raise ValueError(f"Data model field names must be unique. Duplicates: {duplicates}")
+        return self
 
     class Config:
         use_enum_values = True
