@@ -182,12 +182,44 @@ class TelemetryValidator:
         return True
 
     @staticmethod
+    def flatten_payload(payload: dict, prefix: str = "", max_depth: int = 5) -> dict:
+        """
+        Recursively flatten nested dicts into __ separated keys.
+
+        Allows devices that emit nested JSON (Tasmota, Shelly, LoRaWAN decoders, etc.)
+        to be stored as queryable numeric metrics without any bridge or custom firmware.
+
+        Examples:
+            {"SI7021": {"Temperature": 24.5, "Humidity": 61.2}}
+                → {"SI7021__Temperature": 24.5, "SI7021__Humidity": 61.2}
+
+            {"energy": {"power": 120.5, "today": {"kwh": 1.2}}}
+                → {"energy__power": 120.5, "energy__today__kwh": 1.2}
+
+            {"temperature": 24.5}   → {"temperature": 24.5}   (unchanged)
+            {"status": "online"}    → {"status": "online"}    (unchanged)
+            {"data": [1, 2, 3]}     → {"data": [1, 2, 3]}    (arrays kept as-is)
+
+        Non-dict values (numbers, strings, booleans, lists) are kept at their
+        flattened key. max_depth prevents runaway recursion on malicious input.
+        """
+        result = {}
+        for key, value in payload.items():
+            full_key = f"{prefix}__{key}" if prefix else key
+            if isinstance(value, dict) and value and max_depth > 0:
+                nested = TelemetryValidator.flatten_payload(value, full_key, max_depth - 1)
+                result.update(nested)
+            else:
+                result[full_key] = value
+        return result
+
+    @staticmethod
     def is_valid_uuid(value: str) -> bool:
         """Validate UUID format."""
         try:
             UUID(value)
             return True
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             return False
 
 
@@ -691,6 +723,9 @@ class MQTTProcessor:
             # Strip metadata keys devices commonly include (timestamp, ts, device_id, etc.)
             if isinstance(payload, dict):
                 payload = {k: v for k, v in payload.items() if k not in SYSTEM_KEYS}
+                # Flatten nested dicts so Tasmota/Shelly/LoRaWAN payloads become
+                # queryable metrics: {"SI7021": {"Temperature": 24.5}} → {"SI7021__Temperature": 24.5}
+                payload = TelemetryValidator.flatten_payload(payload)
 
             if not self.validator.validate_payload(payload):
                 logger.warning(

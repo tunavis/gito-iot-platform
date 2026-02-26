@@ -17,6 +17,7 @@ import StatGroupWidget from "../Widgets/StatGroupWidget";
 import AlarmSummaryWidget from "../Widgets/AlarmSummaryWidget";
 import ScatterPlotWidget from "../Widgets/ScatterPlotWidget";
 import HeatmapWidget from "../Widgets/HeatmapWidget";
+import StatusMatrixWidget from "../Widgets/StatusMatrixWidget";
 import WidgetWrapper from "../Widgets/WidgetWrapper";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -259,6 +260,22 @@ export default function DashboardGrid({
             onRemove={() => onWidgetRemove?.(widget.id)}
           >
             <HeatmapWidget
+              config={widget.configuration}
+              dataSources={widget.data_sources}
+            />
+          </WidgetWrapper>
+        );
+
+      case "status_matrix":
+        return (
+          <WidgetWrapper
+            key={widget.id}
+            title={widget.title || "Fleet Status Matrix"}
+            isEditMode={isEditMode}
+            onSettings={() => onWidgetSettings?.(widget.id)}
+            onRemove={() => onWidgetRemove?.(widget.id)}
+          >
+            <StatusMatrixWidget
               config={widget.configuration}
               dataSources={widget.data_sources}
             />

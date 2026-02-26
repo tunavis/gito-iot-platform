@@ -26,7 +26,7 @@ mqtt:
 # Settings for bridge_ui.py (the web-based device import tool)
 bridge:
   # Your Gito instance URL
-  gito_api_url: http://127.0.0.1
+  gito_api_url: http://127.0.0.1:80
 
   # Pre-fill the login form (leave blank to type each time)
   gito_email: ""

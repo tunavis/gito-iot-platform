@@ -13,6 +13,7 @@ import {
   ScatterChart,
   Grid3X3,
   Info,
+  LayoutDashboard,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -172,7 +173,23 @@ const WIDGET_TYPES: WidgetType[] = [
     },
   },
 
-  // ── Maps & Location ──────────────────────────────────────────────────────────
+  // ── Fleet Overview ───────────────────────────────────────────────────────────
+  {
+    id: "status_matrix",
+    name: "Fleet Status Matrix",
+    description: "Mission-control grid — all devices coloured by health status with live fleet score",
+    icon: <LayoutDashboard className="w-6 h-6" />,
+    category: "Fleet Overview",
+    defaultWidth: 6,
+    defaultHeight: 4,
+    defaultConfig: {
+      show_location: false,
+      show_last_seen: true,
+      tile_size: "md",
+    },
+  },
+
+  // ── Maps & Location ───────────────────────────────────────────────────────────
   {
     id: "map",
     name: "Device Map",

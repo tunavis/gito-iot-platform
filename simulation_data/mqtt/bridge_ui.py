@@ -22,6 +22,8 @@ import logging
 import os
 import random
 import re
+import subprocess
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -78,6 +80,8 @@ bridges: dict[str, dict] = {}
 
 gito_token:     str | None = None
 gito_tenant_id: str | None = None
+
+sim_proc: subprocess.Popen | None = None
 
 # ── Saved bridges persistence ───────────────────────────────────────────────────
 _SAVED_FILE = Path(__file__).parent / "saved_bridges.json"
@@ -469,7 +473,7 @@ def list_gito_devices():
         return jsonify({"ok": False, "message": "Not logged in"}), 401
     try:
         resp = requests.get(
-            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices?per_page=200",
+            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices?per_page=100",
             headers={"Authorization": f"Bearer {gito_token}"},
             timeout=10,
         )
@@ -581,6 +585,42 @@ def list_bridges():
     return jsonify(list(bridges.values()))
 
 
+# ── Simulator control ───────────────────────────────────────────────────────────
+
+@app.route("/api/simulator/status")
+def simulator_status():
+    running = sim_proc is not None and sim_proc.poll() is None
+    return jsonify({"ok": True, "running": running, "pid": sim_proc.pid if running else None})
+
+
+@app.route("/api/simulator/start", methods=["POST"])
+def start_simulator():
+    global sim_proc
+    if sim_proc and sim_proc.poll() is None:
+        return jsonify({"ok": True, "running": True, "pid": sim_proc.pid})
+    data = request.json or {}
+    interval = int(data.get("interval", 30))
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "simulator.py")
+    sim_proc = subprocess.Popen(
+        [sys.executable, script, "--interval", str(interval)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    return jsonify({"ok": True, "running": True, "pid": sim_proc.pid})
+
+
+@app.route("/api/simulator/stop", methods=["POST"])
+def stop_simulator():
+    global sim_proc
+    if sim_proc and sim_proc.poll() is None:
+        sim_proc.terminate()
+        try:
+            sim_proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            sim_proc.kill()
+    sim_proc = None
+    return jsonify({"ok": True, "running": False})
+
+
 @app.route("/api/bridge/saved")
 def list_saved():
     """Return persisted saved bridges with active status overlay."""
@@ -650,7 +690,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 62)
     print("  Gito MQTT Bridge UI")
     print(f"  Local Mosquitto : {local_cfg['host']}:{local_cfg['port']}")
-    print("  Open  →  http://localhost:5555")
+    print("  Open  ->  http://localhost:5555")
     print("=" * 62 + "\n")
     ui_port = bridge_cfg.get("ui_port", 5555)
     socketio.run(app, host="0.0.0.0", port=ui_port, debug=False, allow_unsafe_werkzeug=True)
