@@ -1,49 +1,83 @@
 "use client";
 
-import { X, Check, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, Check, Loader2, Wifi, BookOpen, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 
-interface TelemetryField {
-  type: string;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SchemaField {
+  type: string;        // float | integer | boolean | string | timestamp | json | array
   unit?: string;
   min?: number;
   max?: number;
   description?: string;
-}
-
-interface DeviceType {
-  id: string;
-  name: string;
-  category: string;
-  icon: string;
-  color: string;
-  data_model?: Record<string, TelemetryField>;
+  required?: boolean;
 }
 
 interface Device {
   id: string;
   name: string;
-  device_type_id: string;
-  device_type?: DeviceType;
+  device_type: string;   // name string from devices list API
+  device_type_id: string | null;
+}
+
+interface Binding {
+  device_id: string;
+  device_name?: string;
+  metric: string;
+  alias?: string;
+  unit?: string;
+  min?: number;
+  max?: number;
 }
 
 interface DeviceBindingModalProps {
   isOpen: boolean;
   widgetType: string;
-  currentBindings: Array<{
-    device_id: string;
-    device_name?: string;
-    metric: string;
-    alias?: string;
-  }>;
+  currentBindings: Binding[];
   onClose: () => void;
-  onSave: (bindings: Array<{
-    device_id: string;
-    device_name?: string;
-    metric: string;
-    alias?: string;
-  }>) => void;
+  onSave: (bindings: Binding[]) => void;
 }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SYSTEM_KEYS = new Set([
+  "timestamp", "device_id", "tenant_id", "id", "rssi", "payload",
+]);
+
+// Widget types that only make sense with numeric telemetry
+const NUMERIC_WIDGET_TYPES = new Set(["gauge", "kpi_card", "stat_group"]);
+
+// Field types considered numeric
+const NUMERIC_FIELD_TYPES = new Set(["float", "integer", "number"]);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getAuthContext(): { token: string; tenantId: string } | null {
+  const token = localStorage.getItem("auth_token");
+  if (!token) return null;
+  try {
+    const { tenant_id } = JSON.parse(atob(token.split(".")[1]));
+    return { token, tenantId: tenant_id };
+  } catch {
+    return null;
+  }
+}
+
+function formatFieldType(type: string): string {
+  const map: Record<string, string> = {
+    float: "Float",
+    integer: "Integer",
+    boolean: "Boolean",
+    string: "String",
+    timestamp: "Timestamp",
+    json: "JSON",
+    array: "Array",
+  };
+  return map[type] ?? type;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DeviceBindingModal({
   isOpen,
@@ -52,156 +86,165 @@ export default function DeviceBindingModal({
   onClose,
   onSave,
 }: DeviceBindingModalProps) {
+  const multiDevice = widgetType === "chart";
+  const isNumericWidget = NUMERIC_WIDGET_TYPES.has(widgetType);
+
+  // ── State ──────────────────────────────────────────────────────────────────
   const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
-  const [selectedMetric, setSelectedMetric] = useState<string>("");
-  const [alias, setAlias] = useState<string>("");
-  const [bindings, setBindings] = useState(currentBindings);
-  const [recentMetrics, setRecentMetrics] = useState<string[]>([]);
-  const [loadingMetrics, setLoadingMetrics] = useState(false);
+  const [loadingDevices, setLoadingDevices] = useState(true);
 
-  const multiDevice = widgetType === "chart"; // Charts support multiple devices
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [selectedMetric, setSelectedMetric] = useState("");
+  const [alias, setAlias] = useState("");
+  const [bindings, setBindings] = useState<Binding[]>(currentBindings);
 
+  // Schema from the device type endpoint (telemetry_schema dict)
+  const [schema, setSchema] = useState<Record<string, SchemaField> | null>(null);
+  const [loadingSchema, setLoadingSchema] = useState(false);
+
+  // Keys seen in recent telemetry (for "live" badges)
+  const [liveKeys, setLiveKeys] = useState<Set<string>>(new Set());
+  const [loadingTelemetry, setLoadingTelemetry] = useState(false);
+
+
+  // ── Fetch devices on open ──────────────────────────────────────────────────
   useEffect(() => {
-    if (isOpen) {
-      fetchDevices();
-      setBindings(currentBindings);
-    }
-  }, [isOpen, currentBindings]);
+    if (!isOpen) return;
+    setBindings(currentBindings);
+    fetchDevices();
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchDevices = async () => {
+    const auth = getAuthContext();
+    if (!auth) return;
     try {
-      setLoading(true);
-      const token = localStorage.getItem("auth_token");
-      if (!token) return;
-
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const tenantId = payload.tenant_id;
-
-      const response = await fetch(
-        `/api/v1/tenants/${tenantId}/devices?per_page=100`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      setLoadingDevices(true);
+      const res = await fetch(
+        `/api/v1/tenants/${auth.tenantId}/devices?per_page=200`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch devices");
+      if (res.ok) {
+        const result = await res.json();
+        setDevices(result.data ?? []);
       }
-
-      const result = await response.json();
-      const deviceList = result.data || [];
-
-      // API now returns nested device_type via joinedload - no need to fetch separately
-      setDevices(deviceList);
-    } catch (error) {
-      console.error("Error fetching devices:", error);
     } finally {
-      setLoading(false);
+      setLoadingDevices(false);
     }
   };
 
-  const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
-  const availableMetrics = selectedDevice?.device_type?.data_model || {};
-
-  // Fetch recent telemetry to discover actual metrics
+  // ── When device changes: fetch schema + telemetry in parallel ─────────────
   useEffect(() => {
-    if (selectedDeviceId) {
-      fetchRecentMetrics(selectedDeviceId);
-    } else {
-      setRecentMetrics([]);
+    if (!selectedDeviceId) {
+      setSchema(null);
+      setLiveKeys(new Set());
+      setSelectedMetric("");
+      return;
     }
-  }, [selectedDeviceId]);
+    const device = devices.find((d) => d.id === selectedDeviceId);
+    // Parallel: schema from device type + live keys from telemetry
+    if (device?.device_type_id) fetchDeviceTypeSchema(device.device_type_id);
+    else setSchema({});
+    fetchLiveTelemetryKeys(selectedDeviceId);
+  }, [selectedDeviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchRecentMetrics = async (deviceId: string) => {
+  const fetchDeviceTypeSchema = useCallback(async (deviceTypeId: string) => {
+    const auth = getAuthContext();
+    if (!auth) return;
+    setLoadingSchema(true);
     try {
-      setLoadingMetrics(true);
-      const token = localStorage.getItem("auth_token");
-      if (!token) return;
+      const res = await fetch(
+        `/api/v1/tenants/${auth.tenantId}/device-types/${deviceTypeId}`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
+      );
+      if (res.ok) {
+        const result = await res.json();
+        // telemetry_schema is the computed dict: { fieldName: { type, unit, min, max } }
+        setSchema(result.data?.telemetry_schema ?? {});
+      } else {
+        setSchema({});
+      }
+    } catch {
+      setSchema({});
+    } finally {
+      setLoadingSchema(false);
+    }
+  }, []);
 
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const tenantId = payload.tenant_id;
-
-      // Get last 24 hours of data (increased window to find seeded data)
-      const endTime = new Date();
-      const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
-
+  const fetchLiveTelemetryKeys = useCallback(async (deviceId: string) => {
+    const auth = getAuthContext();
+    if (!auth) return;
+    setLoadingTelemetry(true);
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 3600 * 1000);
       const params = new URLSearchParams({
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
         per_page: "1",
       });
-
-      const response = await fetch(
-        `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const res = await fetch(
+        `/api/v1/tenants/${auth.tenantId}/devices/${deviceId}/telemetry?${params}`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
       );
-
-      if (response.ok) {
-        const result = await response.json();
-        const telemetryData = result.data || [];
-
-        if (telemetryData.length > 0) {
-          // Extract all keys except system fields, and exclude null/undefined values
-          const dataPoint = telemetryData[0];
-          const directMetrics = Object.keys(dataPoint).filter(
-            (key) =>
-              !["timestamp", "device_id", "tenant_id", "id", "rssi", "payload"].includes(key) &&
-              dataPoint[key] !== null &&
-              dataPoint[key] !== undefined
-          );
-
-          // Also extract metrics from payload JSONB if it exists
-          const payloadMetrics = dataPoint.payload
-            ? Object.keys(dataPoint.payload)
-            : [];
-
-          // Combine both sources
-          const allMetrics = [...new Set([...directMetrics, ...payloadMetrics])];
-          setRecentMetrics(allMetrics);
-        } else {
-          setRecentMetrics([]);
-        }
-      } else {
-        console.error("Telemetry fetch failed:", response.status);
-        setRecentMetrics([]);
+      if (res.ok) {
+        const result = await res.json();
+        const point = result.data?.[0] ?? {};
+        const keys = Object.keys(point).filter(
+          (k) => !SYSTEM_KEYS.has(k) && point[k] != null
+        );
+        setLiveKeys(new Set(keys));
       }
-    } catch (error) {
-      console.error("Error fetching metrics:", error);
-      setRecentMetrics([]);
+    } catch {
+      setLiveKeys(new Set());
     } finally {
-      setLoadingMetrics(false);
+      setLoadingTelemetry(false);
     }
+  }, []);
+
+  // ── Derived metric lists ───────────────────────────────────────────────────
+  const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
+
+  // Schema fields: primary source
+  const schemaFields = Object.entries(schema ?? {});
+
+  // Extra live metrics discovered from telemetry but NOT declared in schema
+  const extraLiveKeys = [...liveKeys].filter(
+    (k) => schema !== null && !(k in schema)
+  );
+
+  // The field currently selected
+  const selectedFieldSchema: SchemaField | undefined = schema?.[selectedMetric];
+
+  // Compatibility warning: non-numeric metric on numeric-only widget
+  const compatibilityWarning: string | null = (() => {
+    if (!isNumericWidget || !selectedMetric || !selectedFieldSchema) return null;
+    const { type } = selectedFieldSchema;
+    if (!NUMERIC_FIELD_TYPES.has(type)) {
+      return `"${selectedMetric}" is type ${formatFieldType(type)} — ${widgetType.replace("_", " ")} widgets require a numeric field.`;
+    }
+    return null;
+  })();
+
+  const isMetricCompatible = (fieldType: string): boolean => {
+    if (!isNumericWidget) return true;
+    return NUMERIC_FIELD_TYPES.has(fieldType);
   };
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleAddBinding = () => {
     if (!selectedDeviceId || !selectedMetric) return;
 
-    const metricDetails = getMetricDetails(selectedMetric);
-    const newBinding = {
+    const newBinding: Binding = {
       device_id: selectedDeviceId,
-      device_name: selectedDevice?.name || '',
+      device_name: selectedDevice?.name ?? "",
       metric: selectedMetric,
       alias: alias || selectedMetric,
-      unit: metricDetails.unit,
-      min: metricDetails.min,
-      max: metricDetails.max,
+      unit: selectedFieldSchema?.unit,
+      min: selectedFieldSchema?.min,
+      max: selectedFieldSchema?.max,
     };
 
-    if (multiDevice) {
-      setBindings([...bindings, newBinding]);
-    } else {
-      setBindings([newBinding]);
-    }
-
-    // Reset form
+    setBindings(multiDevice ? [...bindings, newBinding] : [newBinding]);
     setSelectedDeviceId("");
     setSelectedMetric("");
     setAlias("");
@@ -216,11 +259,9 @@ export default function DeviceBindingModal({
     onClose();
   };
 
-  const getMetricDetails = (metricKey: string): TelemetryField => {
-    return availableMetrics[metricKey] || { type: "number" };
-  };
-
   if (!isOpen) return null;
+
+  const loadingMetric = loadingSchema || loadingTelemetry;
 
   return (
     <div
@@ -228,173 +269,261 @@ export default function DeviceBindingModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              Bind Devices to Widget
+            <h2 className="text-lg font-semibold text-gray-900">
+              Bind {multiDevice ? "Devices" : "Device"} to Widget
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 mt-0.5">
               {multiDevice
-                ? "Select multiple devices and metrics to compare"
-                : "Select a device and metric to display"}
+                ? "Select multiple devices and metrics to compare on the chart"
+                : "Select a device and the metric this widget will display"}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {loadingDevices ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
             </div>
           ) : (
             <>
-              {/* Add Binding Form */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">
-                  Add Device Binding
+              {/* ── Add binding form ──────────────────────────────────────── */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-800">
+                  {multiDevice ? "Add binding" : "Select source"}
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  {/* Device Selector */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Device
-                    </label>
-                    <select
-                      value={selectedDeviceId}
-                      onChange={(e) => {
-                        setSelectedDeviceId(e.target.value);
-                        setSelectedMetric(""); // Reset metric when device changes
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select a device...</option>
-                      {devices.map((device) => (
-                        <option key={device.id} value={device.id}>
-                          {device.name}
-                          {device.device_type?.name && ` (${device.device_type.name})`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Device selector */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Device
+                  </label>
+                  <select
+                    value={selectedDeviceId}
+                    onChange={(e) => {
+                      setSelectedDeviceId(e.target.value);
+                      setSelectedMetric("");
+                      setAlias("");
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select a device…</option>
+                    {devices.map((device) => (
+                      <option key={device.id} value={device.id}>
+                        {device.name}
+                        {device.device_type ? ` — ${device.device_type}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  {/* Metric Selector - Auto-discovered from telemetry */}
+                {/* Metric selector — schema-first */}
+                {selectedDeviceId && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Metric
-                    </label>
-                    {loadingMetrics ? (
-                      <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 text-sm">
-                        Loading metrics...
-                      </div>
-                    ) : recentMetrics.length > 0 ? (
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-gray-600">
+                        Metric
+                      </label>
+                      {loadingMetric && (
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Loading…
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Schema fields exist */}
+                    {schemaFields.length > 0 ? (
                       <select
                         value={selectedMetric}
-                        onChange={(e) => setSelectedMetric(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => {
+                          setSelectedMetric(e.target.value);
+                          setAlias("");
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="">Select a metric...</option>
-                        {recentMetrics.map((metricKey) => {
-                          const schemaInfo = availableMetrics[metricKey];
-                          return (
-                            <option key={metricKey} value={metricKey}>
-                              {metricKey}
-                              {schemaInfo?.unit && ` (${schemaInfo.unit})`}
-                              {schemaInfo?.description && ` - ${schemaInfo.description}`}
-                            </option>
-                          );
-                        })}
+                        <option value="">Select a metric…</option>
+
+                        {/* Schema-declared fields */}
+                        <optgroup label="Declared fields">
+                          {schemaFields.map(([key, field]) => {
+                            const live = liveKeys.has(key);
+                            const compatible = isMetricCompatible(field.type);
+                            return (
+                              <option key={key} value={key} disabled={!compatible}>
+                                {key}
+                                {field.unit ? ` (${field.unit})` : ""}
+                                {live ? " ✓" : ""}
+                                {!compatible ? " — not numeric" : ""}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+
+                        {/* Extra live keys not in schema */}
+                        {extraLiveKeys.length > 0 && (
+                          <optgroup label="Discovered from telemetry">
+                            {extraLiveKeys.map((key) => (
+                              <option key={key} value={key}>
+                                {key} (live)
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
-                    ) : selectedDeviceId ? (
-                      <div className="w-full px-3 py-2 border border-orange-300 rounded-lg bg-orange-50 text-orange-700 text-sm">
-                        No recent telemetry data found for this device
+                    ) : loadingSchema ? (
+                      <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-400">
+                        Loading schema…
                       </div>
                     ) : (
-                      <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 text-sm">
-                        Select a device first
-                      </div>
+                      /* No schema — fall back to live telemetry keys */
+                      liveKeys.size > 0 ? (
+                        <select
+                          value={selectedMetric}
+                          onChange={(e) => setSelectedMetric(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select a metric…</option>
+                          {[...liveKeys].map((key) => (
+                            <option key={key} value={key}>{key}</option>
+                          ))}
+                        </select>
+                      ) : !loadingTelemetry ? (
+                        /* Last resort: free-text entry */
+                        <input
+                          type="text"
+                          value={selectedMetric}
+                          onChange={(e) => setSelectedMetric(e.target.value)}
+                          placeholder="Enter metric key manually (e.g. temperature)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      ) : (
+                        <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-400">
+                          Loading…
+                        </div>
+                      )
                     )}
-                    {recentMetrics.length > 0 && (
-                      <p className="text-xs text-green-600 mt-1">
-                        ✓ {recentMetrics.length} metrics found from device telemetry
+
+                    {/* Live indicator summary */}
+                    {!loadingTelemetry && (
+                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                        {liveKeys.size > 0 ? (
+                          <>
+                            <Wifi className="w-3 h-3 text-green-500" />
+                            <span className="text-green-600 font-medium">{liveKeys.size} live</span>
+                            {schemaFields.length > 0 && (
+                              <span>· {schemaFields.length} declared in schema · ✓ = seen in last 24 h</span>
+                            )}
+                          </>
+                        ) : schemaFields.length > 0 ? (
+                          <>
+                            <BookOpen className="w-3 h-3 text-blue-500" />
+                            <span>Schema-declared fields shown · no telemetry received yet</span>
+                          </>
+                        ) : null}
                       </p>
                     )}
                   </div>
-                </div>
+                )}
 
-                {/* Alias (Optional) */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Display Alias (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={alias}
-                    onChange={(e) => setAlias(e.target.value)}
-                    placeholder={selectedMetric || "e.g., Main Line Temperature"}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+                {/* Compatibility warning */}
+                {compatibilityWarning && (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-800">{compatibilityWarning}</p>
+                  </div>
+                )}
 
-                {/* Metric Details */}
-                {selectedMetric && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                {/* Schema detail panel */}
+                {selectedMetric && selectedFieldSchema && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <h4 className="text-xs font-semibold text-blue-900 mb-2">
-                      Metric Details
+                      Field: <span className="font-mono">{selectedMetric}</span>
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-blue-700 font-medium">Type:</span>{" "}
-                        <span className="text-blue-900">{getMetricDetails(selectedMetric).type}</span>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                      <div className="flex gap-1">
+                        <span className="text-blue-600 font-medium">Type:</span>
+                        <span className="text-blue-900">{formatFieldType(selectedFieldSchema.type)}</span>
                       </div>
-                      {getMetricDetails(selectedMetric).unit && (
-                        <div>
-                          <span className="text-blue-700 font-medium">Unit:</span>{" "}
-                          <span className="text-blue-900">{getMetricDetails(selectedMetric).unit}</span>
+                      {selectedFieldSchema.unit && (
+                        <div className="flex gap-1">
+                          <span className="text-blue-600 font-medium">Unit:</span>
+                          <span className="text-blue-900">{selectedFieldSchema.unit}</span>
                         </div>
                       )}
-                      {getMetricDetails(selectedMetric).min !== undefined && (
-                        <div>
-                          <span className="text-blue-700 font-medium">Min:</span>{" "}
-                          <span className="text-blue-900">{getMetricDetails(selectedMetric).min}</span>
+                      {selectedFieldSchema.min !== undefined && (
+                        <div className="flex gap-1">
+                          <span className="text-blue-600 font-medium">Min:</span>
+                          <span className="text-blue-900">{selectedFieldSchema.min}</span>
                         </div>
                       )}
-                      {getMetricDetails(selectedMetric).max !== undefined && (
-                        <div>
-                          <span className="text-blue-700 font-medium">Max:</span>{" "}
-                          <span className="text-blue-900">{getMetricDetails(selectedMetric).max}</span>
+                      {selectedFieldSchema.max !== undefined && (
+                        <div className="flex gap-1">
+                          <span className="text-blue-600 font-medium">Max:</span>
+                          <span className="text-blue-900">{selectedFieldSchema.max}</span>
                         </div>
                       )}
+                      {selectedFieldSchema.description && (
+                        <div className="col-span-2 flex gap-1">
+                          <span className="text-blue-600 font-medium">Note:</span>
+                          <span className="text-blue-900">{selectedFieldSchema.description}</span>
+                        </div>
+                      )}
+                      <div className="flex gap-1">
+                        <span className="text-blue-600 font-medium">Live:</span>
+                        <span className={liveKeys.has(selectedMetric) ? "text-green-700 font-medium" : "text-gray-500"}>
+                          {liveKeys.has(selectedMetric) ? "Yes — seen in last 24 h" : "Not seen recently"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
 
+                {/* Display alias */}
+                {selectedMetric && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Display name <span className="text-gray-400">(optional — defaults to metric key)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={alias}
+                      onChange={(e) => setAlias(e.target.value)}
+                      placeholder={selectedFieldSchema?.description || selectedMetric}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                )}
+
+                {/* Add button */}
                 <button
                   onClick={handleAddBinding}
                   disabled={!selectedDeviceId || !selectedMetric}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors"
                 >
                   <Check className="w-4 h-4" />
-                  Add Binding
+                  {multiDevice ? "Add to chart" : "Bind device"}
                 </button>
               </div>
 
-              {/* Current Bindings */}
+              {/* ── Current bindings ──────────────────────────────────────── */}
               {bindings.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                    Current Bindings ({bindings.length})
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">
+                    Bindings ({bindings.length})
                   </h3>
                   <div className="space-y-2">
                     {bindings.map((binding, index) => {
@@ -404,17 +533,23 @@ export default function DeviceBindingModal({
                           key={index}
                           className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
                         >
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {device?.name || binding.device_id}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {binding.alias || binding.metric} • {binding.metric}
-                            </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {device?.name ?? binding.device_id}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">
+                              <span className="font-mono">{binding.metric}</span>
+                              {binding.alias && binding.alias !== binding.metric && (
+                                <span className="ml-1 text-gray-400">· "{binding.alias}"</span>
+                              )}
+                              {binding.unit && (
+                                <span className="ml-1 text-gray-400">· {binding.unit}</span>
+                              )}
+                            </p>
                           </div>
                           <button
                             onClick={() => handleRemoveBinding(index)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            className="ml-3 p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -425,17 +560,17 @@ export default function DeviceBindingModal({
                 </div>
               )}
 
-              {bindings.length === 0 && (
-                <div className="text-center py-8 text-gray-500 text-sm">
-                  No devices bound yet. Add a binding above to get started.
-                </div>
+              {bindings.length === 0 && !selectedDeviceId && (
+                <p className="text-center text-sm text-gray-400 py-4">
+                  No bindings yet — select a device and metric above.
+                </p>
               )}
             </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
@@ -444,10 +579,11 @@ export default function DeviceBindingModal({
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            disabled={bindings.length === 0}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             <Check className="w-4 h-4" />
-            Save Bindings
+            Save {bindings.length > 0 ? `(${bindings.length})` : ""}
           </button>
         </div>
       </div>

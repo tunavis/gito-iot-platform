@@ -14,9 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY mqtt_processor.py .
 
-# Health check: simple liveness check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import socket; socket.create_connection(('localhost', 1883), timeout=5)" || exit 1
+# Health check: verify MQTT broker is reachable using configured env vars
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import socket,os; socket.create_connection((os.getenv('MQTT_BROKER','mosquitto'),int(os.getenv('MQTT_PORT',1883))),timeout=5)" || exit 1
 
 # Run the processor
 CMD ["python", "mqtt_processor.py"]

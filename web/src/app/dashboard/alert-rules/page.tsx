@@ -469,27 +469,49 @@ export default function AlertRulesPage() {
 // NEW RULE FORM - Supports both THRESHOLD and COMPOSITE
 // ============================================================================
 
-function getMetricsForDevice(deviceId: string, devices: Device[], deviceTypes: DeviceType[]): string[] {
-  const extractMetrics = (dt: DeviceType): string[] => {
-    // Prefer telemetry_schema (computed from backend), fallback to data_model array
-    if (dt.telemetry_schema) return Object.keys(dt.telemetry_schema);
+// ── Schema helpers ────────────────────────────────────────────────────────────
+
+type SchemaField = { type?: string; unit?: string; min?: number; max?: number };
+type Schema = Record<string, SchemaField>;
+
+const NUMERIC_FIELD_TYPES = new Set(['float', 'integer', 'number']);
+
+function getSchemaForDevice(deviceId: string, devices: Device[], deviceTypes: DeviceType[]): Schema {
+  const schemaFromType = (dt: DeviceType): Schema => {
+    if (dt.telemetry_schema) return dt.telemetry_schema as Schema;
     if (dt.data_model && Array.isArray(dt.data_model)) {
-      return dt.data_model.map(f => f.name).filter(Boolean);
+      return Object.fromEntries(
+        dt.data_model.filter(f => f.name).map(f => [f.name, { type: f.type, unit: f.unit }])
+      );
     }
-    return [];
+    return {};
   };
 
   if (!deviceId) {
-    // Global rule: collect all metrics from all device types
-    const allMetrics = new Set<string>();
-    deviceTypes.forEach(dt => extractMetrics(dt).forEach(k => allMetrics.add(k)));
-    return Array.from(allMetrics).sort();
+    // Global rule: merge all schemas
+    const merged: Schema = {};
+    deviceTypes.forEach(dt => Object.assign(merged, schemaFromType(dt)));
+    return merged;
   }
   const device = devices.find(d => d.id === deviceId);
-  if (!device?.device_type_id) return [];
+  if (!device?.device_type_id) return {};
   const dt = deviceTypes.find(t => t.id === device.device_type_id);
-  if (!dt) return [];
-  return extractMetrics(dt).sort();
+  return dt ? schemaFromType(dt) : {};
+}
+
+function getMetricsForDevice(
+  deviceId: string,
+  devices: Device[],
+  deviceTypes: DeviceType[],
+  numericOnly = false,
+): string[] {
+  const schema = getSchemaForDevice(deviceId, devices, deviceTypes);
+  const keys = Object.keys(schema).sort();
+  if (!numericOnly) return keys;
+  return keys.filter(k => {
+    const type = schema[k]?.type;
+    return !type || NUMERIC_FIELD_TYPES.has(type); // include unknown-type fields (may be numeric)
+  });
 }
 
 function NewRuleForm({
@@ -523,10 +545,17 @@ function NewRuleForm({
   const [conditions, setConditions] = useState<AlertCondition[]>([]);
   const [logic, setLogic] = useState<ConditionLogic>('AND');
 
-  const availableMetrics = getMetricsForDevice(deviceId, devices, deviceTypes);
+  // Threshold rules need numeric metrics; composite conditions show all fields
+  const availableMetrics = getMetricsForDevice(deviceId, devices, deviceTypes, ruleType === 'THRESHOLD');
+  const allMetrics = getMetricsForDevice(deviceId, devices, deviceTypes, false);
+  const deviceSchema = getSchemaForDevice(deviceId, devices, deviceTypes);
+
+  // Schema metadata for the currently selected threshold metric
+  const selectedMetricSchema: SchemaField | undefined =
+    metric && metric !== '__custom__' ? deviceSchema[metric] : undefined;
 
   const addCondition = () => {
-    const defaultField = availableMetrics[0] || 'temperature';
+    const defaultField = allMetrics[0] || 'temperature';
     setConditions([...conditions, { field: defaultField, operator: 'gt', threshold: 0, weight: 1 }]);
   };
 
@@ -679,16 +708,26 @@ function NewRuleForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Metric</label>
+                <label className="block text-sm text-gray-700 mb-1">
+                  Metric
+                  {availableMetrics.length > 0 && (
+                    <span className="ml-1 text-xs text-gray-400 font-normal">(numeric only)</span>
+                  )}
+                </label>
                 <select
                   value={metric}
                   onChange={e => { setMetric(e.target.value); if (e.target.value !== '__custom__') setCustomMetric(''); }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 >
                   <option value="">Select metric...</option>
-                  {availableMetrics.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
+                  {availableMetrics.map(m => {
+                    const s = deviceSchema[m];
+                    return (
+                      <option key={m} value={m}>
+                        {m}{s?.unit ? ` (${s.unit})` : ''}
+                      </option>
+                    );
+                  })}
                   <option value="__custom__">Custom metric...</option>
                 </select>
                 {metric === '__custom__' && (
@@ -700,6 +739,17 @@ function NewRuleForm({
                     placeholder="Enter metric key"
                     required
                   />
+                )}
+                {/* Schema hint: unit + range */}
+                {selectedMetricSchema && (
+                  <p className="mt-1 text-xs text-purple-700">
+                    {selectedMetricSchema.unit && <span className="font-medium">{selectedMetricSchema.unit}</span>}
+                    {selectedMetricSchema.min !== undefined && selectedMetricSchema.max !== undefined && (
+                      <span className="ml-1 text-purple-500">
+                        · range {selectedMetricSchema.min} – {selectedMetricSchema.max}
+                      </span>
+                    )}
+                  </p>
                 )}
               </div>
               <div>
@@ -718,14 +768,29 @@ function NewRuleForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Threshold</label>
+                <label className="block text-sm text-gray-700 mb-1">
+                  Threshold
+                  {selectedMetricSchema?.unit && (
+                    <span className="ml-1 text-xs text-gray-400 font-normal">({selectedMetricSchema.unit})</span>
+                  )}
+                </label>
                 <input
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                   step="0.1"
+                  placeholder={
+                    selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined
+                      ? `${selectedMetricSchema.min} – ${selectedMetricSchema.max}`
+                      : undefined
+                  }
                 />
+                {selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    Valid range: {selectedMetricSchema.min} – {selectedMetricSchema.max}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -766,10 +831,15 @@ function NewRuleForm({
                       onChange={e => updateCondition(idx, { field: e.target.value })}
                       className="px-2 py-1 text-sm border border-gray-300 rounded"
                     >
-                      {availableMetrics.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                      {!availableMetrics.includes(cond.field) && (
+                      {allMetrics.map(m => {
+                        const s = deviceSchema[m];
+                        return (
+                          <option key={m} value={m}>
+                            {m}{s?.unit ? ` (${s.unit})` : ''}
+                          </option>
+                        );
+                      })}
+                      {!allMetrics.includes(cond.field) && (
                         <option value={cond.field}>{cond.field}</option>
                       )}
                     </select>
