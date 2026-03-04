@@ -5,8 +5,11 @@ from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
+
+# Matches DeviceResponse.compute_effective_status — single source of truth for threshold
+OFFLINE_THRESHOLD_SECONDS = 900
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +65,26 @@ async def get_fleet_overview(
     total_query = select(func.count(Device.id)).where(Device.tenant_id == tenant_id)
     total = (await session.execute(total_query)).scalar()
 
-    # Status distribution
-    status_query = select(
-        Device.status,
-        func.count(Device.id).label('count')
-    ).where(Device.tenant_id == tenant_id).group_by(Device.status)
-    status_result = await session.execute(status_query)
+    # Status distribution — apply per-type offline threshold (falls back to 900s default).
+    status_result = await session.execute(text("""
+        SELECT
+            CASE
+                WHEN d.status = 'online'
+                     AND (d.last_seen IS NULL
+                          OR d.last_seen < NOW() - make_interval(
+                              secs => COALESCE(
+                                  (dt.default_settings->>'offline_threshold')::int,
+                                  :default_threshold
+                              )))
+                THEN 'offline'
+                ELSE d.status
+            END AS effective_status,
+            COUNT(*)::integer AS cnt
+        FROM devices d
+        LEFT JOIN device_types dt ON d.device_type_id = dt.id
+        WHERE d.tenant_id = :tenant_id
+        GROUP BY effective_status
+    """), {"tenant_id": str(tenant_id), "default_threshold": OFFLINE_THRESHOLD_SECONDS})
     status_dist = {row[0]: row[1] for row in status_result.fetchall()}
 
     # Device type distribution
@@ -227,9 +244,34 @@ async def get_device_uptime(
     devices_result = await session.execute(devices_query)
     devices = devices_result.scalars().all()
 
-    # Calculate uptime (simplified: based on current status and last_seen)
+    # Batch-load per-type thresholds
+    type_ids = list({str(d.device_type_id) for d in devices if d.device_type_id})
+    type_thresholds: dict[str, int] = {}
+    if type_ids:
+        placeholders = ", ".join(f":id{i}" for i in range(len(type_ids)))
+        params = {f"id{i}": uid for i, uid in enumerate(type_ids)}
+        thresh_result = await session.execute(text(
+            f"SELECT id::text, (default_settings->>'offline_threshold')::int "
+            f"FROM device_types WHERE id::text IN ({placeholders}) "
+            f"AND default_settings->>'offline_threshold' IS NOT NULL"
+        ), params)
+        type_thresholds = {row[0]: row[1] for row in thresh_result}
+
+    # Calculate uptime — apply per-type offline threshold so a device
+    # that stopped reporting is not counted as online.
     total_devices = len(devices)
-    online_devices = len([d for d in devices if d.status == 'online'])
+    now = datetime.now(timezone.utc)
+
+    def _is_effectively_online(d) -> bool:
+        if d.status != 'online':
+            return False
+        if d.last_seen is None:
+            return True  # never reported; trust provisioned status
+        threshold = type_thresholds.get(str(d.device_type_id), OFFLINE_THRESHOLD_SECONDS) if d.device_type_id else OFFLINE_THRESHOLD_SECONDS
+        last = d.last_seen if d.last_seen.tzinfo else d.last_seen.replace(tzinfo=timezone.utc)
+        return (now - last).total_seconds() <= threshold
+
+    online_devices = len([d for d in devices if _is_effectively_online(d)])
 
     # Calculate how many devices were seen in the last N days
     cutoff_date = datetime.utcnow() - timedelta(days=days)

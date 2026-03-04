@@ -1,5 +1,3 @@
-import threading as _real_threading
-
 """
 Gito MQTT Bridge UI
 ===================
@@ -24,6 +22,7 @@ import random
 import re
 import subprocess
 import sys
+import threading as _real_threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -80,6 +79,7 @@ bridges: dict[str, dict] = {}
 
 gito_token:     str | None = None
 gito_tenant_id: str | None = None
+gito_email:     str | None = None
 
 sim_proc: subprocess.Popen | None = None
 
@@ -359,18 +359,23 @@ def connect_broker():
     if username:
         client.username_pw_set(username, password)
 
-    try:
-        # Pre-resolve hostname → bypass Windows DNS flakiness in background threads
-        import socket as _socket
-        resolved = _socket.getaddrinfo(host, port, _socket.AF_INET, _socket.SOCK_STREAM)[0][4][0]
-        logger.info("Resolved %s → %s", host, resolved)
-        client.connect(resolved, port, keepalive=60)  # blocking connect in Flask thread
-        t = _real_threading.Thread(target=client.loop_forever, daemon=True)
-        t.start()
-        ext_client = client
-        return jsonify({"ok": True, "message": f"Connecting to {host}:{port}…"})
-    except Exception as exc:
-        return jsonify({"ok": False, "message": str(exc)}), 500
+    # Run DNS + connect in a background thread so the HTTP request returns immediately.
+    # Status is pushed back to the browser via Socket.IO broker_status events.
+    def _do_connect():
+        global ext_client
+        try:
+            import socket as _socket
+            resolved = _socket.getaddrinfo(host, port, _socket.AF_INET, _socket.SOCK_STREAM)[0][4][0]
+            logger.info("Resolved %s → %s", host, resolved)
+            client.connect(resolved, port, keepalive=60)
+            ext_client = client
+            client.loop_forever()   # blocks until disconnect
+        except Exception as exc:
+            logger.error("External broker connect failed: %s", exc)
+            socketio.emit("broker_status", {"connected": False, "message": str(exc)})
+
+    _real_threading.Thread(target=_do_connect, daemon=True).start()
+    return jsonify({"ok": True, "message": f"Connecting to {host}:{port}…"})
 
 
 @app.route("/api/disconnect", methods=["POST"])
@@ -418,11 +423,19 @@ def _gito_base() -> str:
     return bridge_cfg.get("gito_api_url", "http://localhost").rstrip("/")
 
 
+@app.route("/api/gito/session")
+def gito_session():
+    """Return current Gito login state — used by browser on page load to restore session."""
+    if gito_token and gito_tenant_id:
+        return jsonify({"ok": True, "logged_in": True, "tenant_id": gito_tenant_id, "email": gito_email or ""})
+    return jsonify({"ok": True, "logged_in": False})
+
+
 @app.route("/api/gito/login", methods=["POST"])
 def gito_login():
-    global gito_token, gito_tenant_id
+    global gito_token, gito_tenant_id, gito_email
     data  = request.json or {}
-    base  = data.get("gito_url", _gito_base()).rstrip("/")
+    base  = (data.get("gito_url") or _gito_base()).rstrip("/")
     email = data.get("email", "")
     pwd   = data.get("password", "")
     try:
@@ -441,6 +454,7 @@ def gito_login():
             jwt_payload    = json.loads(base64.b64decode(part))
             gito_token     = token
             gito_tenant_id = jwt_payload.get("tenant_id")
+            gito_email     = email
             return jsonify({"ok": True, "tenant_id": gito_tenant_id, "email": email})
         return jsonify({"ok": False, "message": f"Login failed ({resp.status_code}): {resp.text[:300]}"}), 401
     except Exception as exc:
@@ -491,8 +505,10 @@ def create_device():
     if not gito_token or not gito_tenant_id:
         return jsonify({"ok": False, "message": "Not logged in"}), 401
     data    = request.json or {}
+    if not data.get("name", "").strip():
+        return jsonify({"ok": False, "message": "Device name is required"}), 422
     payload = {
-        "name":        data["name"],
+        "name":        data["name"].strip(),
         "status":      "active",
         "description": data.get("description", f"MQTT Bridge — topic: {data.get('topic', '')}"),
     }
@@ -531,6 +547,9 @@ def start_bridge():
         return jsonify({"ok": False, "message": "Local Mosquitto not connected — check config.yaml mqtt.local"}), 503
 
     data      = request.json or {}
+    for field in ("topic", "device_id", "device_name"):
+        if not data.get(field):
+            return jsonify({"ok": False, "message": f"Missing required field: {field}"}), 422
     bridge_id = f"bridge_{random.randint(10000, 99999)}"
     bridge    = {
         "id":          bridge_id,
@@ -648,7 +667,7 @@ def resume_bridge():
         return jsonify({"ok": False, "message": "Not logged in to Gito"}), 401
     if not local_connected:
         return jsonify({"ok": False, "message": "Local Mosquitto not connected"}), 503
-    if not ext_connected:
+    if not ext_client or not ext_connected:
         return jsonify({"ok": False, "message": "External broker not connected — connect first"}), 503
 
     topic = (request.json or {}).get("topic")
@@ -680,6 +699,13 @@ def resume_bridge():
     logger.info("Bridge resumed: %s → local/%s/devices/%s/telemetry",
                 saved["topic"], saved["tenant_id"], saved["device_id"])
     return jsonify({"ok": True, "bridge": bridge})
+
+
+@app.route("/api/local/reconnect", methods=["POST"])
+def reconnect_local():
+    """Re-attempt connection to local Mosquitto (e.g. after Docker restart)."""
+    _connect_local_mqtt()
+    return jsonify({"ok": True})
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────

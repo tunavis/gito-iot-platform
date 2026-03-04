@@ -23,6 +23,8 @@ const WS_MAX_ATTEMPTS   = 10;
 const SYSTEM_FIELDS = new Set([
   'timestamp', 'device_id', 'tenant_id', 'id', 'ts',
   'metric_key', 'metric_value', 'metric_value_str', 'metric_value_json',
+  // Aggregation artifacts — never real sensor metrics
+  'time_bucket', 'sample_count',
 ]);
 
 function isUnitField(key: string): boolean {

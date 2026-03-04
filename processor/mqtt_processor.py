@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from uuid import UUID
 from email.mime.multipart import MIMEMultipart
@@ -223,12 +224,17 @@ class TelemetryValidator:
             return False
 
 
+UNIT_CACHE_TTL = 300  # seconds — how long to cache device type unit maps
+
+
 class DatabaseService:
     """Handles database operations for telemetry and alerts."""
 
     def __init__(self, db_url: str):
         self.db_url = db_url
         self.conn_pool = None
+        # Cache: device_id → (timestamp, {metric_key: unit})
+        self._unit_cache: dict[str, tuple[float, dict[str, str]]] = {}
 
     async def connect(self):
         """Initialize database connection pool."""
@@ -251,6 +257,42 @@ class DatabaseService:
             await self.conn_pool.close()
             logger.info("Database connection pool closed")
 
+    async def get_unit_map(self, device_id: str) -> dict[str, str]:
+        """Return {metric_key: unit} for a device, resolved from its device type's data_model.
+
+        Uses an in-memory cache with a 5-minute TTL to avoid repeated DB lookups.
+        Returns an empty dict if the device has no type or no data_model.
+        """
+        now = time.monotonic()
+        cached = self._unit_cache.get(device_id)
+        if cached and (now - cached[0]) < UNIT_CACHE_TTL:
+            return cached[1]
+
+        unit_map: dict[str, str] = {}
+        try:
+            async with self.conn_pool.connection() as conn:
+                result = await conn.execute(
+                    """
+                    SELECT dt.data_model
+                    FROM devices d
+                    JOIN device_types dt ON d.device_type_id = dt.id
+                    WHERE d.id = %s
+                    """,
+                    (device_id,),
+                )
+                row = await result.fetchone()
+                if row:
+                    data_model = row.get("data_model") if isinstance(row, dict) else row[0]
+                    if isinstance(data_model, list):
+                        for field in data_model:
+                            if isinstance(field, dict) and field.get("name") and field.get("unit"):
+                                unit_map[field["name"]] = field["unit"]
+        except Exception as e:
+            logger.debug(f"Unit map lookup failed for {device_id}: {e}")
+
+        self._unit_cache[device_id] = (now, unit_map)
+        return unit_map
+
     async def insert_telemetry(
         self,
         tenant_id: str,
@@ -263,10 +305,14 @@ class DatabaseService:
 
         Each metric in the payload becomes a separate row in the telemetry table.
         This enables unlimited dynamic metrics per device (industry-standard pattern).
+        Unit is populated from the device type's data_model when available.
 
         Returns True on success, False on failure.
         """
         try:
+            # Resolve units from device type schema (cached, lightweight)
+            unit_map = await self.get_unit_map(device_id)
+
             async with self.conn_pool.connection() as conn:
                 # Set tenant context for RLS (must match current_setting('app.current_tenant_id') in RLS policies)
                 await conn.execute(
@@ -295,12 +341,14 @@ class DatabaseService:
                         # Convert other types to string
                         value_str = str(metric_value)
 
+                    unit = unit_map.get(metric_key)
+
                     await conn.execute(
                         """
-                        INSERT INTO telemetry (tenant_id, device_id, metric_key, metric_value, metric_value_str, metric_value_json, ts)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO telemetry (tenant_id, device_id, metric_key, metric_value, metric_value_str, metric_value_json, unit, ts)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         """,
-                        (tenant_id, device_id, metric_key, value_float, value_str, value_json, timestamp)
+                        (tenant_id, device_id, metric_key, value_float, value_str, value_json, unit, timestamp)
                     )
 
                 # Update device last_seen

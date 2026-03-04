@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DeviceVisualization } from '@/components/visualization';
+import useDeviceMetrics from '@/components/visualization/useDeviceMetrics';
 
 // Icon mapping for common metrics (optional visual enhancement, NOT used for filtering)
 const METRIC_ICONS: Record<string, any> = {
@@ -136,12 +137,17 @@ export default function DeviceDetailPage() {
   const [alarms, setAlarms] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Single real-time data source — shared by header strip AND Live Device tab.
+  // This means both always show the same value with no stale-data divergence.
+  const deviceMetrics = useDeviceMetrics(deviceId, tenantId, !!tenantId && !!deviceId);
+  const latestValues = deviceMetrics.latestValues;
+
   // Auto-discover metrics from telemetry data
   const discoveredMetrics = useMemo(() => {
     if (telemetryData.length === 0) return [];
 
-    // Get all keys from telemetry data (excluding system fields)
-    const systemFields = ['timestamp', 'device_id', 'tenant_id', 'id', 'ts', 'metric_key', 'metric_value', 'metric_value_str', 'metric_value_json'];
+    // Get all keys from telemetry data (excluding system fields and aggregation artifacts)
+    const systemFields = ['timestamp', 'device_id', 'tenant_id', 'id', 'ts', 'metric_key', 'metric_value', 'metric_value_str', 'metric_value_json', 'time_bucket', 'sample_count'];
     const metricSet = new Set<string>();
 
     telemetryData.forEach(point => {
@@ -452,33 +458,44 @@ export default function DeviceDetailPage() {
                 </div>
               </div>
 
-              {/* Live metrics strip — shown when telemetry data is available */}
-              {numericMetrics.length > 0 && (
-                <div className="flex items-stretch gap-0 border border-gray-100 rounded-lg overflow-hidden">
-                  {numericMetrics.slice(0, 6).map((metric, i) => {
-                    const value = getCurrentValue(metric);
-                    const trend = calculateTrend(metric);
-                    const meta = getMetricMetadata(metric);
-                    const isUp = trend && trend.direction === 'up';
-                    return (
-                      <div key={metric} className={`flex-1 px-4 py-3 text-center ${i > 0 ? 'border-l border-gray-100' : ''} bg-gray-50`}>
-                        <p className="text-xs text-gray-400 capitalize mb-1 truncate">
-                          {metric.replace(/_/g, ' ')}
-                        </p>
-                        <p className="text-lg font-bold text-gray-900 leading-none">
-                          {typeof value === 'number' ? value.toFixed(1) : '—'}
-                          {meta.unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{meta.unit}</span>}
-                        </p>
-                        {trend && (
-                          <p className={`text-xs font-medium mt-0.5 ${isUp ? 'text-orange-500' : 'text-green-500'}`}>
-                            {isUp ? '↑' : '↓'} {Math.abs(trend.value).toFixed(1)}%
+              {/* Live metrics strip — schema-declared numeric metrics with real-time /latest values */}
+              {(() => {
+                // Prefer schema-declared metrics; fall back to what we've seen in live data
+                const schemaKeys = deviceType?.telemetry_schema
+                  ? Object.entries(deviceType.telemetry_schema)
+                      .filter(([, s]) => !s.type || ['float', 'integer', 'number'].includes(s.type))
+                      .map(([k]) => k)
+                  : numericMetrics;
+                // Only show metrics that have a current value
+                const stripMetrics = schemaKeys.filter(k => latestValues[k] != null).slice(0, 6);
+                if (stripMetrics.length === 0) return null;
+                return (
+                  <div className="flex items-stretch gap-0 border border-gray-100 rounded-lg overflow-hidden">
+                    {stripMetrics.map((metric, i) => {
+                      const value = latestValues[metric];
+                      const trend = calculateTrend(metric);
+                      const meta = getMetricMetadata(metric);
+                      const isUp = trend && trend.direction === 'up';
+                      return (
+                        <div key={metric} className={`flex-1 px-4 py-3 text-center ${i > 0 ? 'border-l border-gray-100' : ''} bg-gray-50`}>
+                          <p className="text-xs text-gray-400 capitalize mb-1 truncate">
+                            {metric.replace(/_/g, ' ')}
                           </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          <p className="text-lg font-bold text-gray-900 leading-none">
+                            {typeof value === 'number' ? value.toFixed(1) : '—'}
+                            {meta.unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{meta.unit}</span>}
+                          </p>
+                          {trend && (
+                            <p className={`text-xs font-medium mt-0.5 ${isUp ? 'text-orange-500' : 'text-green-500'}`}>
+                              {isUp ? '↑' : '↓'} {Math.abs(trend.value).toFixed(1)}%
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -515,6 +532,8 @@ export default function DeviceDetailPage() {
               deviceId={deviceId}
               tenantId={tenantId}
               telemetrySchema={deviceType?.telemetry_schema ?? {}}
+              deviceStatus={device?.status}
+              metrics={deviceMetrics}
             />
           </div>
         )}
@@ -581,26 +600,31 @@ export default function DeviceDetailPage() {
                     <p className="text-sm mt-1">This device hasn&apos;t sent any data yet.</p>
                   </div>
                 ) : (
-                  telemetryData.slice(-5).reverse().map((point, idx) => (
-                    <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                          <Activity className="w-4 h-4 text-primary-600" />
+                  telemetryData.slice(-5).reverse().map((point, idx) => {
+                    // Aggregated data uses time_bucket; raw data uses timestamp
+                    const ts = point.time_bucket || point.timestamp;
+                    const tsDate = ts ? new Date(ts) : null;
+                    return (
+                      <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-primary-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Telemetry received</p>
+                            <p className="text-xs text-gray-500">
+                              {tsDate && !isNaN(tsDate.getTime()) ? tsDate.toLocaleString() : 'Unknown time'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">Telemetry received</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(point.timestamp).toLocaleString()}
-                          </p>
+                        <div className="text-right text-xs text-gray-600">
+                          {numericMetrics.slice(0, 2).map(m => point[m] != null && (
+                            <p key={m}>{m.replace(/_/g, ' ')}: {typeof point[m] === 'number' ? (point[m] as number).toFixed(1) : point[m]}</p>
+                          ))}
                         </div>
                       </div>
-                      <div className="text-right text-xs text-gray-600">
-                        {discoveredMetrics.slice(0, 2).map(m => point[m] != null && (
-                          <p key={m}>{m}: {typeof point[m] === 'number' ? point[m].toFixed(1) : point[m]}</p>
-                        ))}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

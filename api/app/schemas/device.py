@@ -1,8 +1,8 @@
 """Device-related request and response schemas."""
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID
 
@@ -58,6 +58,9 @@ class DeviceUpdate(BaseModel):
     device_profile_id: Optional[str] = Field(None, description="Device profile UUID")
 
 
+DEFAULT_OFFLINE_THRESHOLD = 900  # seconds — 15 minutes
+
+
 class DeviceResponse(BaseModel):
     """Device response model."""
     id: UUID
@@ -84,5 +87,24 @@ class DeviceResponse(BaseModel):
     ttn_synced: bool = False
     created_at: datetime
     updated_at: datetime
+    # Per-device-type threshold — set by router before validation, excluded from JSON
+    offline_threshold: Optional[int] = Field(None, exclude=True)
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def compute_effective_status(self) -> "DeviceResponse":
+        """Override ONLINE → OFFLINE when last_seen exceeds the offline threshold.
+
+        Uses the device type's default_settings.offline_threshold when available,
+        otherwise falls back to 900 s (15 minutes). Other statuses (IDLE, ERROR,
+        PROVISIONING) are intentional operator states and are never overridden.
+        """
+        if self.last_seen is None or self.status != DeviceStatus.ONLINE:
+            return self
+        threshold = self.offline_threshold or DEFAULT_OFFLINE_THRESHOLD
+        now = datetime.now(timezone.utc)
+        last = self.last_seen if self.last_seen.tzinfo else self.last_seen.replace(tzinfo=timezone.utc)
+        if (now - last).total_seconds() > threshold:
+            self.status = DeviceStatus.OFFLINE
+        return self

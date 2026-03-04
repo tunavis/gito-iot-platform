@@ -22,7 +22,17 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
+
+interface DiscoveredMetric {
+  key: string;
+  device_count: number;
+  last_seen: string | null;
+  in_schema: boolean;
+}
 
 // Types
 interface DataModelField {
@@ -142,6 +152,9 @@ export default function DeviceTypeFormPage() {
     settings: false,
     connectivity: false,
   });
+  const [discoveredMetrics, setDiscoveredMetrics] = useState<DiscoveredMetric[]>([]);
+  const [discoveredTotal, setDiscoveredTotal] = useState(0);
+  const [discoveredLoading, setDiscoveredLoading] = useState(false);
 
   // Load existing device type if editing
   const loadDeviceType = useCallback(async () => {
@@ -201,6 +214,36 @@ export default function DeviceTypeFormPage() {
       loadDeviceType();
     }
   }, [isEditMode, loadDeviceType]);
+
+  // Fetch discovered metrics (edit mode only)
+  const loadDiscoveredMetrics = useCallback(async () => {
+    if (!isEditMode) return;
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+
+    setDiscoveredLoading(true);
+    try {
+      const res = await fetch(
+        `/api/v1/tenants/${tenant}/device-types/${params.id}/discovered-metrics?days=7`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        const data = json.data ?? json;
+        setDiscoveredMetrics(data.metrics || []);
+        setDiscoveredTotal(data.total_devices || 0);
+      }
+    } catch {
+      // Non-critical — panel just stays empty
+    } finally {
+      setDiscoveredLoading(false);
+    }
+  }, [isEditMode, params.id]);
+
+  useEffect(() => {
+    loadDiscoveredMetrics();
+  }, [loadDiscoveredMetrics]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -628,6 +671,82 @@ export default function DeviceTypeFormPage() {
                   <Plus className="w-4 h-4" />
                   Add Field
                 </button>
+
+                {/* Discovered Metrics — edit mode only */}
+                {isEditMode && (
+                  <div className="mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-medium text-gray-700">
+                        Discovered Metrics
+                        {discoveredTotal > 0 && (
+                          <span className="ml-2 text-xs font-normal text-gray-500">
+                            from {discoveredTotal} device{discoveredTotal !== 1 ? 's' : ''}, last 7 days
+                          </span>
+                        )}
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={loadDiscoveredMetrics}
+                        disabled={discoveredLoading}
+                        className="p-1 hover:bg-blue-100 rounded text-gray-500"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${discoveredLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+
+                    {discoveredLoading && discoveredMetrics.length === 0 ? (
+                      <p className="text-xs text-gray-500">Loading...</p>
+                    ) : discoveredMetrics.length === 0 ? (
+                      <p className="text-xs text-gray-500">
+                        No telemetry received from devices of this type yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {discoveredMetrics.map((m) => {
+                          // Re-check in_schema against current form state (user may have added/removed fields)
+                          const inSchema = form.data_model.some((f) => f.name === m.key);
+                          return (
+                            <div
+                              key={m.key}
+                              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-blue-100/50"
+                            >
+                              <div className="flex items-center gap-2">
+                                {inSchema ? (
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                                ) : (
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                )}
+                                <span className={`text-sm font-mono ${inSchema ? 'text-gray-700' : 'text-amber-700 font-medium'}`}>
+                                  {m.key}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {m.device_count}/{discoveredTotal} device{discoveredTotal !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              {!inSchema && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setForm({
+                                      ...form,
+                                      data_model: [
+                                        ...form.data_model,
+                                        { name: m.key, type: 'float', unit: '', description: '', required: false },
+                                      ],
+                                    });
+                                  }}
+                                  className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-0.5 hover:bg-primary-50 rounded"
+                                >
+                                  + Add
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

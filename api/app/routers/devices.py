@@ -1,7 +1,7 @@
 """Device management routes - CRUD operations with RLS enforcement."""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
@@ -41,6 +41,42 @@ async def get_current_tenant(
         )
 
     return UUID(tenant_id)
+
+
+async def _fetch_offline_thresholds(
+    session: RLSSession,
+    device_type_ids: list[UUID],
+) -> dict[str, int]:
+    """Batch-fetch offline_threshold from device_types.default_settings for a set of type IDs.
+
+    Returns {device_type_id_str: threshold_seconds}.
+    """
+    if not device_type_ids:
+        return {}
+    placeholders = ", ".join(f":id{i}" for i in range(len(device_type_ids)))
+    params = {f"id{i}": str(uid) for i, uid in enumerate(device_type_ids)}
+    result = await session.execute(
+        text(
+            f"SELECT id::text, (default_settings->>'offline_threshold')::int "
+            f"FROM device_types WHERE id::text IN ({placeholders}) "
+            f"AND default_settings->>'offline_threshold' IS NOT NULL"
+        ),
+        params,
+    )
+    return {row[0]: row[1] for row in result}
+
+
+def _to_response(device, thresholds: dict[str, int]) -> DeviceResponse:
+    """Validate a Device ORM object into DeviceResponse with per-type offline threshold.
+
+    Sets offline_threshold as a transient attribute on the ORM object so that
+    model_validate picks it up during the model_validator pass.
+    """
+    if device.device_type_id:
+        threshold = thresholds.get(str(device.device_type_id))
+        if threshold:
+            device.offline_threshold = threshold
+    return DeviceResponse.model_validate(device, from_attributes=True)
 
 
 @router.get("", response_model=SuccessResponse)
@@ -88,10 +124,14 @@ async def list_devices(
     query = query.offset(offset).limit(per_page).order_by(Device.created_at.desc())
 
     result = await session.execute(query)
-    devices = result.scalars().all()
+    devices = list(result.scalars().all())
+
+    # Batch-fetch per-type offline thresholds
+    type_ids = list({d.device_type_id for d in devices if d.device_type_id})
+    thresholds = await _fetch_offline_thresholds(session, type_ids)
 
     return SuccessResponse(
-        data=[DeviceResponse.model_validate(d) for d in devices],
+        data=[_to_response(d, thresholds) for d in devices],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
 
@@ -198,7 +238,10 @@ async def get_device(
             detail="Device not found",
         )
 
-    return SuccessResponse(data=DeviceResponse.model_validate(device))
+    type_ids = [device.device_type_id] if device.device_type_id else []
+    thresholds = await _fetch_offline_thresholds(session, type_ids)
+
+    return SuccessResponse(data=_to_response(device, thresholds))
 
 
 @router.put("/{device_id}", response_model=SuccessResponse)

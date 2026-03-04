@@ -16,13 +16,20 @@ import { Wifi, WifiOff, Clock, Bell } from 'lucide-react';
 import useDeviceMetrics from './useDeviceMetrics';
 import MetricRenderer from './MetricRenderer';
 import { buildMetricSchema, inferMetricDefinition } from './effects';
-import type { MetricDefinition } from './types';
+import type { MetricDefinition, DeviceMetrics } from './types';
 
 interface DeviceVisualizationProps {
   deviceId: string;
   tenantId: string;
   /** telemetry_schema from the device type — used to determine MetricDefinitions */
   telemetrySchema?: Record<string, { type?: string; unit?: string; min?: number; max?: number }>;
+  /** Current device status from the API — used to show stale-data indicator */
+  deviceStatus?: string;
+  /**
+   * Pre-fetched metrics from the parent page's useDeviceMetrics call.
+   * When provided, the component skips its own hook call (single source of truth).
+   */
+  metrics?: DeviceMetrics;
 }
 
 function formatRelative(iso: string | null): string {
@@ -39,9 +46,15 @@ export default function DeviceVisualization({
   deviceId,
   tenantId,
   telemetrySchema = {},
+  deviceStatus,
+  metrics: externalMetrics,
 }: DeviceVisualizationProps) {
+  const isOffline = deviceStatus === 'offline';
+  // Use parent-provided metrics when available (avoids a second hook + WebSocket connection).
+  // Fall back to an internal hook only when rendered standalone (e.g. in tests or Storybook).
+  const internalMetrics = useDeviceMetrics(deviceId, tenantId, !externalMetrics);
   const { latestValues, lastUpdated, loading, error, wsConnected, activeAlarmCount } =
-    useDeviceMetrics(deviceId, tenantId, true);
+    externalMetrics ?? internalMetrics;
 
   // Build schema-based definitions once; fall back to runtime inference for ad-hoc metrics
   const schemaDefinitions = useMemo(
@@ -49,15 +62,24 @@ export default function DeviceVisualization({
     [telemetrySchema]
   );
 
-  // Merge schema definitions with any ad-hoc metrics seen in live values
+  // Merge schema definitions with any ad-hoc metrics seen in live values.
+  // When a device type schema is declared, only show schema fields — any extra
+  // keys the device sends (e.g. "location", "sample_count") are silently ignored.
+  // When no schema is declared, fall back to showing every non-null metric.
+  const schemaKeys = useMemo(() => Object.keys(telemetrySchema), [telemetrySchema]);
+
   const resolvedMetrics = useMemo<Array<{ key: string; def: MetricDefinition }>>(() => {
     return Object.entries(latestValues)
-      .filter(([, val]) => val !== null)
+      .filter(([key, val]) => {
+        if (val === null) return false;
+        if (schemaKeys.length > 0) return schemaKeys.includes(key);
+        return true;
+      })
       .map(([key, val]) => ({
         key,
         def: schemaDefinitions[key] ?? inferMetricDefinition(key, val),
       }));
-  }, [latestValues, schemaDefinitions]);
+  }, [latestValues, schemaDefinitions, schemaKeys]);
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
@@ -93,6 +115,16 @@ export default function DeviceVisualization({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Offline banner — shown when device status is offline */}
+      {isOffline && (
+        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
+          <WifiOff className="w-4 h-4 flex-shrink-0" />
+          <span>
+            Device is offline — showing last known values. Still checking every 15s and will update instantly when the device reconnects.
+          </span>
+        </div>
+      )}
+
       {/* Status bar */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-4 text-xs text-slate-500">
@@ -104,7 +136,7 @@ export default function DeviceVisualization({
           </span>
           <span className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            {formatRelative(lastUpdated)}
+            {isOffline ? `Last seen ${formatRelative(lastUpdated)}` : formatRelative(lastUpdated)}
           </span>
           {activeAlarmCount > 0 && (
             <span className="flex items-center gap-1.5 text-amber-400">
@@ -115,8 +147,8 @@ export default function DeviceVisualization({
         </div>
       </div>
 
-      {/* Metric grid — responsive: 1 col mobile, 2 col tablet, 3 col desktop */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Metric grid — dimmed when offline to signal stale data */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>
         {resolvedMetrics.map(({ key, def }) => (
           <MetricRenderer
             key={key}

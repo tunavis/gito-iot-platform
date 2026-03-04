@@ -447,3 +447,100 @@ async def clone_device_type(
         data=DeviceTypeResponse.model_validate(clone),
         message="Device type cloned successfully",
     )
+
+
+# ============================================================================
+# DISCOVERED METRICS
+# ============================================================================
+
+@router.get("/{device_type_id}/discovered-metrics")
+async def get_discovered_metrics(
+    tenant_id: UUID,
+    device_type_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    days: int = Query(7, ge=1, le=30, description="Look back N days"),
+) -> SuccessResponse:
+    """List metrics actually received from devices of this type.
+
+    Compares discovered metric keys against the device type's data_model
+    so users can see which MQTT payload keys match their schema and which
+    are missing.
+    """
+    await session.set_tenant_context(current_tenant)
+
+    # Verify device type exists and load its data_model
+    result = await session.execute(
+        select(DeviceType).where(
+            DeviceType.id == device_type_id,
+            DeviceType.tenant_id == current_tenant,
+        )
+    )
+    device_type = result.scalar_one_or_none()
+
+    if not device_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device type not found",
+        )
+
+    # Schema field names from data_model
+    schema_fields: set[str] = set()
+    if device_type.data_model:
+        for field in device_type.data_model:
+            if isinstance(field, dict) and "name" in field:
+                schema_fields.add(field["name"])
+
+    # Total devices of this type
+    cnt_result = await session.execute(
+        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id AND tenant_id = :tid"),
+        {"id": str(device_type_id), "tid": str(current_tenant)},
+    )
+    total_devices = cnt_result.scalar() or 0
+
+    # Discover metrics from telemetry across all devices of this type
+    query_sql = """
+    SELECT
+        metric_key,
+        COUNT(DISTINCT device_id)::integer AS device_count,
+        MAX(ts) AS last_seen
+    FROM telemetry
+    WHERE tenant_id = :tenant_id
+      AND device_id = ANY(
+        SELECT id FROM devices
+        WHERE device_type_id = :device_type_id AND tenant_id = :tenant_id
+      )
+      AND ts >= NOW() - make_interval(days => :days)
+    GROUP BY metric_key
+    ORDER BY metric_key
+    """
+
+    try:
+        rows = (await session.execute(text(query_sql), {
+            "tenant_id": str(current_tenant),
+            "device_type_id": str(device_type_id),
+            "days": days,
+        })).fetchall()
+
+        metrics = [
+            {
+                "key": row[0],
+                "device_count": row[1],
+                "last_seen": row[2].isoformat() if row[2] else None,
+                "in_schema": row[0] in schema_fields,
+            }
+            for row in rows
+        ]
+
+        return SuccessResponse(data={
+            "metrics": metrics,
+            "total_devices": total_devices,
+            "schema_fields": sorted(schema_fields),
+        })
+
+    except Exception as e:
+        logger.error(f"Discovered metrics query failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Query error: {type(e).__name__}",
+        )
