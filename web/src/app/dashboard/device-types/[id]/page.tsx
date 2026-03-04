@@ -217,7 +217,6 @@ export default function DeviceTypeFormPage() {
 
   // Fetch discovered metrics (edit mode only)
   const loadDiscoveredMetrics = useCallback(async () => {
-    if (!isEditMode) return;
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
@@ -239,7 +238,7 @@ export default function DeviceTypeFormPage() {
     } finally {
       setDiscoveredLoading(false);
     }
-  }, [isEditMode, params.id]);
+  }, [params.id]);
 
   useEffect(() => {
     loadDiscoveredMetrics();

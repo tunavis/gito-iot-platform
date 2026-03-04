@@ -540,7 +540,7 @@ export default function DeviceBindingModal({
                             <p className="text-xs text-gray-500 truncate">
                               <span className="font-mono">{binding.metric}</span>
                               {binding.alias && binding.alias !== binding.metric && (
-                                <span className="ml-1 text-gray-400">· "{binding.alias}"</span>
+                                <span className="ml-1 text-gray-400">&middot; &ldquo;{binding.alias}&rdquo;</span>
                               )}
                               {binding.unit && (
                                 <span className="ml-1 text-gray-400">· {binding.unit}</span>
