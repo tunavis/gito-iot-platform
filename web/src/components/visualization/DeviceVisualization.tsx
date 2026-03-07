@@ -17,12 +17,15 @@ import useDeviceMetrics from './useDeviceMetrics';
 import MetricRenderer from './MetricRenderer';
 import { buildMetricSchema, inferMetricDefinition } from './effects';
 import type { MetricDefinition, DeviceMetrics } from './types';
+import { TemplateRenderer, resolveTemplate } from '@/components/DeviceTemplates';
 
 interface DeviceVisualizationProps {
   deviceId: string;
   tenantId: string;
   /** telemetry_schema from the device type — used to determine MetricDefinitions */
   telemetrySchema?: Record<string, { type?: string; unit?: string; min?: number; max?: number }>;
+  /** device type category — used to resolve the device illustration template */
+  deviceCategory?: string;
   /** Current device status from the API — used to show stale-data indicator */
   deviceStatus?: string;
   /**
@@ -46,6 +49,7 @@ export default function DeviceVisualization({
   deviceId,
   tenantId,
   telemetrySchema = {},
+  deviceCategory,
   deviceStatus,
   metrics: externalMetrics,
 }: DeviceVisualizationProps) {
@@ -55,6 +59,12 @@ export default function DeviceVisualization({
   const internalMetrics = useDeviceMetrics(deviceId, tenantId, !externalMetrics);
   const { latestValues, lastUpdated, loading, error, wsConnected, activeAlarmCount } =
     externalMetrics ?? internalMetrics;
+
+  // Resolve device illustration template (null = no matching template → metric grid only)
+  const templateConfig = useMemo(
+    () => resolveTemplate(deviceCategory, telemetrySchema),
+    [deviceCategory, telemetrySchema]
+  );
 
   // Build schema-based definitions once; fall back to runtime inference for ad-hoc metrics
   const schemaDefinitions = useMemo(
@@ -84,9 +94,9 @@ export default function DeviceVisualization({
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48 bg-slate-900/40 rounded-xl border border-slate-800">
-        <div className="flex flex-col items-center gap-3 text-slate-400">
-          <div className="w-8 h-8 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin" />
+      <div className="flex items-center justify-center h-48 rounded-xl border gito-card">
+        <div className="flex flex-col items-center gap-3" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="w-8 h-8 border-2 border-t-blue-500 rounded-full animate-spin" style={{ borderColor: 'var(--color-border)', borderTopColor: '#3b82f6' }} />
           <span className="text-sm">Loading telemetry…</span>
         </div>
       </div>
@@ -96,8 +106,8 @@ export default function DeviceVisualization({
   // ── Error state ───────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="flex items-center justify-center h-48 bg-slate-900/40 rounded-xl border border-red-800/40">
-        <span className="text-sm text-red-400">{error}</span>
+      <div className="flex items-center justify-center h-48 rounded-xl border" style={{ background: 'var(--color-surface)', borderColor: 'rgba(239,68,68,0.3)' }}>
+        <span className="text-sm text-red-500">{error}</span>
       </div>
     );
   }
@@ -105,10 +115,10 @@ export default function DeviceVisualization({
   // ── No data state ─────────────────────────────────────────────────────────
   if (resolvedMetrics.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 gap-3 bg-slate-900/40 rounded-xl border border-slate-800">
-        <WifiOff className="w-8 h-8 text-slate-600" />
-        <p className="text-sm text-slate-500">No telemetry received yet</p>
-        <p className="text-xs text-slate-600">Waiting for data from device…</p>
+      <div className="flex flex-col items-center justify-center h-48 gap-3 rounded-xl border gito-card">
+        <WifiOff className="w-8 h-8" style={{ color: 'var(--color-text-muted)' }} />
+        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>No telemetry received yet</p>
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Waiting for data from device…</p>
       </div>
     );
   }
@@ -127,8 +137,8 @@ export default function DeviceVisualization({
 
       {/* Status bar */}
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-4 text-xs text-slate-500">
-          <span className={`flex items-center gap-1.5 ${wsConnected ? 'text-emerald-400' : 'text-slate-500'}`}>
+        <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          <span className={`flex items-center gap-1.5 ${wsConnected ? 'text-emerald-500' : ''}`} style={wsConnected ? {} : { color: 'var(--color-text-muted)' }}>
             {wsConnected
               ? <><Wifi className="w-3.5 h-3.5" /> Live</>
               : <><WifiOff className="w-3.5 h-3.5" /> Polling 15s</>
@@ -146,6 +156,14 @@ export default function DeviceVisualization({
           )}
         </div>
       </div>
+
+      {/* Device illustration — shown when device type has a matching template */}
+      {templateConfig && (
+        <div className={`rounded-xl overflow-hidden border transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-page)' }}>
+          <TemplateRenderer config={templateConfig} telemetry={latestValues} />
+        </div>
+      )}
 
       {/* Metric grid — dimmed when offline to signal stale data */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>

@@ -568,11 +568,12 @@ export default function DeviceDetailPage() {
 
         {/* Live Device Tab — Visualization Layer */}
         {activeTab === 'live' && tenantId && (
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
+          <div className="rounded-xl border p-6 gito-card">
             <DeviceVisualization
               deviceId={deviceId}
               tenantId={tenantId}
               telemetrySchema={deviceType?.telemetry_schema ?? {}}
+              deviceCategory={deviceType?.category}
               deviceStatus={device?.status}
               metrics={deviceMetrics}
             />

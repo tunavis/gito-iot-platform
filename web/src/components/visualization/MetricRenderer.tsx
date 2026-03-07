@@ -61,14 +61,14 @@ function FlowRenderer({ value, definition }: { value: number; definition: Metric
         length={220}
       />
       <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-semibold tabular-nums text-slate-100">
+        <span className="text-2xl font-semibold tabular-nums" style={{ color: 'var(--color-text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
           {formatted}
         </span>
         {definition.unit && (
-          <span className="text-sm text-slate-400">{definition.unit}</span>
+          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{definition.unit}</span>
         )}
         {value < 0 && (
-          <span className="text-xs text-slate-500 ml-1">↩ reverse</span>
+          <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>↩ reverse</span>
         )}
       </div>
     </div>
@@ -78,11 +78,11 @@ function FlowRenderer({ value, definition }: { value: number; definition: Metric
 function ScalarRenderer({ value, definition }: { value: number; definition: MetricDefinition }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-3xl font-semibold tabular-nums text-slate-100">
+      <span className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
         {formatNumeric(value)}
       </span>
       {definition.unit && (
-        <span className="text-base text-slate-400">{definition.unit}</span>
+        <span className="text-base" style={{ color: 'var(--color-text-muted)' }}>{definition.unit}</span>
       )}
     </div>
   );
@@ -102,7 +102,7 @@ function LevelRenderer({ value, definition }: { value: number; definition: Metri
   return (
     <div className="flex items-end gap-3">
       {/* Vertical bar */}
-      <div className="relative w-5 h-20 bg-slate-700 rounded-sm overflow-hidden">
+      <div className="relative w-5 h-20 rounded-sm overflow-hidden" style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)' }}>
         <div
           className="absolute bottom-0 left-0 right-0 rounded-sm transition-all duration-700"
           style={{ height: `${pct}%`, backgroundColor: color }}
@@ -110,14 +110,14 @@ function LevelRenderer({ value, definition }: { value: number; definition: Metri
       </div>
       <div className="flex flex-col">
         <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-semibold tabular-nums text-slate-100">
+          <span className="text-2xl font-semibold tabular-nums" style={{ color: 'var(--color-text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
             {formatNumeric(value)}
           </span>
           {definition.unit && (
-            <span className="text-sm text-slate-400">{definition.unit}</span>
+            <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{definition.unit}</span>
           )}
         </div>
-        <span className="text-xs text-slate-500">{pct.toFixed(0)}%</span>
+        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{pct.toFixed(0)}%</span>
       </div>
     </div>
   );
@@ -132,7 +132,7 @@ function StateRenderer({ value }: { value: string }) {
       ? { bg: 'bg-red-500/20', text: 'text-red-400' }
     : ['warning', 'idle', 'standby', 'partial'].includes(lower)
       ? { bg: 'bg-amber-500/20', text: 'text-amber-400' }
-    : { bg: 'bg-slate-500/20', text: 'text-slate-300' };
+    : { bg: 'bg-slate-500/15', text: 'text-slate-500' };
 
   return (
     <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${bg} ${text}`}>
@@ -151,7 +151,7 @@ export default function MetricRenderer({ metricKey, value, definition, label }: 
     // No data
     if (value === null || value === undefined) {
       return (
-        <span className="text-sm text-slate-500 italic">No data</span>
+        <span className="text-sm italic" style={{ color: 'var(--color-text-muted)' }}>No data</span>
       );
     }
 
@@ -180,8 +180,8 @@ export default function MetricRenderer({ metricKey, value, definition, label }: 
   }, [value, definition]);
 
   return (
-    <div className="flex flex-col gap-2 p-4 bg-slate-800/60 rounded-xl border border-slate-700/50">
-      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+    <div className="flex flex-col gap-2 p-4 rounded-xl gito-card">
+      <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
         {displayLabel}
       </span>
       {content}
