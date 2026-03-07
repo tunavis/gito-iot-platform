@@ -109,22 +109,25 @@ function buildWaterMeterOverlays(schema: TelemetrySchema): Overlay[] {
 
   const flowKey = findKey(schema, ['flow_rate', 'flow', 'rate', 'velocity'], used);
   if (flowKey) {
+    // Animated dashes along the pipe
     overlays.push({ type: 'flow', metric: mark(flowKey), start: { x: 30, y: 200 }, end: { x: 470, y: 200 }, max: schema[flowKey].max, unit: schema[flowKey].unit });
+    // Numeric reading inside the meter display face
+    overlays.push({ type: 'value', metric: flowKey, position: { x: 250, y: 165 }, unit: schema[flowKey].unit, label: schema[flowKey].description ?? 'Flow Rate' });
   }
 
   const volumeKey = findKey(schema, ['total_volume', 'cumulative', 'volume', 'total_flow', 'reading'], used);
   if (volumeKey) {
-    overlays.push({ type: 'value', metric: mark(volumeKey), position: { x: 250, y: 200 }, unit: schema[volumeKey].unit, label: schema[volumeKey].description ?? 'Volume' });
+    overlays.push({ type: 'value', metric: mark(volumeKey), position: { x: 250, y: 230 }, unit: schema[volumeKey].unit, label: schema[volumeKey].description ?? 'Volume' });
   }
 
   const pressureKey = findKey(schema, ['pressure', 'line_pressure'], used);
   if (pressureKey) {
-    overlays.push({ type: 'value', metric: mark(pressureKey), position: { x: 250, y: 245 }, unit: schema[pressureKey].unit, label: 'Pressure' });
+    overlays.push({ type: 'value', metric: mark(pressureKey), position: { x: 130, y: 165 }, unit: schema[pressureKey].unit, label: 'Pressure' });
   }
 
   const tempKey = findKey(schema, ['temperature', 'temp', 'fluid_temp'], used);
   if (tempKey) {
-    overlays.push({ type: 'value', metric: mark(tempKey), position: { x: 250, y: 280 }, unit: schema[tempKey].unit, label: 'Temp' });
+    overlays.push({ type: 'value', metric: mark(tempKey), position: { x: 370, y: 165 }, unit: schema[tempKey].unit, label: 'Temp' });
   }
 
   return overlays;

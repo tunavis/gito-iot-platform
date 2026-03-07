@@ -62,6 +62,10 @@ export interface LevelOverlay extends BaseOverlay {
   /** Absolute max value; if omitted the value is treated as 0–100 */
   capacity?: number;
   unit?: string;
+  /** Bar width in px (default 18) */
+  width?: number;
+  /** Bar height in px (default 72) */
+  height?: number;
 }
 
 /** Online/offline style status badge */

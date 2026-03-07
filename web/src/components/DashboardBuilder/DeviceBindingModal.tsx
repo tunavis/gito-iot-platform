@@ -107,11 +107,15 @@ export default function DeviceBindingModal({
   const [liveKeys, setLiveKeys] = useState<Set<string>>(new Set());
   const [loadingTelemetry, setLoadingTelemetry] = useState(false);
 
+  // Error state for user feedback
+  const [error, setError] = useState<string | null>(null);
+
 
   // ── Fetch devices on open ──────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
     setBindings(currentBindings);
+    setError(null);
     fetchDevices();
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -120,14 +124,19 @@ export default function DeviceBindingModal({
     if (!auth) return;
     try {
       setLoadingDevices(true);
+      setError(null);
       const res = await fetch(
-        `/api/v1/tenants/${auth.tenantId}/devices?per_page=200`,
+        `/api/v1/tenants/${auth.tenantId}/devices?per_page=100`,
         { headers: { Authorization: `Bearer ${auth.token}` } }
       );
       if (res.ok) {
         const result = await res.json();
         setDevices(result.data ?? []);
+      } else {
+        setError("Failed to load devices. Please try again.");
       }
+    } catch {
+      setError("Network error loading devices. Check your connection.");
     } finally {
       setLoadingDevices(false);
     }
@@ -295,6 +304,20 @@ export default function DeviceBindingModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {error && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm text-red-800">{error}</p>
+                <button
+                  onClick={() => { setError(null); fetchDevices(); }}
+                  className="text-xs text-red-600 underline mt-1"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
           {loadingDevices ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
@@ -302,6 +325,13 @@ export default function DeviceBindingModal({
           ) : (
             <>
               {/* ── Add binding form ──────────────────────────────────────── */}
+              {devices.length === 0 && !error ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-th-muted">
+                    No devices found. Create a device first to bind it to a widget.
+                  </p>
+                </div>
+              ) : (
               <div className="bg-page border border-th-default rounded-lg p-4 space-y-4">
                 <h3 className="text-sm font-semibold text-th-primary">
                   {multiDevice ? "Add binding" : "Select source"}
@@ -519,6 +549,7 @@ export default function DeviceBindingModal({
                   {multiDevice ? "Add to chart" : "Bind device"}
                 </button>
               </div>
+              )}
 
               {/* ── Current bindings ──────────────────────────────────────── */}
               {bindings.length > 0 && (

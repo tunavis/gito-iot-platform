@@ -5,17 +5,13 @@
  *
  * Renders a device illustration (SVG) with live telemetry overlays.
  *
- * Layout:
- *   - Container: width=100%, aspect-ratio 5:4 (matches viewBox 500x400)
- *   - SVG illustration: absolute inset-0, fills container
- *   - Overlays: absolutely positioned using % coords derived from SVG space
+ * Each template defines a CROP that trims empty vertical space from the 500×400 viewBox.
+ * The container aspect-ratio and overlay y-positions are both derived from the crop so
+ * they stay perfectly aligned at any container width.
  *
- * Coordinate system:
- *   overlay.position = SVG viewBox units (0–500 x, 0–400 y)
- *   DOM position     = (x/500)*100% left, (y/400)*100% top
- *
- * FlowOverlay requires svgScale (containerWidth/500) to compute pixel length.
- * This is obtained via ResizeObserver on the container div.
+ * Coordinate system (x unchanged, y adjusted for crop):
+ *   left = (x / 500) * 100%
+ *   top  = ((y - crop.y) / crop.h) * 100%
  */
 
 import React, { useRef, useState, useEffect } from 'react';
@@ -35,6 +31,18 @@ const TEMPLATE_MAP: Record<TemplateConfig['template'], React.FC<{ width: number;
   generator:    GeneratorTemplate,
   solar_system: SolarTemplate,
   hvac_unit:    HvacTemplate,
+};
+
+/** Crops remove empty vertical padding from the 500×400 viewBox. */
+interface ViewBoxCrop { y: number; h: number; }
+
+const TEMPLATE_CROPS: Record<TemplateConfig['template'], ViewBoxCrop> = {
+  water_tank:   { y: 45,  h: 335 },  // content: inlet cap at top ~y45, base ~y380
+  water_meter:  { y: 80,  h: 215 },  // content: pipe top ~y80, pipe bottom ~y295
+  pump:         { y: 70,  h: 260 },  // content: motor top ~y70, base bottom ~y330
+  generator:    { y: 45,  h: 270 },  // content: exhaust top ~y45, frame bottom ~y315
+  solar_system: { y: 30,  h: 310 },  // content: panel label ~y30, battery label ~y340
+  hvac_unit:    { y: 60,  h: 325 },  // content: duct top ~y60, label bottom ~y385
 };
 
 interface TemplateRendererProps {
@@ -61,16 +69,18 @@ export default function TemplateRenderer({ config, telemetry }: TemplateRenderer
   const Template = TEMPLATE_MAP[config.template];
   if (!Template) return null;
 
+  const crop = TEMPLATE_CROPS[config.template] ?? { y: 0, h: 400 };
+
   return (
     <div
       ref={containerRef}
       className="relative w-full"
-      style={{ aspectRatio: '5 / 4', overflow: 'hidden' }}
+      style={{ aspectRatio: `500 / ${crop.h}`, overflow: 'hidden' }}
     >
-      {/* Layer 1: Static SVG illustration */}
+      {/* Layer 1: Static SVG illustration — cropped viewBox removes empty vertical space */}
       <svg
         className="absolute inset-0 w-full h-full"
-        viewBox="0 0 500 400"
+        viewBox={`0 ${crop.y} 500 ${crop.h}`}
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
@@ -84,6 +94,7 @@ export default function TemplateRenderer({ config, telemetry }: TemplateRenderer
           overlay={overlay}
           value={telemetry[overlay.metric] ?? null}
           svgScale={svgScale}
+          crop={crop}
         />
       ))}
     </div>

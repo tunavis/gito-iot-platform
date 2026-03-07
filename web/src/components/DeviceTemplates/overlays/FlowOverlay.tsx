@@ -10,9 +10,11 @@ interface Props {
   value: number | string | null;
   /** Pixels per SVG unit (containerWidth / 500). Used to size FlowLine correctly. */
   svgScale: number;
+  /** ViewBox crop applied to the SVG container — used to align y-position */
+  crop: { y: number; h: number };
 }
 
-export default function FlowOverlayWidget({ overlay, value, svgScale }: Props) {
+export default function FlowOverlayWidget({ overlay, value, svgScale, crop }: Props) {
   const numVal = value === null || value === undefined ? 0 : Number(value);
   const max    = overlay.max ?? 100;
 
@@ -32,7 +34,7 @@ export default function FlowOverlayWidget({ overlay, value, svgScale }: Props) {
       style={{
         position: 'absolute',
         left:  `${(overlay.start.x / 500) * 100}%`,
-        top:   `${(overlay.start.y / 400) * 100}%`,
+        top:   `${((overlay.start.y - crop.y) / crop.h) * 100}%`,
         transform: `rotate(${angleDeg}deg)`,
         transformOrigin: '0 50%',
         width: pixelLength,

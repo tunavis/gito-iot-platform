@@ -21,12 +21,14 @@ interface Props {
   value: number | string | null;
   /** Pixels per SVG unit — required by FlowOverlay */
   svgScale: number;
+  /** ViewBox crop applied to the SVG container — used to align overlay y-positions */
+  crop: { y: number; h: number };
 }
 
-export default function OverlayWidget({ overlay, value, svgScale }: Props) {
+export default function OverlayWidget({ overlay, value, svgScale, crop }: Props) {
   // Flow overlays position themselves absolutely — skip the wrapper
   if (overlay.type === 'flow') {
-    return <FlowOverlayWidget overlay={overlay} value={value} svgScale={svgScale} />;
+    return <FlowOverlayWidget overlay={overlay} value={value} svgScale={svgScale} crop={crop} />;
   }
 
   // All other overlays are centered on their `position` point
@@ -36,7 +38,7 @@ export default function OverlayWidget({ overlay, value, svgScale }: Props) {
       style={{
         position: 'absolute',
         left:      `${(pos.x / 500) * 100}%`,
-        top:       `${(pos.y / 400) * 100}%`,
+        top:       `${((pos.y - crop.y) / crop.h) * 100}%`,
         transform: 'translate(-50%, -50%)',
         zIndex:    10,
       }}

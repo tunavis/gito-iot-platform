@@ -78,6 +78,12 @@ export default function DeviceVisualization({
   // When no schema is declared, fall back to showing every non-null metric.
   const schemaKeys = useMemo(() => Object.keys(telemetrySchema), [telemetrySchema]);
 
+  // Metrics already rendered as overlays on the illustration — exclude from the grid
+  const overlayMetricKeys = useMemo(
+    () => new Set(templateConfig?.overlays.map(o => o.metric) ?? []),
+    [templateConfig]
+  );
+
   const resolvedMetrics = useMemo<Array<{ key: string; def: MetricDefinition }>>(() => {
     return Object.entries(latestValues)
       .filter(([key, val]) => {
@@ -90,6 +96,15 @@ export default function DeviceVisualization({
         def: schemaDefinitions[key] ?? inferMetricDefinition(key, val),
       }));
   }, [latestValues, schemaDefinitions, schemaKeys]);
+
+  // When a template is active, only the metrics NOT already shown as overlays
+  // appear in the right-hand grid — avoids showing the same value twice.
+  const gridMetrics = useMemo(
+    () => templateConfig
+      ? resolvedMetrics.filter(({ key }) => !overlayMetricKeys.has(key))
+      : resolvedMetrics,
+    [resolvedMetrics, overlayMetricKeys, templateConfig]
+  );
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
@@ -157,25 +172,33 @@ export default function DeviceVisualization({
         </div>
       </div>
 
-      {/* Device illustration — shown when device type has a matching template */}
-      {templateConfig && (
-        <div className={`rounded-xl overflow-hidden border transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-page)' }}>
-          <TemplateRenderer config={templateConfig} telemetry={latestValues} />
+      {templateConfig ? (
+        /* ── Template layout: illustration left, metrics right ── */
+        <div className={`flex flex-col lg:flex-row gap-4 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>
+          {/* Illustration — constrained width so it never dominates */}
+          <div
+            className="rounded-xl overflow-hidden border flex-shrink-0"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-page)', width: '100%', maxWidth: 360 }}
+          >
+            <TemplateRenderer config={templateConfig} telemetry={latestValues} />
+          </div>
+          {/* Metric grid — only metrics not already shown as overlays on the illustration */}
+          {gridMetrics.length > 0 && (
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+              {gridMetrics.map(({ key, def }) => (
+                <MetricRenderer key={key} metricKey={key} value={latestValues[key] ?? null} definition={def} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── No template: standard metric grid ── */
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>
+          {resolvedMetrics.map(({ key, def }) => (
+            <MetricRenderer key={key} metricKey={key} value={latestValues[key] ?? null} definition={def} />
+          ))}
         </div>
       )}
-
-      {/* Metric grid — dimmed when offline to signal stale data */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>
-        {resolvedMetrics.map(({ key, def }) => (
-          <MetricRenderer
-            key={key}
-            metricKey={key}
-            value={latestValues[key] ?? null}
-            definition={def}
-          />
-        ))}
-      </div>
     </div>
   );
 }
