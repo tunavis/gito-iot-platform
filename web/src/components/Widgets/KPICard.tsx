@@ -189,7 +189,7 @@ export default function KPICard({
   const getTrendColor = () => {
     if (trend > 0) return "text-green-600";
     if (trend < 0) return "text-red-600";
-    return "text-gray-600";
+    return "text-th-secondary";
   };
 
   const TrendIcon = getTrendIcon();
@@ -204,8 +204,8 @@ export default function KPICard({
       <div className="flex flex-col items-center justify-center h-full p-6">
         {loading ? (
           <div className="animate-pulse">
-            <div className="h-12 w-32 bg-gray-200 rounded mb-2"></div>
-            <div className="h-4 w-20 bg-gray-200 rounded mx-auto"></div>
+            <div className="h-12 w-32 bg-panel rounded mb-2"></div>
+            <div className="h-4 w-20 bg-panel rounded mx-auto"></div>
           </div>
         ) : (
           <>
@@ -225,7 +225,7 @@ export default function KPICard({
             )}
 
             {(!data_sources || data_sources.length === 0) && (
-              <div className="text-xs text-gray-400 mt-2">
+              <div className="text-xs text-th-muted mt-2">
                 No device bound - configure widget
               </div>
             )}

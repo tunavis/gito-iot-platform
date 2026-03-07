@@ -78,8 +78,8 @@ const LORAWAN_STEPS: { id: StepId; label: string }[] = [
 // ─── Shared field styles ──────────────────────────────────────────────────────
 
 const INPUT = [
-  'w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-lg',
-  'text-sm text-gray-900 placeholder-gray-400',
+  'w-full px-3.5 py-2.5 bg-surface border border-[var(--color-input-border)] rounded-lg',
+  'text-sm text-th-primary placeholder-[var(--color-text-muted)]',
   'focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500',
   'transition-colors',
 ].join(' ');
@@ -102,11 +102,11 @@ function FormRow({ label, required, hint, children }: {
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+      <label className="block text-sm font-medium text-th-primary mb-1.5">
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs text-th-muted">{hint}</p>}
     </div>
   );
 }
@@ -114,8 +114,8 @@ function FormRow({ label, required, hint, children }: {
 function SummaryRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-6 py-2 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-500 flex-shrink-0">{label}</span>
-      <span className={`text-sm text-gray-900 text-right ${mono ? 'font-mono text-xs' : ''}`}>{value}</span>
+      <span className="text-sm text-th-secondary flex-shrink-0">{label}</span>
+      <span className={`text-sm text-th-primary text-right ${mono ? 'font-mono text-xs' : ''}`}>{value}</span>
     </div>
   );
 }
@@ -123,7 +123,7 @@ function SummaryRow({ label, value, mono }: { label: string; value: string; mono
 function StepBar({ steps, currentId }: { steps: { id: StepId; label: string }[]; currentId: StepId }) {
   const currentIndex = steps.findIndex(s => s.id === currentId);
   return (
-    <div className="flex items-center gap-0 px-6 py-4 bg-white border-b border-gray-100">
+    <div className="flex items-center gap-0 px-6 py-4 bg-surface border-b border-th-subtle">
       {steps.map((s, i) => {
         const done    = i < currentIndex;
         const current = i === currentIndex;
@@ -133,16 +133,16 @@ function StepBar({ steps, currentId }: { steps: { id: StepId; label: string }[];
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all
                 ${done    ? 'bg-emerald-500 text-white'
                 : current ? 'bg-primary-600 text-white'
-                :           'bg-gray-100 text-gray-400'}`}>
+                :           'bg-panel text-th-muted'}`}>
                 {done ? <Check className="w-3.5 h-3.5" /> : i + 1}
               </div>
               <span className={`text-sm font-medium hidden sm:block ${
-                current ? 'text-gray-900' : done ? 'text-emerald-600' : 'text-gray-400'}`}>
+                current ? 'text-th-primary' : done ? 'text-emerald-600' : 'text-th-muted'}`}>
                 {s.label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className={`flex-1 h-px mx-3 transition-colors ${i < currentIndex ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+              <div className={`flex-1 h-px mx-3 transition-colors ${i < currentIndex ? 'bg-emerald-300' : 'bg-panel'}`} />
             )}
           </React.Fragment>
         );
@@ -293,10 +293,10 @@ export default function NewDevicePage() {
   // ── Loading skeleton ───────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-page">
         <Sidebar />
         <main className="flex-1 ml-64 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-gray-200 border-t-primary-500 rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-th-default border-t-primary-500 rounded-full animate-spin" />
         </main>
       </div>
     );
@@ -304,20 +304,20 @@ export default function NewDevicePage() {
 
   // ── Page ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-page">
       <Sidebar />
       <main className="flex-1 ml-64">
 
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-8 py-5">
+        <div className="bg-surface border-b border-th-default px-8 py-5">
           <div className="flex items-center gap-3 max-w-3xl">
             <button onClick={() => router.back()}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+              className="p-1.5 rounded-lg text-th-muted hover:text-th-secondary hover:bg-panel transition-colors">
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">Register New Device</h1>
-              <p className="text-xs text-gray-400">Add a device to your fleet and start ingesting telemetry</p>
+              <h1 className="text-lg font-semibold text-th-primary">Register New Device</h1>
+              <p className="text-xs text-th-muted">Add a device to your fleet and start ingesting telemetry</p>
             </div>
           </div>
         </div>
@@ -341,17 +341,17 @@ export default function NewDevicePage() {
           {step === 'select-type' && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">What type of device are you registering?</h2>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <h2 className="text-base font-semibold text-th-primary">What type of device are you registering?</h2>
+                <p className="text-sm text-th-secondary mt-0.5">
                   The device type defines the telemetry schema and communication protocol.
                 </p>
               </div>
 
               {deviceTypes.length === 0 ? (
-                <div className="flex flex-col items-center py-16 bg-white border border-dashed border-gray-300 rounded-xl text-center">
+                <div className="flex flex-col items-center py-16 bg-surface border border-dashed border-[var(--color-input-border)] rounded-xl text-center">
                   <Cpu className="w-10 h-10 text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-600 mb-1">No device types yet</p>
-                  <p className="text-xs text-gray-400 mb-5">Create a device type to define the telemetry schema first.</p>
+                  <p className="text-sm font-medium text-th-secondary mb-1">No device types yet</p>
+                  <p className="text-xs text-th-muted mb-5">Create a device type to define the telemetry schema first.</p>
                   <button onClick={() => router.push('/dashboard/device-types')}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-lg transition-colors">
                     <Plus className="w-4 h-4" /> Create Device Type
@@ -370,7 +370,7 @@ export default function NewDevicePage() {
                         className={`p-4 text-left rounded-xl border transition-all ${
                           selected
                             ? 'bg-primary-50 border-primary-300 ring-2 ring-primary-100 shadow-sm'
-                            : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                            : 'bg-surface border-th-default hover:border-[var(--color-input-border)] hover:shadow-sm'
                         }`}>
                         <div className="flex items-start gap-3">
                           <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -379,22 +379,22 @@ export default function NewDevicePage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-semibold text-gray-900">{dt.name}</span>
+                              <span className="text-sm font-semibold text-th-primary">{dt.name}</span>
                               <ProtocolBadge protocol={dt.connectivity?.protocol} />
                             </div>
-                            <p className="text-xs text-gray-400 mt-0.5">
+                            <p className="text-xs text-th-muted mt-0.5">
                               {dt.manufacturer ?? 'Generic'}{dt.model ? ` · ${dt.model}` : ''}
                             </p>
                             {dt.description && (
-                              <p className="text-xs text-gray-500 mt-2 line-clamp-2">{dt.description}</p>
+                              <p className="text-xs text-th-secondary mt-2 line-clamp-2">{dt.description}</p>
                             )}
                             {schemaKeys.length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-2">
                                 {schemaKeys.slice(0, 4).map(k => (
-                                  <span key={k} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{k}</span>
+                                  <span key={k} className="px-1.5 py-0.5 bg-panel rounded text-[10px] text-th-secondary">{k}</span>
                                 ))}
                                 {schemaKeys.length > 4 && (
-                                  <span className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-400">+{schemaKeys.length - 4} more</span>
+                                  <span className="px-1.5 py-0.5 bg-panel rounded text-[10px] text-th-muted">+{schemaKeys.length - 4} more</span>
                                 )}
                               </div>
                             )}
@@ -417,11 +417,11 @@ export default function NewDevicePage() {
           {step === 'device-info' && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Device identity</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Name and label this device within your fleet.</p>
+                <h2 className="text-base font-semibold text-th-primary">Device identity</h2>
+                <p className="text-sm text-th-secondary mt-0.5">Name and label this device within your fleet.</p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+              <div className="bg-surface border border-th-default rounded-xl shadow-sm divide-y divide-[var(--color-border-subtle)]">
                 <div className="p-5 space-y-4">
                   <FormRow label="Device Name" required>
                     <input autoFocus type="text" value={info.name}
@@ -453,11 +453,11 @@ export default function NewDevicePage() {
                       <div className="flex flex-wrap gap-1.5 mb-2">
                         {info.tags.map(t => (
                           <span key={t}
-                            className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 bg-gray-100 rounded-lg text-xs text-gray-700 border border-gray-200">
-                            <Tag className="w-3 h-3 text-gray-400" />
+                            className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 bg-panel rounded-lg text-xs text-th-primary border border-th-default">
+                            <Tag className="w-3 h-3 text-th-muted" />
                             {t}
                             <button onClick={() => setInfo({ ...info, tags: info.tags.filter(x => x !== t) })}
-                              className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors rounded">
+                              className="w-4 h-4 flex items-center justify-center text-th-muted hover:text-red-500 transition-colors rounded">
                               ×
                             </button>
                           </span>
@@ -471,7 +471,7 @@ export default function NewDevicePage() {
                         placeholder="e.g. production, hvac, floor-2"
                         className={INPUT + ' flex-1'} />
                       <button type="button" onClick={addTag}
-                        className="px-3 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-gray-600 transition-colors">
+                        className="px-3 bg-panel hover:bg-panel border border-th-default rounded-lg text-th-secondary transition-colors">
                         <Plus className="w-4 h-4" />
                       </button>
                     </div>
@@ -485,15 +485,15 @@ export default function NewDevicePage() {
           {step === 'network' && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">LoRaWAN network settings</h2>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <h2 className="text-base font-semibold text-th-primary">LoRaWAN network settings</h2>
+                <p className="text-sm text-th-secondary mt-0.5">
                   OTAA join credentials for{' '}
-                  <span className="font-medium text-gray-700">{selectedType?.name}</span>.
+                  <span className="font-medium text-th-primary">{selectedType?.name}</span>.
                   These must match your The Things Network or ChirpStack application.
                 </p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-4">
+              <div className="bg-surface border border-th-default rounded-xl shadow-sm p-5 space-y-4">
                 <FormRow label="Device EUI (DevEUI)" required
                   hint="16-character hex identifier — printed on the device label.">
                   <input type="text" value={network.dev_eui}
@@ -530,11 +530,11 @@ export default function NewDevicePage() {
           {step === 'placement' && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Placement</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Assign to a site and group for fleet organisation. All fields are optional.</p>
+                <h2 className="text-base font-semibold text-th-primary">Placement</h2>
+                <p className="text-sm text-th-secondary mt-0.5">Assign to a site and group for fleet organisation. All fields are optional.</p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+              <div className="bg-surface border border-th-default rounded-xl shadow-sm divide-y divide-[var(--color-border-subtle)]">
                 <div className="p-5 space-y-4">
                   <FormRow label="Site">
                     <select value={placement.site_id}
@@ -558,8 +558,8 @@ export default function NewDevicePage() {
                 </div>
 
                 <div className="p-5">
-                  <p className="text-sm font-medium text-gray-700 mb-1">GPS Coordinates
-                    <span className="ml-2 text-xs font-normal text-gray-400">Optional — enables Map view</span>
+                  <p className="text-sm font-medium text-th-primary mb-1">GPS Coordinates
+                    <span className="ml-2 text-xs font-normal text-th-muted">Optional — enables Map view</span>
                   </p>
                   <div className="grid grid-cols-2 gap-3 mt-3">
                     <FormRow label="Latitude">
@@ -582,14 +582,14 @@ export default function NewDevicePage() {
           {step === 'review' && selectedType && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Review & provision</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Confirm the configuration before creating the device.</p>
+                <h2 className="text-base font-semibold text-th-primary">Review & provision</h2>
+                <p className="text-sm text-th-secondary mt-0.5">Confirm the configuration before creating the device.</p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="bg-surface border border-th-default rounded-xl shadow-sm overflow-hidden">
 
                 {/* Device type header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-th-subtle">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center"
                       style={{ background: `${selectedType.color}15`, color: selectedType.color }}>
@@ -597,10 +597,10 @@ export default function NewDevicePage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-900">{selectedType.name}</span>
+                        <span className="text-sm font-semibold text-th-primary">{selectedType.name}</span>
                         <ProtocolBadge protocol={selectedType.connectivity?.protocol} />
                       </div>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-th-muted">
                         {selectedType.manufacturer ?? 'Generic'}{selectedType.model ? ` · ${selectedType.model}` : ''}
                       </p>
                     </div>
@@ -635,10 +635,10 @@ export default function NewDevicePage() {
                   )}
                   {info.tags.length > 0 && (
                     <div className="flex items-center justify-between py-2 border-b border-gray-50">
-                      <span className="text-sm text-gray-500">Tags</span>
+                      <span className="text-sm text-th-secondary">Tags</span>
                       <div className="flex flex-wrap gap-1 justify-end">
                         {info.tags.map(t => (
-                          <span key={t} className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">{t}</span>
+                          <span key={t} className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary">{t}</span>
                         ))}
                       </div>
                     </div>
@@ -651,8 +651,8 @@ export default function NewDevicePage() {
                     <Network className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-xs font-semibold text-blue-700">After creation</p>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        Go to <span className="font-medium text-gray-700">Settings → Tokens</span> to generate an auth token.
+                      <p className="text-xs text-th-secondary mt-0.5">
+                        Go to <span className="font-medium text-th-primary">Settings → Tokens</span> to generate an auth token.
                         Use it as the MQTT password in your firmware — no UUID configuration needed.
                       </p>
                     </div>
@@ -663,9 +663,9 @@ export default function NewDevicePage() {
           )}
 
           {/* ── Navigation ────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+          <div className="flex items-center justify-between pt-6 border-t border-th-default">
             <button onClick={goBack}
-              className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
+              className="px-4 py-2.5 text-sm text-th-secondary hover:text-th-primary hover:bg-panel rounded-lg transition-colors">
               {stepIndex === 0 ? 'Cancel' : '← Back'}
             </button>
 
@@ -678,7 +678,7 @@ export default function NewDevicePage() {
               </button>
             ) : (
               <button onClick={goNext} disabled={!canAdvance()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-panel disabled:text-th-muted text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
                 Continue <ChevronRight className="w-4 h-4" />
               </button>
             )}

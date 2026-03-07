@@ -170,8 +170,8 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">
-          <TableIcon className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+        <div className="text-center text-th-secondary">
+          <TableIcon className="w-12 h-12 mx-auto mb-2 text-th-muted" />
           <p className="text-sm">No data available</p>
         </div>
       </div>
@@ -200,28 +200,28 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 sticky top-0">
+          <thead className="bg-page sticky top-0">
             <tr>
               {show_device_name && (
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-left text-xs font-medium text-th-secondary uppercase tracking-wider">
                   Device
                 </th>
               )}
               {displayColumns.map((col) => (
                 <th
                   key={col.field}
-                  className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  className="px-3 py-2 text-left text-xs font-medium text-th-secondary uppercase tracking-wider"
                 >
                   {col.label || col.field.replace(/_/g, " ")}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-surface divide-y divide-[var(--color-border)]">
             {pageData.map((row, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
+              <tr key={idx} className="hover:bg-page">
                 {show_device_name && (
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900">
+                  <td className="px-3 py-2 whitespace-nowrap text-th-primary">
                     {row.device_name}
                   </td>
                 )}
@@ -230,7 +230,7 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
                     return (
                       <td
                         key={col.field}
-                        className="px-3 py-2 whitespace-nowrap text-gray-900"
+                        className="px-3 py-2 whitespace-nowrap text-th-primary"
                       >
                         {formatTimestamp(row.timestamp)}
                       </td>
@@ -243,7 +243,7 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
                   return (
                     <td
                       key={col.field}
-                      className="px-3 py-2 whitespace-nowrap text-gray-900"
+                      className="px-3 py-2 whitespace-nowrap text-th-primary"
                     >
                       {formatValue(value)}
                     </td>
@@ -257,19 +257,19 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-200">
-          <div className="text-sm text-gray-700">
+        <div className="flex items-center justify-between px-4 py-3 bg-page border-t border-th-default">
+          <div className="text-sm text-th-primary">
             Showing {startIdx + 1} to {endIdx} of {data.length} entries
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
               disabled={currentPage === 0}
-              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1 text-sm border border-[var(--color-input-border)] rounded hover:bg-panel disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <div className="px-3 py-1 text-sm text-gray-700">
+            <div className="px-3 py-1 text-sm text-th-primary">
               Page {currentPage + 1} of {totalPages}
             </div>
             <button
@@ -277,7 +277,7 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
                 setCurrentPage(Math.min(totalPages - 1, currentPage + 1))
               }
               disabled={currentPage === totalPages - 1}
-              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1 text-sm border border-[var(--color-input-border)] rounded hover:bg-panel disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

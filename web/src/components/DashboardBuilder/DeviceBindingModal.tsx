@@ -2,6 +2,7 @@
 
 import { X, Check, Loader2, Wifi, BookOpen, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { formatMetricLabel } from "@/lib/formatMetricLabel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -269,16 +270,16 @@ export default function DeviceBindingModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"
+        className="bg-surface rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-th-default">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-th-primary">
               Bind {multiDevice ? "Devices" : "Device"} to Widget
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-th-secondary mt-0.5">
               {multiDevice
                 ? "Select multiple devices and metrics to compare on the chart"
                 : "Select a device and the metric this widget will display"}
@@ -286,7 +287,7 @@ export default function DeviceBindingModal({
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-th-muted hover:text-th-secondary hover:bg-panel rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -301,14 +302,14 @@ export default function DeviceBindingModal({
           ) : (
             <>
               {/* ── Add binding form ──────────────────────────────────────── */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-                <h3 className="text-sm font-semibold text-gray-800">
+              <div className="bg-page border border-th-default rounded-lg p-4 space-y-4">
+                <h3 className="text-sm font-semibold text-th-primary">
                   {multiDevice ? "Add binding" : "Select source"}
                 </h3>
 
                 {/* Device selector */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-medium text-th-secondary mb-1">
                     Device
                   </label>
                   <select
@@ -318,7 +319,7 @@ export default function DeviceBindingModal({
                       setSelectedMetric("");
                       setAlias("");
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-sm text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Select a device…</option>
                     {devices.map((device) => (
@@ -334,11 +335,11 @@ export default function DeviceBindingModal({
                 {selectedDeviceId && (
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium text-gray-600">
+                      <label className="text-xs font-medium text-th-secondary">
                         Metric
                       </label>
                       {loadingMetric && (
-                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                        <span className="flex items-center gap-1 text-xs text-th-muted">
                           <Loader2 className="w-3 h-3 animate-spin" />
                           Loading…
                         </span>
@@ -353,7 +354,7 @@ export default function DeviceBindingModal({
                           setSelectedMetric(e.target.value);
                           setAlias("");
                         }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-sm text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="">Select a metric…</option>
 
@@ -364,7 +365,7 @@ export default function DeviceBindingModal({
                             const compatible = isMetricCompatible(field.type);
                             return (
                               <option key={key} value={key} disabled={!compatible}>
-                                {key}
+                                {field.description || formatMetricLabel(key)}
                                 {field.unit ? ` (${field.unit})` : ""}
                                 {live ? " ✓" : ""}
                                 {!compatible ? " — not numeric" : ""}
@@ -378,14 +379,14 @@ export default function DeviceBindingModal({
                           <optgroup label="Discovered from telemetry">
                             {extraLiveKeys.map((key) => (
                               <option key={key} value={key}>
-                                {key} (live)
+                                {formatMetricLabel(key)} (live)
                               </option>
                             ))}
                           </optgroup>
                         )}
                       </select>
                     ) : loadingSchema ? (
-                      <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-400">
+                      <div className="w-full px-3 py-2 border border-th-default rounded-lg bg-page text-sm text-th-muted">
                         Loading schema…
                       </div>
                     ) : (
@@ -394,7 +395,7 @@ export default function DeviceBindingModal({
                         <select
                           value={selectedMetric}
                           onChange={(e) => setSelectedMetric(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-sm text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="">Select a metric…</option>
                           {[...liveKeys].map((key) => (
@@ -408,10 +409,10 @@ export default function DeviceBindingModal({
                           value={selectedMetric}
                           onChange={(e) => setSelectedMetric(e.target.value)}
                           placeholder="Enter metric key manually (e.g. temperature)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       ) : (
-                        <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-400">
+                        <div className="w-full px-3 py-2 border border-th-default rounded-lg bg-page text-sm text-th-muted">
                           Loading…
                         </div>
                       )
@@ -419,7 +420,7 @@ export default function DeviceBindingModal({
 
                     {/* Live indicator summary */}
                     {!loadingTelemetry && (
-                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                      <p className="text-xs text-th-muted mt-1 flex items-center gap-1">
                         {liveKeys.size > 0 ? (
                           <>
                             <Wifi className="w-3 h-3 text-green-500" />
@@ -484,7 +485,7 @@ export default function DeviceBindingModal({
                       )}
                       <div className="flex gap-1">
                         <span className="text-blue-600 font-medium">Live:</span>
-                        <span className={liveKeys.has(selectedMetric) ? "text-green-700 font-medium" : "text-gray-500"}>
+                        <span className={liveKeys.has(selectedMetric) ? "text-green-700 font-medium" : "text-th-secondary"}>
                           {liveKeys.has(selectedMetric) ? "Yes — seen in last 24 h" : "Not seen recently"}
                         </span>
                       </div>
@@ -495,15 +496,15 @@ export default function DeviceBindingModal({
                 {/* Display alias */}
                 {selectedMetric && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Display name <span className="text-gray-400">(optional — defaults to metric key)</span>
+                    <label className="block text-xs font-medium text-th-secondary mb-1">
+                      Display name <span className="text-th-muted">(optional — defaults to metric key)</span>
                     </label>
                     <input
                       type="text"
                       value={alias}
                       onChange={(e) => setAlias(e.target.value)}
                       placeholder={selectedFieldSchema?.description || selectedMetric}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                 )}
@@ -512,7 +513,7 @@ export default function DeviceBindingModal({
                 <button
                   onClick={handleAddBinding}
                   disabled={!selectedDeviceId || !selectedMetric}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-[var(--color-input-border)] disabled:cursor-not-allowed rounded-lg transition-colors"
                 >
                   <Check className="w-4 h-4" />
                   {multiDevice ? "Add to chart" : "Bind device"}
@@ -522,7 +523,7 @@ export default function DeviceBindingModal({
               {/* ── Current bindings ──────────────────────────────────────── */}
               {bindings.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-800 mb-2">
+                  <h3 className="text-sm font-semibold text-th-primary mb-2">
                     Bindings ({bindings.length})
                   </h3>
                   <div className="space-y-2">
@@ -531,19 +532,19 @@ export default function DeviceBindingModal({
                       return (
                         <div
                           key={index}
-                          className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
+                          className="flex items-center justify-between p-3 bg-surface border border-th-default rounded-lg"
                         >
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                            <p className="text-sm font-medium text-th-primary truncate">
                               {device?.name ?? binding.device_id}
                             </p>
-                            <p className="text-xs text-gray-500 truncate">
+                            <p className="text-xs text-th-secondary truncate">
                               <span className="font-mono">{binding.metric}</span>
                               {binding.alias && binding.alias !== binding.metric && (
-                                <span className="ml-1 text-gray-400">&middot; &ldquo;{binding.alias}&rdquo;</span>
+                                <span className="ml-1 text-th-muted">&middot; &ldquo;{binding.alias}&rdquo;</span>
                               )}
                               {binding.unit && (
-                                <span className="ml-1 text-gray-400">· {binding.unit}</span>
+                                <span className="ml-1 text-th-muted">· {binding.unit}</span>
                               )}
                             </p>
                           </div>
@@ -561,7 +562,7 @@ export default function DeviceBindingModal({
               )}
 
               {bindings.length === 0 && !selectedDeviceId && (
-                <p className="text-center text-sm text-gray-400 py-4">
+                <p className="text-center text-sm text-th-muted py-4">
                   No bindings yet — select a device and metric above.
                 </p>
               )}
@@ -570,17 +571,17 @@ export default function DeviceBindingModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-th-default bg-page rounded-b-xl">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-th-primary hover:bg-panel rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={bindings.length === 0}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-[var(--color-input-border)] disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             <Check className="w-4 h-4" />
             Save {bindings.length > 0 ? `(${bindings.length})` : ""}

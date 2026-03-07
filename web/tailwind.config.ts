@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,73 +10,107 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Gito brand colors from logo
+        // Semantic theme tokens (CSS variable-driven)
+        surface: 'var(--color-surface)',
+        page: 'var(--color-page)',
+        panel: 'var(--color-panel)',
+        card: {
+          DEFAULT: 'var(--color-card)',
+          hover: 'var(--color-card-hover)',
+        },
+        sidebar: {
+          bg: 'var(--color-sidebar-bg)',
+          text: 'var(--color-sidebar-text)',
+          muted: 'var(--color-sidebar-muted)',
+          active: 'var(--color-sidebar-active)',
+          hover: 'var(--color-sidebar-hover)',
+          border: 'var(--color-sidebar-border)',
+        },
+        // Gito brand — electric blue
         primary: {
-          50: '#f0f6ff',
-          100: '#e0ecff',
-          200: '#c7dcff',
-          300: '#a3c4ff',
-          400: '#7aa1ff',
-          500: '#4f7cff',
-          600: '#0066CC', // Gito dark blue
-          700: '#0052a3',
-          800: '#003d7a',
-          900: '#002952',
+          50:  '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
         },
         accent: {
-          50: '#e0f7ff',
-          100: '#b3ecff',
-          200: '#80dfff',
-          300: '#4dd4ff',
-          400: '#1ac9ff',
-          500: '#00A8E8', // Gito light blue
-          600: '#0088c4',
-          700: '#0069a0',
-          800: '#004a7c',
-          900: '#002b4d',
+          50:  '#ecfeff',
+          100: '#cffafe',
+          200: '#a5f3fc',
+          300: '#67e8f9',
+          400: '#22d3ee',
+          500: '#06b6d4',
+          600: '#0891b2',
+          700: '#0e7490',
+          800: '#155e75',
+          900: '#164e63',
         },
         gito: {
-          dark: '#001F3F', // Navy for contrast
-          light: '#E8F4F8', // Light blue background
+          dark: '#001F3F',
+          light: '#E8F4F8',
         },
         hmi: {
-          surface: '#f8fafc',
-          panel: '#f1f5f9',
-          inset: '#e2e8f0',
-          border: '#cbd5e1',
-          value: '#1e293b',
-          muted: '#94a3b8',
+          surface: '#f4f7fb',
+          panel: '#eef2f8',
+          inset: '#d4dff0',
+          border: '#c8d6ec',
+          value: '#0d1422',
+          muted: '#7c9bc2',
         },
+      },
+      textColor: {
+        'th-primary': 'var(--color-text-primary)',
+        'th-secondary': 'var(--color-text-secondary)',
+        'th-muted': 'var(--color-text-muted)',
+      },
+      borderColor: {
+        'th-default': 'var(--color-border)',
+        'th-subtle': 'var(--color-border-subtle)',
       },
       fontFamily: {
         sans: [
+          'Plus Jakarta Sans',
           '-apple-system',
           'BlinkMacSystemFont',
           '"Segoe UI"',
-          'Roboto',
-          '"Helvetica Neue"',
-          'Arial',
           'sans-serif',
         ],
+        mono: [
+          'JetBrains Mono',
+          'Fira Code',
+          'ui-monospace',
+          'monospace',
+        ],
+      },
+      boxShadow: {
+        'glow-sm': '0 0 12px rgba(37, 99, 235, 0.15)',
+        'glow':    '0 0 24px rgba(37, 99, 235, 0.2)',
+        'glow-lg': '0 0 40px rgba(37, 99, 235, 0.25)',
       },
       keyframes: {
         'fade-in': {
-          '0%': { opacity: '0' },
+          '0%':   { opacity: '0' },
           '100%': { opacity: '1' },
         },
         'slide-up': {
-          '0%': { transform: 'translateY(10px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
+          '0%':   { transform: 'translateY(8px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)',   opacity: '1' },
         },
         'slide-in-right': {
-          '0%': { transform: 'translateX(100%)', opacity: '0' },
-          '100%': { transform: 'translateX(0)', opacity: '1' },
+          '0%':   { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)',    opacity: '1' },
         },
       },
       animation: {
-        'fade-in': 'fade-in 0.3s ease-in-out',
-        'slide-up': 'slide-up 0.3s ease-out',
-        'slide-in-right': 'slide-in-right 0.3s ease-out',
+        'fade-in':       'fade-in 0.2s ease-out',
+        'slide-up':      'slide-up 0.25s ease-out',
+        'slide-in-right':'slide-in-right 0.3s ease-out',
       },
     },
   },

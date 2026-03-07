@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatMetricLabel } from "@/lib/formatMetricLabel";
 import {
   ScatterChart,
   Scatter,
@@ -35,8 +36,8 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
 
   const xSource = dataSources?.[0];
   const ySource = dataSources?.[1];
-  const xLabel = config.x_label || xSource?.alias || xSource?.metric || "X";
-  const yLabel = config.y_label || ySource?.alias || ySource?.metric || "Y";
+  const xLabel = config.x_label || xSource?.alias || (xSource?.metric ? formatMetricLabel(xSource.metric) : "X");
+  const yLabel = config.y_label || ySource?.alias || (ySource?.metric ? formatMetricLabel(ySource.metric) : "Y");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -111,7 +112,7 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
 
   if (!xSource || !ySource) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400 text-sm text-center px-4">
+      <div className="h-full flex items-center justify-center text-th-muted text-sm text-center px-4">
         Bind two metrics to see correlation (X axis + Y axis)
       </div>
     );
@@ -127,7 +128,7 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
 
   if (points.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-full flex items-center justify-center text-th-muted text-sm">
         No correlated data in {time_range}
       </div>
     );
@@ -165,7 +166,7 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
                 if (!active || !payload?.length) return null;
                 const d = payload[0].payload;
                 return (
-                  <div className="bg-white border border-gray-200 rounded p-2 text-xs shadow-sm">
+                  <div className="bg-surface border border-th-default rounded p-2 text-xs shadow-sm">
                     <div>{xLabel}: <strong>{d.x?.toFixed(2)}</strong></div>
                     <div>{yLabel}: <strong>{d.y?.toFixed(2)}</strong></div>
                   </div>
@@ -176,7 +177,7 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-      <div className="text-center text-xs text-gray-400 pb-1">{points.length} data points matched</div>
+      <div className="text-center text-xs text-th-muted pb-1">{points.length} data points matched</div>
     </div>
   );
 }

@@ -330,11 +330,11 @@ export default function DeviceTypeFormPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-page">
         <Sidebar />
         <main className="flex-1 ml-64 p-8">
           <div className="flex items-center justify-center py-12">
-            <div className="text-gray-500">Loading device type...</div>
+            <div className="text-th-secondary">Loading device type...</div>
           </div>
         </main>
       </div>
@@ -342,7 +342,7 @@ export default function DeviceTypeFormPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-page">
       <Sidebar />
       <main className="flex-1 ml-64 p-8">
         {/* Header */}
@@ -351,15 +351,15 @@ export default function DeviceTypeFormPage() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.back()}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                className="p-2 hover:bg-panel rounded-lg transition-colors text-th-secondary"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">
+                <h1 className="text-3xl font-bold text-th-primary">
                   {isEditMode ? 'Edit Device Type' : 'Create Device Type'}
                 </h1>
-                <p className="text-gray-600 mt-1">
+                <p className="text-th-secondary mt-1">
                   Define a template for devices with data model and capabilities
                 </p>
               </div>
@@ -386,25 +386,25 @@ export default function DeviceTypeFormPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => toggleSection('basic')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
             >
-              <h2 className="text-lg font-semibold text-gray-900">Basic Information</h2>
+              <h2 className="text-lg font-semibold text-th-primary">Basic Information</h2>
               {expandedSections.basic ? (
-                <ChevronUp className="w-5 h-5 text-gray-400" />
+                <ChevronUp className="w-5 h-5 text-th-muted" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-th-muted" />
               )}
             </button>
 
             {expandedSections.basic && (
-              <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-4">
+              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Name <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -412,19 +412,19 @@ export default function DeviceTypeFormPage() {
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       placeholder="e.g., Environmental Sensor"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Category
                     </label>
                     <select
                       value={form.category}
                       onChange={(e) => setForm({ ...form, category: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-surface"
                     >
                       {CATEGORIES.map((cat) => (
                         <option key={cat.value} value={cat.value}>
@@ -436,7 +436,7 @@ export default function DeviceTypeFormPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-th-primary mb-1">
                     Description
                   </label>
                   <textarea
@@ -444,13 +444,13 @@ export default function DeviceTypeFormPage() {
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                     placeholder="Describe what this device type is used for..."
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                    className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Manufacturer
                     </label>
                     <input
@@ -458,12 +458,12 @@ export default function DeviceTypeFormPage() {
                       value={form.manufacturer}
                       onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
                       placeholder="e.g., Acme Devices"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Model
                     </label>
                     <input
@@ -471,14 +471,14 @@ export default function DeviceTypeFormPage() {
                       value={form.model}
                       onChange={(e) => setForm({ ...form, model: e.target.value })}
                       placeholder="e.g., ES-100"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 {/* Color Picker */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-th-primary mb-2">
                     Color
                   </label>
                   <div className="flex gap-2">
@@ -507,37 +507,37 @@ export default function DeviceTypeFormPage() {
                       onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                    <div className="w-11 h-6 bg-panel peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface after:border-[var(--color-input-border)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                   </label>
-                  <span className="text-sm text-gray-700">Active</span>
+                  <span className="text-sm text-th-primary">Active</span>
                 </div>
               </div>
             )}
           </div>
 
           {/* Data Model */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => toggleSection('dataModel')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
             >
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-gray-900">Data Model</h2>
-                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                <h2 className="text-lg font-semibold text-th-primary">Data Model</h2>
+                <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary">
                   {form.data_model.length} fields
                 </span>
               </div>
               {expandedSections.dataModel ? (
-                <ChevronUp className="w-5 h-5 text-gray-400" />
+                <ChevronUp className="w-5 h-5 text-th-muted" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-th-muted" />
               )}
             </button>
 
             {expandedSections.dataModel && (
-              <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-4">
-                <p className="text-sm text-gray-600">
+              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
+                <p className="text-sm text-th-secondary">
                   Define the telemetry fields this device type sends. This creates a schema for
                   validating and displaying device data.
                 </p>
@@ -545,10 +545,10 @@ export default function DeviceTypeFormPage() {
                 {form.data_model.map((field, index) => (
                   <div
                     key={index}
-                    className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3"
+                    className="p-4 bg-page border border-th-default rounded-lg space-y-3"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-gray-500">
+                      <div className="flex items-center gap-2 text-th-secondary">
                         <GripVertical className="w-4 h-4" />
                         <span className="text-sm font-medium">Field #{index + 1}</span>
                       </div>
@@ -563,7 +563,7 @@ export default function DeviceTypeFormPage() {
 
                     <div className="grid grid-cols-4 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Name *</label>
+                        <label className="block text-xs text-th-secondary mb-1">Name *</label>
                         <input
                           type="text"
                           value={field.name}
@@ -571,17 +571,17 @@ export default function DeviceTypeFormPage() {
                             updateDataModelField(index, { name: e.target.value })
                           }
                           placeholder="temperature"
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Type</label>
+                        <label className="block text-xs text-th-secondary mb-1">Type</label>
                         <select
                           value={field.type}
                           onChange={(e) =>
                             updateDataModelField(index, { type: e.target.value })
                           }
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-primary-500"
                         >
                           {FIELD_TYPES.map((t) => (
                             <option key={t.value} value={t.value}>
@@ -591,7 +591,7 @@ export default function DeviceTypeFormPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Unit</label>
+                        <label className="block text-xs text-th-secondary mb-1">Unit</label>
                         <input
                           type="text"
                           value={field.unit}
@@ -599,7 +599,7 @@ export default function DeviceTypeFormPage() {
                             updateDataModelField(index, { unit: e.target.value })
                           }
                           placeholder="°C"
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
                       <div className="flex items-end gap-2">
@@ -610,16 +610,16 @@ export default function DeviceTypeFormPage() {
                             onChange={(e) =>
                               updateDataModelField(index, { required: e.target.checked })
                             }
-                            className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            className="w-4 h-4 rounded border-[var(--color-input-border)] text-primary-600 focus:ring-primary-500"
                           />
-                          <span className="text-xs text-gray-600">Required</span>
+                          <span className="text-xs text-th-secondary">Required</span>
                         </label>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3">
                       <div className="col-span-1">
-                        <label className="block text-xs text-gray-500 mb-1">Min Value</label>
+                        <label className="block text-xs text-th-secondary mb-1">Min Value</label>
                         <input
                           type="number"
                           value={field.min_value ?? ''}
@@ -629,11 +629,11 @@ export default function DeviceTypeFormPage() {
                             })
                           }
                           placeholder="-40"
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
                       <div className="col-span-1">
-                        <label className="block text-xs text-gray-500 mb-1">Max Value</label>
+                        <label className="block text-xs text-th-secondary mb-1">Max Value</label>
                         <input
                           type="number"
                           value={field.max_value ?? ''}
@@ -643,11 +643,11 @@ export default function DeviceTypeFormPage() {
                             })
                           }
                           placeholder="85"
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
                       <div className="col-span-1">
-                        <label className="block text-xs text-gray-500 mb-1">Description</label>
+                        <label className="block text-xs text-th-secondary mb-1">Description</label>
                         <input
                           type="text"
                           value={field.description}
@@ -655,7 +655,7 @@ export default function DeviceTypeFormPage() {
                             updateDataModelField(index, { description: e.target.value })
                           }
                           placeholder="Ambient temperature"
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
                     </div>
@@ -665,7 +665,7 @@ export default function DeviceTypeFormPage() {
                 <button
                   type="button"
                   onClick={addDataModelField}
-                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-primary-600 hover:border-primary-400 transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2 border-2 border-dashed border-[var(--color-input-border)] rounded-lg text-th-secondary hover:text-primary-600 hover:border-primary-400 transition-colors flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   Add Field
@@ -675,10 +675,10 @@ export default function DeviceTypeFormPage() {
                 {isEditMode && (
                   <div className="mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-gray-700">
+                      <h4 className="text-sm font-medium text-th-primary">
                         Discovered Metrics
                         {discoveredTotal > 0 && (
-                          <span className="ml-2 text-xs font-normal text-gray-500">
+                          <span className="ml-2 text-xs font-normal text-th-secondary">
                             from {discoveredTotal} device{discoveredTotal !== 1 ? 's' : ''}, last 7 days
                           </span>
                         )}
@@ -687,16 +687,16 @@ export default function DeviceTypeFormPage() {
                         type="button"
                         onClick={loadDiscoveredMetrics}
                         disabled={discoveredLoading}
-                        className="p-1 hover:bg-blue-100 rounded text-gray-500"
+                        className="p-1 hover:bg-blue-100 rounded text-th-secondary"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${discoveredLoading ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
 
                     {discoveredLoading && discoveredMetrics.length === 0 ? (
-                      <p className="text-xs text-gray-500">Loading...</p>
+                      <p className="text-xs text-th-secondary">Loading...</p>
                     ) : discoveredMetrics.length === 0 ? (
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-th-secondary">
                         No telemetry received from devices of this type yet.
                       </p>
                     ) : (
@@ -715,10 +715,10 @@ export default function DeviceTypeFormPage() {
                                 ) : (
                                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                                 )}
-                                <span className={`text-sm font-mono ${inSchema ? 'text-gray-700' : 'text-amber-700 font-medium'}`}>
+                                <span className={`text-sm font-mono ${inSchema ? 'text-th-primary' : 'text-amber-700 font-medium'}`}>
                                   {m.key}
                                 </span>
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-th-muted">
                                   {m.device_count}/{discoveredTotal} device{discoveredTotal !== 1 ? 's' : ''}
                                 </span>
                               </div>
@@ -751,28 +751,28 @@ export default function DeviceTypeFormPage() {
           </div>
 
           {/* Capabilities */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => toggleSection('capabilities')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
             >
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-gray-900">Capabilities</h2>
-                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                <h2 className="text-lg font-semibold text-th-primary">Capabilities</h2>
+                <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary">
                   {form.capabilities.length} selected
                 </span>
               </div>
               {expandedSections.capabilities ? (
-                <ChevronUp className="w-5 h-5 text-gray-400" />
+                <ChevronUp className="w-5 h-5 text-th-muted" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-th-muted" />
               )}
             </button>
 
             {expandedSections.capabilities && (
-              <div className="px-6 pb-6 border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-600 mb-4">
+              <div className="px-6 pb-6 border-t border-th-default pt-4">
+                <p className="text-sm text-th-secondary mb-4">
                   Select the capabilities this device type supports. This determines which
                   features are available for devices of this type.
                 </p>
@@ -784,18 +784,18 @@ export default function DeviceTypeFormPage() {
                       className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                         form.capabilities.includes(cap.value)
                           ? 'bg-primary-50 border-primary-300'
-                          : 'bg-white border-gray-200 hover:border-gray-300'
+                          : 'bg-surface border-th-default hover:border-[var(--color-input-border)]'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={form.capabilities.includes(cap.value)}
                         onChange={() => toggleCapability(cap.value)}
-                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        className="mt-0.5 w-4 h-4 rounded border-[var(--color-input-border)] text-primary-600 focus:ring-primary-500"
                       />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{cap.label}</div>
-                        <div className="text-xs text-gray-500">{cap.description}</div>
+                        <div className="text-sm font-medium text-th-primary">{cap.label}</div>
+                        <div className="text-xs text-th-secondary">{cap.description}</div>
                       </div>
                     </label>
                   ))}
@@ -805,30 +805,30 @@ export default function DeviceTypeFormPage() {
           </div>
 
           {/* Default Settings */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => toggleSection('settings')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
             >
-              <h2 className="text-lg font-semibold text-gray-900">Default Settings</h2>
+              <h2 className="text-lg font-semibold text-th-primary">Default Settings</h2>
               {expandedSections.settings ? (
-                <ChevronUp className="w-5 h-5 text-gray-400" />
+                <ChevronUp className="w-5 h-5 text-th-muted" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-th-muted" />
               )}
             </button>
 
             {expandedSections.settings && (
-              <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-4">
-                <p className="text-sm text-gray-600">
+              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
+                <p className="text-sm text-th-secondary">
                   Default operational settings for devices of this type. These can be overridden
                   per device.
                 </p>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Heartbeat Interval (sec)
                     </label>
                     <input
@@ -843,12 +843,12 @@ export default function DeviceTypeFormPage() {
                           },
                         })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Telemetry Interval (sec)
                     </label>
                     <input
@@ -863,12 +863,12 @@ export default function DeviceTypeFormPage() {
                           },
                         })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-th-primary mb-1">
                       Offline Threshold (sec)
                     </label>
                     <input
@@ -883,7 +883,7 @@ export default function DeviceTypeFormPage() {
                           },
                         })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
@@ -892,23 +892,23 @@ export default function DeviceTypeFormPage() {
           </div>
 
           {/* Connectivity */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => toggleSection('connectivity')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
             >
-              <h2 className="text-lg font-semibold text-gray-900">Connectivity</h2>
+              <h2 className="text-lg font-semibold text-th-primary">Connectivity</h2>
               {expandedSections.connectivity ? (
-                <ChevronUp className="w-5 h-5 text-gray-400" />
+                <ChevronUp className="w-5 h-5 text-th-muted" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-th-muted" />
               )}
             </button>
 
             {expandedSections.connectivity && (
-              <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-6">
-                <p className="text-sm text-gray-600">
+              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-6">
+                <p className="text-sm text-th-secondary">
                   Configure the communication protocol and connection settings for devices of this type.
                 </p>
 
@@ -944,7 +944,7 @@ export default function DeviceTypeFormPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              className="px-5 py-2.5 border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-page transition-colors font-medium"
             >
               Cancel
             </button>

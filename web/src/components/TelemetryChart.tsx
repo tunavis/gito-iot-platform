@@ -23,8 +23,8 @@ export default function TelemetryChart({
   const gradientId = `gradient-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-      <h3 className="text-lg font-semibold text-slate-900 mb-4">{title}</h3>
+    <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+      <h3 className="text-lg font-semibold text-th-primary mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <Chart data={data}>
           <defs>

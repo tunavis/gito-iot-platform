@@ -22,14 +22,14 @@ export default function WidgetWrapper({
 }: WidgetWrapperProps) {
   return (
     <div
-      className={`bg-white rounded border border-gray-200 shadow-sm h-full flex flex-col ${
+      className={`bg-surface rounded border border-th-default shadow-sm h-full flex flex-col ${
         isEditMode ? "cursor-move hover:border-blue-400" : ""
       } ${className}`}
     >
       {/* Widget Header */}
       {(title || isEditMode) && (
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+        <div className="px-4 py-3 border-b border-th-default flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-th-primary uppercase tracking-wide">
             {title || "Widget"}
           </h2>
 
@@ -46,7 +46,7 @@ export default function WidgetWrapper({
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer z-50"
+                  className="p-1 text-th-muted hover:text-th-secondary cursor-pointer z-50"
                   title="Widget Settings"
                   type="button"
                 >
@@ -64,7 +64,7 @@ export default function WidgetWrapper({
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  className="p-1 text-gray-400 hover:text-red-600 cursor-pointer z-50"
+                  className="p-1 text-th-muted hover:text-red-600 cursor-pointer z-50"
                   title="Remove Widget"
                   type="button"
                 >

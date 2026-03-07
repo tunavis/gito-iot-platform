@@ -22,12 +22,12 @@ import {
 const MapView = dynamic(() => import('@/components/DeviceMapView'), {
   ssr: false,
   loading: () => (
-    <div className="h-full w-full flex items-center justify-center bg-gray-100">
+    <div className="h-full w-full flex items-center justify-center bg-panel">
       <div className="text-center">
         <div className="inline-block animate-spin mb-4">
           <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
         </div>
-        <p className="text-gray-600 font-medium">Loading map...</p>
+        <p className="text-th-secondary font-medium">Loading map...</p>
       </div>
     </div>
   )
@@ -180,18 +180,18 @@ export default function DeviceMapPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-page">
       <Sidebar />
       <main className="flex-1 ml-64 flex flex-col">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-8 py-4">
+        <div className="bg-surface border-b border-th-default px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-th-primary flex items-center gap-3">
                 <MapPin className="w-8 h-8 text-primary-600" />
                 Device Map
               </h1>
-              <p className="text-gray-600 mt-1">Real-time visualization of device locations and status</p>
+              <p className="text-th-secondary mt-1">Real-time visualization of device locations and status</p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -200,7 +200,7 @@ export default function DeviceMapPage() {
                 className={`px-4 py-2.5 rounded-lg border font-medium transition-colors flex items-center gap-2 ${
                   showFilters
                     ? 'bg-primary-50 text-primary-700 border-primary-200'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    : 'bg-surface text-th-primary border-[var(--color-input-border)] hover:bg-page'
                 }`}
               >
                 <Filter className="w-4 h-4" />
@@ -208,14 +208,14 @@ export default function DeviceMapPage() {
               </button>
               <button
                 onClick={exportLocations}
-                className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                className="px-4 py-2.5 bg-surface border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-page transition-colors flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Export
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                className="px-4 py-2.5 bg-surface border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-page transition-colors flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
@@ -225,15 +225,15 @@ export default function DeviceMapPage() {
         </div>
 
         {/* Stats Bar */}
-        <div className="bg-white border-b border-gray-200 px-8 py-4">
+        <div className="bg-surface border-b border-th-default px-8 py-4">
           <div className="grid grid-cols-5 gap-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-primary-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-600">Total Devices</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-xs text-th-secondary">Total Devices</p>
+                <p className="text-2xl font-bold text-th-primary">{stats.total}</p>
               </div>
             </div>
 
@@ -242,7 +242,7 @@ export default function DeviceMapPage() {
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-600">Online</p>
+                <p className="text-xs text-th-secondary">Online</p>
                 <p className="text-2xl font-bold text-green-600">{stats.online}</p>
               </div>
             </div>
@@ -252,7 +252,7 @@ export default function DeviceMapPage() {
                 <XCircle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-600">Offline</p>
+                <p className="text-xs text-th-secondary">Offline</p>
                 <p className="text-2xl font-bold text-red-600">{stats.offline}</p>
               </div>
             </div>
@@ -262,7 +262,7 @@ export default function DeviceMapPage() {
                 <Activity className="w-5 h-5 text-yellow-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-600">Idle</p>
+                <p className="text-xs text-th-secondary">Idle</p>
                 <p className="text-2xl font-bold text-yellow-600">{stats.idle}</p>
               </div>
             </div>
@@ -272,7 +272,7 @@ export default function DeviceMapPage() {
                 <AlertTriangle className="w-5 h-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-600">With Issues</p>
+                <p className="text-xs text-th-secondary">With Issues</p>
                 <p className="text-2xl font-bold text-orange-600">{stats.withIssues}</p>
               </div>
             </div>
@@ -281,32 +281,32 @@ export default function DeviceMapPage() {
 
         {/* Filters Panel */}
         {showFilters && (
-          <div className="bg-white border-b border-gray-200 px-8 py-4">
+          <div className="bg-surface border-b border-th-default px-8 py-4">
             <div className="flex items-center gap-4">
               {/* Search */}
               <div className="flex-1 max-w-md">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-th-muted" />
                   <input
                     type="text"
                     placeholder="Search devices..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full pl-10 pr-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
 
               {/* Status Filter */}
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-1">
+              <div className="flex items-center gap-2 bg-page border border-th-default rounded-lg p-1">
                 {(['all', 'online', 'offline', 'idle'] as const).map(status => (
                   <button
                     key={status}
                     onClick={() => setStatusFilter(status)}
                     className={`px-4 py-2 text-sm font-medium rounded transition-colors capitalize ${
                       statusFilter === status
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'bg-surface text-th-primary shadow-sm'
+                        : 'text-th-secondary hover:text-th-primary'
                     }`}
                   >
                     {status}
@@ -325,7 +325,7 @@ export default function DeviceMapPage() {
                 <div className="inline-block animate-spin mb-4">
                   <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
                 </div>
-                <p className="text-gray-600 font-medium">Loading devices...</p>
+                <p className="text-th-secondary font-medium">Loading devices...</p>
               </div>
             </div>
           ) : (
@@ -339,25 +339,25 @@ export default function DeviceMapPage() {
 
         {/* Device Detail Panel */}
         {selectedDevice && (
-          <div className="absolute right-8 top-24 w-96 bg-white border border-gray-200 rounded-lg shadow-lg p-6 z-[1000]">
+          <div className="absolute right-8 top-24 w-96 bg-surface border border-th-default rounded-lg shadow-lg p-6 z-[1000]">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">{selectedDevice.name}</h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <h3 className="text-lg font-semibold text-th-primary">{selectedDevice.name}</h3>
+                <p className="text-sm text-th-secondary mt-1">
                   {selectedDevice.device_type?.name || 'Unknown Type'}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedDevice(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-th-muted hover:text-th-secondary transition-colors"
               >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-600">Status</span>
+              <div className="flex items-center justify-between py-2 border-b border-th-subtle">
+                <span className="text-sm text-th-secondary">Status</span>
                 <span className={`px-3 py-1 rounded-lg text-sm font-semibold capitalize ${
                   selectedDevice.status === 'online'
                     ? 'bg-green-100 text-green-700'
@@ -370,26 +370,26 @@ export default function DeviceMapPage() {
               </div>
 
               {selectedDevice.battery_level !== null && (
-                <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                  <span className="text-sm text-gray-600">Battery</span>
-                  <span className="text-sm font-semibold text-gray-900">
+                <div className="flex items-center justify-between py-2 border-b border-th-subtle">
+                  <span className="text-sm text-th-secondary">Battery</span>
+                  <span className="text-sm font-semibold text-th-primary">
                     {Math.round(selectedDevice.battery_level)}%
                   </span>
                 </div>
               )}
 
               {selectedDevice.signal_strength !== null && (
-                <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                  <span className="text-sm text-gray-600">Signal</span>
-                  <span className="text-sm font-semibold text-gray-900">
+                <div className="flex items-center justify-between py-2 border-b border-th-subtle">
+                  <span className="text-sm text-th-secondary">Signal</span>
+                  <span className="text-sm font-semibold text-th-primary">
                     {selectedDevice.signal_strength} dBm
                   </span>
                 </div>
               )}
 
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-600">Last Seen</span>
-                <span className="text-sm font-semibold text-gray-900">
+              <div className="flex items-center justify-between py-2 border-b border-th-subtle">
+                <span className="text-sm text-th-secondary">Last Seen</span>
+                <span className="text-sm font-semibold text-th-primary">
                   {selectedDevice.last_seen
                     ? new Date(selectedDevice.last_seen).toLocaleString()
                     : 'Never'}
@@ -397,8 +397,8 @@ export default function DeviceMapPage() {
               </div>
 
               <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-gray-600">Location</span>
-                <span className="text-sm font-mono text-gray-900">
+                <span className="text-sm text-th-secondary">Location</span>
+                <span className="text-sm font-mono text-th-primary">
                   {selectedDevice.attributes.latitude?.toFixed(4)}, {selectedDevice.attributes.longitude?.toFixed(4)}
                 </span>
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatMetricLabel } from "@/lib/formatMetricLabel";
 
 interface StatGroupConfig {
   unit?: string;
@@ -54,7 +55,7 @@ export default function StatGroupWidget({ config, dataSources }: StatGroupWidget
       const tenantId = payload.tenant_id;
 
       const src = dataSources[0];
-      setMetricLabel(src.alias || src.metric);
+      setMetricLabel(src.alias || formatMetricLabel(src.metric));
 
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - parseHours(time_range) * 60 * 60 * 1000);
@@ -102,7 +103,7 @@ export default function StatGroupWidget({ config, dataSources }: StatGroupWidget
 
   if (!dataSources || dataSources.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-full flex items-center justify-center text-th-muted text-sm">
         No device bound — configure widget
       </div>
     );
@@ -126,7 +127,7 @@ export default function StatGroupWidget({ config, dataSources }: StatGroupWidget
   return (
     <div className="h-full flex flex-col gap-2 p-1">
       {metricLabel && (
-        <div className="text-xs text-gray-500 font-medium text-center truncate">{metricLabel} · {time_range}</div>
+        <div className="text-xs text-th-secondary font-medium text-center truncate">{metricLabel} · {time_range}</div>
       )}
       <div className="grid grid-cols-2 gap-2 flex-1">
         {statCards.map(({ label, value, accent }) => (
@@ -138,7 +139,7 @@ export default function StatGroupWidget({ config, dataSources }: StatGroupWidget
               backgroundColor: accent ? `${color}10` : "#f9fafb",
             }}
           >
-            <div className="text-xs text-gray-500 font-medium mb-1">{label}</div>
+            <div className="text-xs text-th-secondary font-medium mb-1">{label}</div>
             <div
               className="text-lg font-bold truncate max-w-full"
               style={{ color: accent ? color : "#374151" }}

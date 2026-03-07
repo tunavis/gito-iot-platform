@@ -286,9 +286,9 @@ export default function DashboardGrid({
         return (
           <div
             key={widget.id}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-center"
+            className="bg-surface dark:bg-gray-800 rounded-lg shadow-sm border border-th-default dark:border-gray-700 p-4 flex items-center justify-center"
           >
-            <div className="text-center text-gray-500 dark:text-gray-400">
+            <div className="text-center text-th-secondary dark:text-th-muted">
               <p className="text-sm font-medium">Unknown Widget Type</p>
               <p className="text-xs mt-1">{widget.widget_type}</p>
             </div>

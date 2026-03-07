@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
 import {
   Cpu,
@@ -27,6 +27,10 @@ import {
   Radio,
   Plus,
 } from 'lucide-react';
+import { DeviceStatusBadge } from '@/components/ui/Badge';
+import LoadingState from '@/components/ui/LoadingState';
+import EmptyState from '@/components/ui/EmptyState';
+import { btn, input } from '@/components/ui/buttonStyles';
 
 interface Device {
   id: string;
@@ -232,7 +236,7 @@ export default function DevicesPage() {
       case 'online': return 'text-green-600 bg-green-50 border-green-200';
       case 'offline': return 'text-red-600 bg-red-50 border-red-200';
       case 'idle': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+      default: return 'text-th-secondary bg-page border-th-default';
     }
   };
 
@@ -241,7 +245,7 @@ export default function DevicesPage() {
       case 'online': return 'bg-green-500';
       case 'offline': return 'bg-red-500';
       case 'idle': return 'bg-yellow-500';
-      default: return 'bg-gray-500';
+      default: return 'bg-page0';
     }
   };
 
@@ -269,53 +273,47 @@ export default function DevicesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      
-      <main className="flex-1 ml-64 p-8">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Devices</h1>
-              <p className="text-sm text-gray-500 mt-0.5">Monitor and manage your IoT fleet</p>
-            </div>
-            <button
-              onClick={() => router.push('/dashboard/devices/new')}
-              className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-sm text-sm"
-            >
-              <Plus className="w-4 h-4" /> Add Device
-            </button>
-          </div>
-
+    <PageShell
+      title="Devices"
+      subtitle="Monitor and manage your IoT fleet"
+      action={
+        <button
+          onClick={() => router.push('/dashboard/devices/new')}
+          className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-sm text-sm"
+        >
+          <Plus className="w-4 h-4" /> Add Device
+        </button>
+      }
+    >
+      <div className="mb-6">
           {/* Fleet status bar */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm">
-              <Cpu className="w-4 h-4 text-gray-400" />
-              <span className="text-sm font-semibold text-gray-900">{stats.total}</span>
-              <span className="text-sm text-gray-400">devices</span>
+            <div className="flex items-center gap-2 bg-surface border border-th-default rounded-lg px-4 py-2.5 shadow-sm">
+              <Cpu className="w-4 h-4 text-th-muted" />
+              <span className="text-sm font-semibold text-th-primary">{stats.total}</span>
+              <span className="text-sm text-th-muted">devices</span>
             </div>
-            <div className="flex items-center gap-2 bg-white border border-green-200 rounded-lg px-4 py-2.5 shadow-sm">
+            <div className="flex items-center gap-2 bg-surface border border-green-200 rounded-lg px-4 py-2.5 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-sm font-semibold text-green-700">{stats.online}</span>
-              <span className="text-sm text-gray-400">online</span>
+              <span className="text-sm text-th-muted">online</span>
             </div>
             {stats.offline > 0 && (
-              <div className="flex items-center gap-2 bg-white border border-red-200 rounded-lg px-4 py-2.5 shadow-sm">
+              <div className="flex items-center gap-2 bg-surface border border-red-200 rounded-lg px-4 py-2.5 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-red-500" />
                 <span className="text-sm font-semibold text-red-600">{stats.offline}</span>
-                <span className="text-sm text-gray-400">offline</span>
+                <span className="text-sm text-th-muted">offline</span>
               </div>
             )}
             {stats.idle > 0 && (
-              <div className="flex items-center gap-2 bg-white border border-yellow-200 rounded-lg px-4 py-2.5 shadow-sm">
+              <div className="flex items-center gap-2 bg-surface border border-yellow-200 rounded-lg px-4 py-2.5 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-yellow-500" />
                 <span className="text-sm font-semibold text-yellow-600">{stats.idle}</span>
-                <span className="text-sm text-gray-400">idle</span>
+                <span className="text-sm text-th-muted">idle</span>
               </div>
             )}
             {stats.total > 0 && (
-              <div className="ml-auto text-xs text-gray-400">
+              <div className="ml-auto text-xs text-th-muted">
                 {Math.round((stats.online / stats.total) * 100)}% fleet online
               </div>
             )}
@@ -323,7 +321,7 @@ export default function DevicesPage() {
         </div>
 
         {/* Controls Bar */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 mb-6">
+        <div className="gito-card p-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             {/* Search */}
             <div className="flex-1 w-full md:max-w-md">
@@ -333,9 +331,9 @@ export default function DevicesPage() {
                   placeholder="Search devices by name, type, or ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className={`${input.base} pl-11`}
                 />
-                <Search className="absolute left-3.5 top-3 w-5 h-5 text-slate-400" />
+                <Search className="absolute left-3.5 top-3 w-5 h-5 text-th-muted" />
               </div>
             </div>
 
@@ -345,7 +343,7 @@ export default function DevicesPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                className={input.select}
               >
                 <option value="all">All Status</option>
                 <option value="online">Online</option>
@@ -354,13 +352,13 @@ export default function DevicesPage() {
               </select>
 
               {/* View Mode Toggle */}
-              <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
+              <div className="flex gap-1 p-1 bg-panel rounded-lg">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
                     viewMode === 'grid'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-surface text-primary-600 shadow-sm'
+                      : 'text-th-secondary hover:text-th-primary'
                   }`}
                 >
                   <Grid3x3 className="w-4 h-4" />
@@ -370,8 +368,8 @@ export default function DevicesPage() {
                   onClick={() => setViewMode('list')}
                   className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
                     viewMode === 'list'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-surface text-primary-600 shadow-sm'
+                      : 'text-th-secondary hover:text-th-primary'
                   }`}
                 >
                   <List className="w-4 h-4" />
@@ -383,24 +381,24 @@ export default function DevicesPage() {
 
           {/* Device Count */}
           {!loading && (
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <p className="text-sm text-slate-600">
-                Showing <span className="font-semibold text-slate-900">{filteredDevices.length}</span> of{' '}
-                <span className="font-semibold text-slate-900">{stats.total}</span> devices
+            <div className="mt-4 pt-4 border-t border-th-default">
+              <p className="text-sm text-th-secondary">
+                Showing <span className="font-semibold text-th-primary">{filteredDevices.length}</span> of{' '}
+                <span className="font-semibold text-th-primary">{stats.total}</span> devices
               </p>
             </div>
           )}
 
           {/* Bulk Actions */}
           {selectedDevices.size > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-sm text-slate-600 font-medium">
+            <div className="mt-4 pt-4 border-t border-th-default flex items-center justify-between">
+              <span className="text-sm text-th-secondary font-medium">
                 {selectedDevices.size} device{selectedDevices.size !== 1 ? 's' : ''} selected
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowBulkAssignModal(true)}
-                  className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                  className="px-4 py-2 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors font-medium"
                 >
                   Assign to Group
                 </button>
@@ -412,7 +410,7 @@ export default function DevicesPage() {
                 </button>
                 <button 
                   onClick={() => setSelectedDevices(new Set())}
-                  className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 font-medium"
+                  className="px-4 py-2 text-sm text-th-secondary hover:text-th-primary font-medium"
                 >
                   Clear
                 </button>
@@ -423,58 +421,35 @@ export default function DevicesPage() {
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="text-center">
-              <div className="inline-block animate-spin mb-4">
-                <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
-              </div>
-              <p className="text-slate-600">Loading devices...</p>
-            </div>
-          </div>
+          <LoadingState message="Loading devices…" />
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
-            <AlertTriangle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-            <p className="text-red-600 mb-4">{error}</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              Retry
-            </button>
+          <div className="gito-card p-8 text-center">
+            <AlertTriangle className="w-10 h-10 mx-auto mb-3" style={{ color: '#dc2626' }} />
+            <p className="text-th-secondary mb-4">{error}</p>
+            <button onClick={() => window.location.reload()} className={btn.danger}>Retry</button>
           </div>
         ) : filteredDevices.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-            {searchQuery || statusFilter !== 'all' ? (
-              <>
-                <p className="text-slate-600 mb-4">No devices match your filters</p>
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    setStatusFilter('all');
-                  }}
-                  className="px-4 py-2 text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  Clear Filters
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-slate-600 mb-4">No devices found. Add your first device to get started.</p>
-                <button 
-                  onClick={() => router.push('/dashboard/devices/new')}
-                  className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                >
-                  + Add Device
-                </button>
-              </>
-            )}
-          </div>
+          searchQuery || statusFilter !== 'all' ? (
+            <EmptyState
+              icon={<Search className="w-8 h-8" />}
+              title="No devices match your filters"
+              description="Try adjusting your search or status filter."
+              secondaryAction={{ label: 'Clear Filters', onClick: () => { setSearchQuery(''); setStatusFilter('all'); } }}
+            />
+          ) : (
+            <EmptyState
+              icon={<Cpu className="w-8 h-8" />}
+              title="No devices yet"
+              description="Add your first device to start monitoring your IoT fleet."
+              action={{ label: 'Add Device', onClick: () => router.push('/dashboard/devices/new') }}
+            />
+          )
         ) : viewMode === 'grid' ? (
           /* Grid View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredDevices.map((device) => (
               <Link key={device.id} href={`/dashboard/devices/${device.id}`} className="group block">
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200 overflow-hidden h-full">
+                <div className="gito-card overflow-hidden h-full">
 
                   {/* Coloured status stripe at top */}
                   <div className={`h-1 w-full ${
@@ -491,7 +466,7 @@ export default function DevicesPage() {
                           type="checkbox"
                           checked={selectedDevices.has(device.id)}
                           onChange={() => toggleDeviceSelection(device.id)}
-                          className="w-3.5 h-3.5 text-primary-600 border-slate-300 rounded focus:ring-primary-500 flex-shrink-0"
+                          className="w-3.5 h-3.5 text-primary-600 border-[var(--color-input-border)] rounded focus:ring-primary-500 flex-shrink-0"
                           onClick={(e) => e.stopPropagation()}
                         />
                         {/* Device type icon */}
@@ -500,23 +475,19 @@ export default function DevicesPage() {
                             ? 'bg-green-50 text-green-600'
                             : device.status === 'offline'
                             ? 'bg-red-50 text-red-400'
-                            : 'bg-gray-50 text-gray-400'
+                            : 'bg-page text-th-muted'
                         }`}>
                           <DeviceTypeIcon deviceType={device.device_type} className="w-4 h-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-900 group-hover:text-primary-600 transition-colors truncate leading-tight">
+                          <p className="text-sm font-semibold text-th-primary group-hover:text-primary-600 transition-colors truncate leading-tight">
                             {device.name}
                           </p>
-                          <p className="text-xs text-gray-400 truncate">{device.device_type}</p>
+                          <p className="text-xs text-th-muted truncate">{device.device_type}</p>
                         </div>
                       </div>
-                      {/* Status indicator */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                        <span className={`w-2 h-2 rounded-full ${
-                          device.status === 'online' ? 'bg-green-500 animate-pulse' :
-                          device.status === 'offline' ? 'bg-red-500' : 'bg-yellow-400'
-                        }`} />
+                      <div className="flex-shrink-0 ml-2">
+                        <DeviceStatusBadge status={device.status} />
                       </div>
                     </div>
 
@@ -524,10 +495,10 @@ export default function DevicesPage() {
                     <div className="space-y-2.5 mt-3">
                       {/* Last seen */}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-400">Last seen</span>
+                        <span className="text-xs text-th-muted">Last seen</span>
                         <span className={`text-xs font-semibold ${
                           device.status === 'online' ? 'text-green-600' :
-                          device.status === 'offline' ? 'text-red-500' : 'text-gray-500'
+                          device.status === 'offline' ? 'text-red-500' : 'text-th-secondary'
                         }`}>
                           {getRelativeTime(device.last_seen)}
                         </span>
@@ -537,13 +508,13 @@ export default function DevicesPage() {
                       {device.battery_level !== null ? (
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-gray-400">Battery</span>
+                            <span className="text-xs text-th-muted">Battery</span>
                             <span className={`text-xs font-semibold ${
                               device.battery_level > 50 ? 'text-green-600' :
                               device.battery_level > 20 ? 'text-yellow-600' : 'text-red-600'
                             }`}>{Math.round(device.battery_level)}%</span>
                           </div>
-                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div className="w-full bg-panel rounded-full h-1.5">
                             <div
                               className={`h-1.5 rounded-full ${
                                 device.battery_level > 50 ? 'bg-green-400' :
@@ -555,7 +526,7 @@ export default function DevicesPage() {
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-400">Battery</span>
+                          <span className="text-xs text-th-muted">Battery</span>
                           <span className="text-xs text-gray-300">—</span>
                         </div>
                       )}
@@ -568,13 +539,13 @@ export default function DevicesPage() {
                       ? 'bg-green-50 border-green-100'
                       : device.status === 'offline'
                       ? 'bg-red-50 border-red-100'
-                      : 'bg-gray-50 border-gray-100'
+                      : 'bg-page border-th-subtle'
                   }`}>
                     <span className={`text-xs font-semibold capitalize ${
                       device.status === 'online' ? 'text-green-700' :
                       device.status === 'offline' ? 'text-red-600' : 'text-yellow-700'
                     }`}>{device.status}</span>
-                    <span className="text-xs text-gray-400 group-hover:text-primary-600 transition-colors">
+                    <span className="text-xs text-th-muted group-hover:text-primary-600 transition-colors">
                       View →
                     </span>
                   </div>
@@ -584,21 +555,21 @@ export default function DevicesPage() {
           </div>
         ) : (
           /* List View */
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-surface rounded-xl border border-th-default shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-page border-b border-th-default">
                   <tr>
                     <th className="px-6 py-4 text-left w-12">
                       <input
                         type="checkbox"
                         checked={filteredDevices.length > 0 && selectedDevices.size === filteredDevices.length}
                         onChange={toggleSelectAll}
-                        className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
+                        className="w-4 h-4 text-primary-600 border-[var(--color-input-border)] rounded focus:ring-primary-500"
                       />
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-6 py-4 text-left text-xs font-semibold text-th-secondary uppercase tracking-wider cursor-pointer hover:bg-panel transition-colors"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
@@ -607,7 +578,7 @@ export default function DevicesPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-6 py-4 text-left text-xs font-semibold text-th-secondary uppercase tracking-wider cursor-pointer hover:bg-panel transition-colors"
                       onClick={() => handleSort('device_type')}
                     >
                       <div className="flex items-center gap-2">
@@ -616,7 +587,7 @@ export default function DevicesPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-6 py-4 text-left text-xs font-semibold text-th-secondary uppercase tracking-wider cursor-pointer hover:bg-panel transition-colors"
                       onClick={() => handleSort('status')}
                     >
                       <div className="flex items-center gap-2">
@@ -625,7 +596,7 @@ export default function DevicesPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-6 py-4 text-left text-xs font-semibold text-th-secondary uppercase tracking-wider cursor-pointer hover:bg-panel transition-colors"
                       onClick={() => handleSort('battery_level')}
                     >
                       <div className="flex items-center gap-2">
@@ -634,7 +605,7 @@ export default function DevicesPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-6 py-4 text-left text-xs font-semibold text-th-secondary uppercase tracking-wider cursor-pointer hover:bg-panel transition-colors"
                       onClick={() => handleSort('last_seen')}
                     >
                       <div className="flex items-center gap-2">
@@ -642,23 +613,23 @@ export default function DevicesPage() {
                         <SortIcon field="last_seen" />
                       </div>
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-th-secondary uppercase tracking-wider">
                       Created
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-th-secondary uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[var(--color-border-subtle)]">
                   {filteredDevices.map((device) => (
-                    <tr key={device.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={device.id} className="hover:bg-panel transition-colors">
                       <td className="px-6 py-4">
                         <input
                           type="checkbox"
                           checked={selectedDevices.has(device.id)}
                           onChange={() => toggleDeviceSelection(device.id)}
-                          className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
+                          className="w-4 h-4 text-primary-600 border-[var(--color-input-border)] rounded focus:ring-primary-500"
                         />
                       </td>
                       <td className="px-6 py-4">
@@ -667,15 +638,15 @@ export default function DevicesPage() {
                             {device.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 group-hover:text-primary-600 transition-colors truncate">
+                            <p className="text-sm font-semibold text-th-primary group-hover:text-primary-600 transition-colors truncate">
                               {device.name}
                             </p>
-                            <p className="text-xs text-slate-500 truncate">{device.id.substring(0, 16)}</p>
+                            <p className="text-xs text-th-secondary truncate">{device.id.substring(0, 16)}</p>
                           </div>
                         </Link>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-panel text-th-primary">
                           {device.device_type}
                         </span>
                       </td>
@@ -693,13 +664,13 @@ export default function DevicesPage() {
                               ? device.battery_level > 50 ? 'text-green-600' 
                                 : device.battery_level > 20 ? 'text-yellow-600' 
                                 : 'text-red-600'
-                              : 'text-slate-400'
+                              : 'text-th-muted'
                           }`}>
                             {device.battery_level !== null ? `${Math.round(device.battery_level)}%` : 'N/A'}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-900 font-medium">
+                      <td className="px-6 py-4 text-sm text-th-primary font-medium">
                         {device.last_seen 
                           ? new Date(device.last_seen).toLocaleString('en-US', { 
                               month: 'short', 
@@ -708,9 +679,9 @@ export default function DevicesPage() {
                               hour: '2-digit',
                               minute: '2-digit'
                             })
-                          : <span className="text-slate-400">Never</span>}
+                          : <span className="text-th-muted">Never</span>}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">
+                      <td className="px-6 py-4 text-sm text-th-secondary">
                         {new Date(device.created_at).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -774,8 +745,7 @@ export default function DevicesPage() {
             onCancel={() => setShowBulkAssignModal(false)}
           />
         )}
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
@@ -832,27 +802,27 @@ function BulkAssignModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+      <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 className="text-lg font-semibold text-th-primary mb-4">
           Assign Devices to Group
         </h3>
 
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-sm text-th-secondary mb-4">
           Assign {selectedCount} selected device{selectedCount !== 1 ? 's' : ''} to a device group.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-th-primary mb-1">
               Device Group
             </label>
             {loading ? (
-              <div className="text-sm text-gray-500">Loading groups...</div>
+              <div className="text-sm text-th-secondary">Loading groups...</div>
             ) : (
               <select
                 value={selectedGroupId}
                 onChange={(e) => setSelectedGroupId(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">No Group (Unassign)</option>
                 {deviceGroups.map((group) => (
@@ -869,7 +839,7 @@ function BulkAssignModal({
               type="button"
               onClick={onCancel}
               disabled={submitting}
-              className="flex-1 px-4 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 text-sm border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-panel transition-colors disabled:opacity-50"
             >
               Cancel
             </button>

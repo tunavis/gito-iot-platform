@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
+import { Pencil, Trash2, Building2 } from 'lucide-react';
+import { Badge } from '@/components/ui/Badge';
+import { btn, input } from '@/components/ui/buttonStyles';
 
 interface Organization {
   id: string;
@@ -64,31 +67,20 @@ export default function OrganizationsPage() {
     }
   };
 
-  const statusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'bg-green-100 text-green-700',
-      inactive: 'bg-gray-100 text-gray-600',
-      suspended: 'bg-red-100 text-red-700'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-600';
-  };
-
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Organizations</h1>
-          <p className="text-sm text-gray-600">Manage sub-customers and organizational units</p>
-        </div>
-        <button 
+    <PageShell
+      title="Organizations"
+      subtitle="Manage sub-customers and organizational units"
+      action={
+        <button
           onClick={() => setShowNewForm(true)}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+          className={`${btn.primary} flex items-center gap-2`}
         >
-          + New Organization
+          <Building2 className="w-4 h-4" />
+          New Organization
         </button>
-      </div>
+      }
+    >
 
       {showNewForm && (
         <OrganizationForm
@@ -111,9 +103,9 @@ export default function OrganizationsPage() {
         />
       )}
 
-      <div className="bg-white rounded border border-gray-200">
-        <div className="border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase">
+      <div className="gito-card overflow-hidden">
+        <div className="border-b border-[var(--color-border)] px-6 py-3 bg-panel">
+          <div className="grid grid-cols-12 gap-4 text-[10px] font-bold text-th-muted uppercase tracking-widest">
             <div className="col-span-3">Name</div>
             <div className="col-span-2">Slug</div>
             <div className="col-span-3">Billing Contact</div>
@@ -122,49 +114,45 @@ export default function OrganizationsPage() {
             <div className="col-span-2 text-right">Actions</div>
           </div>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-[var(--color-border)]">
           {loading ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-600">Loading...</div>
+            <div className="px-6 py-8 text-center text-sm text-th-secondary">Loading...</div>
           ) : organizations.length === 0 ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-600">
+            <div className="px-6 py-8 text-center text-sm text-th-secondary">
               No organizations found. Click &quot;New Organization&quot; to create one.
             </div>
           ) : (
             organizations.map(org => (
-              <div key={org.id} className="px-6 py-4 hover:bg-gray-50">
+              <div key={org.id} className="px-6 py-4 hover:bg-panel transition-colors">
                 <div className="grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-3">
-                    <p className="text-sm font-semibold text-gray-900">{org.name}</p>
+                    <p className="text-sm font-semibold text-th-primary">{org.name}</p>
                     {org.description && (
-                      <p className="text-xs text-gray-600 mt-0.5">{org.description}</p>
+                      <p className="text-xs text-th-muted mt-0.5">{org.description}</p>
                     )}
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm font-mono text-gray-700">{org.slug}</span>
+                    <span className="text-xs font-mono text-th-secondary">{org.slug}</span>
                   </div>
                   <div className="col-span-3">
-                    <span className="text-sm text-gray-600">{org.billing_contact || '—'}</span>
+                    <span className="text-sm text-th-secondary">{org.billing_contact || '—'}</span>
                   </div>
                   <div className="col-span-1">
-                    <span className={`px-2 py-1 text-xs font-medium rounded capitalize ${statusColor(org.status)}`}>
-                      {org.status}
-                    </span>
+                    <Badge
+                      variant={org.status === 'active' ? 'success' : org.status === 'suspended' ? 'danger' : 'neutral'}
+                      label={org.status}
+                      size="sm"
+                    />
                   </div>
                   <div className="col-span-1">
-                    <span className="text-xs text-gray-600">{new Date(org.created_at).toLocaleDateString()}</span>
+                    <span className="text-xs text-th-muted">{new Date(org.created_at).toLocaleDateString()}</span>
                   </div>
-                  <div className="col-span-2 flex gap-2 justify-end">
-                    <button 
-                      onClick={() => setEditingOrg(org)}
-                      className="px-3 py-1 text-xs font-medium rounded bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    >
-                      Edit
+                  <div className="col-span-2 flex gap-1 justify-end">
+                    <button onClick={() => setEditingOrg(org)} className={btn.icon} title="Edit">
+                      <Pencil className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => deleteOrganization(org.id)}
-                      className="px-3 py-1 text-xs font-medium rounded bg-red-50 text-red-600 hover:bg-red-100"
-                    >
-                      Delete
+                    <button onClick={() => deleteOrganization(org.id)} className={btn.iconDanger} title="Delete">
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -173,8 +161,7 @@ export default function OrganizationsPage() {
           )}
         </div>
       </div>
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
@@ -224,72 +211,75 @@ function OrganizationForm({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded p-6 mb-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+    <div className="gito-card p-6 mb-4">
+      <h3 className="text-lg font-bold text-th-primary mb-1">
         {organization ? 'Edit Organization' : 'Create New Organization'}
       </h3>
+      <p className="text-sm text-th-secondary mb-5">
+        {organization ? 'Update organization details' : 'Add a new organizational unit'}
+      </p>
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-5">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Organization Name *</label>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Organization Name *</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className={input.base}
               placeholder="Acme Corp"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Slug *</label>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Slug *</label>
             <input
               type="text"
               required
               disabled={!!organization}
               value={formData.slug}
               onChange={e => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100"
+              className={`${input.base} disabled:opacity-50`}
               placeholder="acme-corp"
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Description</label>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Description</label>
             <textarea
               value={formData.description}
               onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className={`${input.base} resize-none`}
               rows={2}
               placeholder="Optional description..."
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Billing Contact</label>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Billing Contact</label>
             <input
               type="email"
               value={formData.billing_contact}
               onChange={e => setFormData(prev => ({ ...prev, billing_contact: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className={input.base}
               placeholder="billing@acme.com"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">ChirpStack App ID</label>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">ChirpStack App ID</label>
             <input
               type="text"
               value={formData.chirpstack_app_id}
               onChange={e => setFormData(prev => ({ ...prev, chirpstack_app_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className={input.base}
               placeholder="Optional"
             />
           </div>
           {organization && (
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Status</label>
+              <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Status</label>
               <select
                 value={formData.status}
                 onChange={e => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                className={input.select}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -298,20 +288,9 @@ function OrganizationForm({
             </div>
           )}
         </div>
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit"
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            {organization ? 'Update' : 'Create'} Organization
-          </button>
+        <div className="flex gap-3">
+          <button type="button" onClick={onCancel} className={btn.secondary}>Cancel</button>
+          <button type="submit" className={btn.primary}>{organization ? 'Update' : 'Create'} Organization</button>
         </div>
       </form>
     </div>

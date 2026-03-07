@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
+import ErrorBanner from '@/components/ui/ErrorBanner';
 import {
   TrendingUp,
   Activity,
@@ -13,7 +14,6 @@ import {
   Calendar,
   BarChart3,
   RefreshCw,
-  AlertCircle,
 } from 'lucide-react';
 import {
   LineChart,
@@ -80,21 +80,13 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 function SkeletonCard({ className = '' }: { className?: string }) {
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm p-6 animate-pulse ${className}`}>
-      <div className="h-4 bg-gray-200 rounded w-1/3 mb-4" />
-      <div className="h-8 bg-gray-200 rounded w-1/2" />
+    <div className={`bg-surface rounded-lg border border-th-default shadow-sm p-6 animate-pulse ${className}`}>
+      <div className="h-4 bg-panel rounded w-1/3 mb-4" />
+      <div className="h-8 bg-panel rounded w-1/2" />
     </div>
   );
 }
 
-function ErrorCard({ message }: { message: string }) {
-  return (
-    <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-      <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-      <p className="text-sm text-red-700">{message}</p>
-    </div>
-  );
-}
 
 export default function AnalyticsPage() {
   const [fleet, setFleet] = useState<FleetOverview | null>(null);
@@ -171,40 +163,35 @@ export default function AnalyticsPage() {
     : [];
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-sm text-gray-500 mt-1">Fleet health and operational insights</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setRefreshKey(k => k + 1)}
-              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              title="Refresh"
+    <PageShell
+      title="Analytics"
+      subtitle="Fleet health and operational insights"
+      action={
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setRefreshKey(k => k + 1)}
+            className="p-2 border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 text-th-secondary ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <div className="flex items-center gap-2 bg-surface border border-th-default rounded-lg px-3 py-2">
+            <Calendar className="w-4 h-4 text-th-muted" />
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(Number(e.target.value))}
+              className="text-sm font-medium text-th-primary bg-transparent focus:outline-none"
             >
-              <RefreshCw className={`w-4 h-4 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(Number(e.target.value))}
-                className="text-sm font-medium text-gray-700 bg-transparent focus:outline-none"
-              >
-                <option value={7}>Last 7 days</option>
-                <option value={30}>Last 30 days</option>
-                <option value={90}>Last 90 days</option>
-              </select>
-            </div>
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
           </div>
         </div>
+      }
+    >
 
-        {error && <ErrorCard message={error} />}
+        {error && <ErrorBanner message={error} />}
 
         {/* Fleet Overview KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -212,53 +199,53 @@ export default function AnalyticsPage() {
             Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
           ) : fleet ? (
             <>
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-gray-500 font-medium">Total Devices</p>
-                  <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-                    <Cpu className="w-5 h-5 text-blue-600" />
+                  <p className="text-sm text-th-secondary font-medium">Total Devices</p>
+                  <div className="w-9 h-9 bg-primary-50 rounded-lg flex items-center justify-center">
+                    <Cpu className="w-5 h-5 text-primary-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-900">{fleet.total_devices}</p>
-                <p className="text-xs text-gray-400 mt-1">{deviceTypeData.length} device types</p>
+                <p className="text-3xl font-bold text-th-primary">{fleet.total_devices}</p>
+                <p className="text-xs text-th-muted mt-1">{deviceTypeData.length} device types</p>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-gray-500 font-medium">Online Now</p>
+                  <p className="text-sm text-th-secondary font-medium">Online Now</p>
                   <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center">
                     <CheckCircle2 className="w-5 h-5 text-green-600" />
                   </div>
                 </div>
                 <p className="text-3xl font-bold text-green-600">{fleet.status_distribution.online || 0}</p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-th-muted mt-1">
                   {fleet.total_devices > 0
                     ? `${Math.round(((fleet.status_distribution.online || 0) / fleet.total_devices) * 100)}% of fleet`
                     : '—'}
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-gray-500 font-medium">Offline</p>
+                  <p className="text-sm text-th-secondary font-medium">Offline</p>
                   <div className="w-9 h-9 bg-red-50 rounded-lg flex items-center justify-center">
                     <XCircle className="w-5 h-5 text-red-600" />
                   </div>
                 </div>
                 <p className="text-3xl font-bold text-red-600">{fleet.status_distribution.offline || 0}</p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-th-muted mt-1">
                   {fleet.status_distribution.idle ? `${fleet.status_distribution.idle} idle` : 'None idle'}
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-gray-500 font-medium">Avg Battery</p>
+                  <p className="text-sm text-th-secondary font-medium">Avg Battery</p>
                   <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center">
                     <Battery className="w-5 h-5 text-amber-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-900">{fleet.average_battery_level.toFixed(0)}%</p>
+                <p className="text-3xl font-bold text-th-primary">{fleet.average_battery_level.toFixed(0)}%</p>
                 <p className="text-xs text-red-500 mt-1">{fleet.low_battery_devices} below 20%</p>
               </div>
             </>
@@ -268,24 +255,24 @@ export default function AnalyticsPage() {
         {/* Uptime + Telemetry Activity Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Uptime */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+          <div className="bg-surface rounded-lg border border-th-default shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-th-primary mb-4 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-primary-600" />
               Device Availability ({Math.min(timeRange, 30)}d)
             </h3>
             {loading && !uptime ? (
               <div className="space-y-4 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-full" />
-                <div className="h-4 bg-gray-200 rounded w-full" />
+                <div className="h-4 bg-panel rounded w-full" />
+                <div className="h-4 bg-panel rounded w-full" />
               </div>
             ) : uptime ? (
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between text-sm mb-1.5">
-                    <span className="text-gray-600">Online now</span>
-                    <span className="font-semibold text-gray-900">{uptime.uptime_percentage}%</span>
+                    <span className="text-th-secondary">Online now</span>
+                    <span className="font-semibold text-th-primary">{uptime.uptime_percentage}%</span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5">
+                  <div className="w-full bg-panel rounded-full h-2.5">
                     <div
                       className="h-2.5 rounded-full transition-all"
                       style={{ width: `${uptime.uptime_percentage}%`, backgroundColor: uptime.uptime_percentage >= 80 ? '#10b981' : uptime.uptime_percentage >= 50 ? '#f59e0b' : '#ef4444' }}
@@ -294,67 +281,67 @@ export default function AnalyticsPage() {
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1.5">
-                    <span className="text-gray-600">Active in period</span>
-                    <span className="font-semibold text-gray-900">{uptime.availability_percentage}%</span>
+                    <span className="text-th-secondary">Active in period</span>
+                    <span className="font-semibold text-th-primary">{uptime.availability_percentage}%</span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5">
+                  <div className="w-full bg-panel rounded-full h-2.5">
                     <div
-                      className="h-2.5 rounded-full bg-blue-500 transition-all"
+                      className="h-2.5 rounded-full bg-primary-500 transition-all"
                       style={{ width: `${uptime.availability_percentage}%` }}
                     />
                   </div>
                 </div>
-                <div className="pt-2 grid grid-cols-3 gap-2 text-center text-xs text-gray-500 border-t border-gray-100">
-                  <div><span className="block text-base font-bold text-gray-900">{uptime.total_devices}</span>Total</div>
+                <div className="pt-2 grid grid-cols-3 gap-2 text-center text-xs text-th-secondary border-t border-th-subtle">
+                  <div><span className="block text-base font-bold text-th-primary">{uptime.total_devices}</span>Total</div>
                   <div><span className="block text-base font-bold text-green-600">{uptime.online_now}</span>Online</div>
-                  <div><span className="block text-base font-bold text-blue-600">{uptime.active_in_period}</span>Active</div>
+                  <div><span className="block text-base font-bold text-primary-600">{uptime.active_in_period}</span>Active</div>
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-400">No uptime data</p>
+              <p className="text-sm text-th-muted">No uptime data</p>
             )}
           </div>
 
           {/* Telemetry Activity */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+          <div className="bg-surface rounded-lg border border-th-default shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-th-primary mb-4 flex items-center gap-2">
               <Activity className="w-4 h-4 text-primary-600" />
               Telemetry Activity ({Math.min(timeRange * 24, 168)}h)
             </h3>
             {loading && !telemetry ? (
               <div className="space-y-3 animate-pulse">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-8 bg-gray-200 rounded" />
+                  <div key={i} className="h-8 bg-panel rounded" />
                 ))}
               </div>
             ) : telemetry ? (
               <div>
                 <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-3xl font-bold text-gray-900">{telemetry.message_count.toLocaleString()}</span>
-                  <span className="text-sm text-gray-500">messages</span>
-                  <span className="ml-auto text-sm text-gray-500">{telemetry.active_devices} active devices</span>
+                  <span className="text-3xl font-bold text-th-primary">{telemetry.message_count.toLocaleString()}</span>
+                  <span className="text-sm text-th-secondary">messages</span>
+                  <span className="ml-auto text-sm text-th-secondary">{telemetry.active_devices} active devices</span>
                 </div>
                 {telemetry.top_metrics.length > 0 ? (
                   <div className="space-y-2">
                     {telemetry.top_metrics.slice(0, 5).map(m => (
                       <div key={m.key} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500 w-28 truncate capitalize">{m.key.replace(/_/g, ' ')}</span>
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                        <span className="text-xs text-th-secondary w-28 truncate capitalize">{m.key.replace(/_/g, ' ')}</span>
+                        <div className="flex-1 bg-panel rounded-full h-1.5">
                           <div
                             className="h-1.5 rounded-full bg-primary-500"
                             style={{ width: `${Math.min((m.count / (telemetry.top_metrics[0]?.count || 1)) * 100, 100)}%` }}
                           />
                         </div>
-                        <span className="text-xs font-medium text-gray-700 w-16 text-right">avg {m.avg.toFixed(1)}</span>
+                        <span className="text-xs font-medium text-th-primary w-16 text-right">avg {m.avg.toFixed(1)}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">No telemetry data in this period</p>
+                  <p className="text-sm text-th-muted">No telemetry data in this period</p>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-400">No telemetry data</p>
+              <p className="text-sm text-th-muted">No telemetry data</p>
             )}
           </div>
         </div>
@@ -362,14 +349,14 @@ export default function AnalyticsPage() {
         {/* Charts Row: Alert Trend + Status Pie */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Daily Alert Trend */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+          <div className="bg-surface rounded-lg border border-th-default shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-th-primary mb-1 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-primary-600" />
               Alert Trend
             </h3>
-            <p className="text-xs text-gray-400 mb-4">Daily alarm count — last {timeRange} days</p>
+            <p className="text-xs text-th-muted mb-4">Daily alarm count — last {timeRange} days</p>
             {loading && !alerts ? (
-              <div className="h-56 bg-gray-100 rounded animate-pulse" />
+              <div className="h-56 bg-panel rounded animate-pulse" />
             ) : alerts && alerts.daily_trend.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={alerts.daily_trend}>
@@ -390,14 +377,14 @@ export default function AnalyticsPage() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-56 flex flex-col items-center justify-center text-gray-400">
+              <div className="h-56 flex flex-col items-center justify-center text-th-muted">
                 <BarChart3 className="w-10 h-10 mb-2 opacity-30" />
                 <p className="text-sm">No alarms in this period</p>
               </div>
             )}
             {alerts && (
-              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                <span className="font-semibold text-gray-900 text-base">{alerts.total_alarms}</span> total alarms
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-th-subtle text-xs text-th-secondary">
+                <span className="font-semibold text-th-primary text-base">{alerts.total_alarms}</span> total alarms
                 {Object.entries(alerts.severity_distribution).map(([sev, count]) => (
                   <span key={sev} className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[sev] || '#94a3b8' }} />
@@ -409,11 +396,11 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Device Status Distribution */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Device Status</h3>
-            <p className="text-xs text-gray-400 mb-4">Current fleet status breakdown</p>
+          <div className="bg-surface rounded-lg border border-th-default shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-th-primary mb-1">Device Status</h3>
+            <p className="text-xs text-th-muted mb-4">Current fleet status breakdown</p>
             {loading && !fleet ? (
-              <div className="h-56 bg-gray-100 rounded animate-pulse" />
+              <div className="h-56 bg-panel rounded animate-pulse" />
             ) : statusData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -435,7 +422,7 @@ export default function AnalyticsPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-56 flex flex-col items-center justify-center text-gray-400">
+              <div className="h-56 flex flex-col items-center justify-center text-th-muted">
                 <Cpu className="w-10 h-10 mb-2 opacity-30" />
                 <p className="text-sm">No device data</p>
               </div>
@@ -447,12 +434,12 @@ export default function AnalyticsPage() {
         {(severityData.length > 0 || deviceTypeData.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {severityData.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+              <div className="bg-surface rounded-lg border border-th-default shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-th-primary mb-1 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
                   Alarm Severity Breakdown
                 </h3>
-                <p className="text-xs text-gray-400 mb-4">Last {timeRange} days</p>
+                <p className="text-xs text-th-muted mb-4">Last {timeRange} days</p>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={severityData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
@@ -470,20 +457,20 @@ export default function AnalyticsPage() {
             )}
 
             {deviceTypeData.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-1">Device Type Distribution</h3>
-                <p className="text-xs text-gray-400 mb-4">Fleet composition</p>
+              <div className="bg-surface rounded-lg border border-th-default shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-th-primary mb-1">Device Type Distribution</h3>
+                <p className="text-xs text-th-muted mb-4">Fleet composition</p>
                 <div className="space-y-3">
                   {deviceTypeData.map(({ name, value }) => (
                     <div key={name} className="flex items-center gap-3">
-                      <span className="text-xs text-gray-600 w-36 truncate">{name}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2">
+                      <span className="text-xs text-th-secondary w-36 truncate">{name}</span>
+                      <div className="flex-1 bg-panel rounded-full h-2">
                         <div
                           className="h-2 rounded-full bg-primary-500"
                           style={{ width: `${(value / (fleet?.total_devices || 1)) * 100}%` }}
                         />
                       </div>
-                      <span className="text-xs font-semibold text-gray-700 w-6 text-right">{value}</span>
+                      <span className="text-xs font-semibold text-th-primary w-6 text-right">{value}</span>
                     </div>
                   ))}
                 </div>
@@ -494,20 +481,20 @@ export default function AnalyticsPage() {
 
         {/* Top Alerting Devices */}
         {alerts && alerts.top_alerting_devices.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="border-b border-gray-100 px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <div className="bg-surface rounded-xl border border-th-default shadow-sm overflow-hidden">
+            <div className="border-b border-th-subtle px-6 py-4">
+              <h3 className="text-sm font-semibold text-th-primary flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
                 Top Alerting Devices
-                <span className="ml-1 text-xs text-gray-400 font-normal">— last {timeRange} days</span>
+                <span className="ml-1 text-xs text-th-muted font-normal">— last {timeRange} days</span>
               </h3>
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-[var(--color-border-subtle)]">
               {alerts.top_alerting_devices.map((device, idx) => (
-                <div key={device.device_id} className="px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div key={device.device_id} className="px-6 py-3 flex items-center justify-between hover:bg-panel transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-bold text-gray-300 w-5">#{idx + 1}</span>
-                    <span className="text-sm font-medium text-gray-800">{device.device_name}</span>
+                    <span className="text-sm font-medium text-th-primary">{device.device_name}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div
@@ -515,14 +502,13 @@ export default function AnalyticsPage() {
                       style={{ width: `${Math.max((device.alarm_count / (alerts.top_alerting_devices[0]?.alarm_count || 1)) * 80, 8)}px` }}
                     />
                     <span className="text-sm font-semibold text-amber-600">{device.alarm_count}</span>
-                    <span className="text-xs text-gray-400">alarms</span>
+                    <span className="text-xs text-th-muted">alarms</span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-      </main>
-    </div>
+    </PageShell>
   );
 }

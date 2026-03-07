@@ -152,7 +152,7 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
+      <div className="flex items-center justify-center h-full bg-page">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -160,13 +160,13 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
 
   if (devices.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50 p-4">
-        <div className="text-center text-gray-500 max-w-xs">
-          <MapPin className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-          <p className="text-sm font-medium text-gray-700 mb-1">
+      <div className="flex items-center justify-center h-full bg-page p-4">
+        <div className="text-center text-th-secondary max-w-xs">
+          <MapPin className="w-12 h-12 mx-auto mb-2 text-th-muted" />
+          <p className="text-sm font-medium text-th-primary mb-1">
             No Device Locations Set
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-th-secondary">
             Add latitude and longitude to your devices to see them on the map
           </p>
           <button
@@ -182,8 +182,8 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
 
   if (!mapReady) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
-        <div className="text-sm text-gray-500">Loading map...</div>
+      <div className="flex items-center justify-center h-full bg-page">
+        <div className="text-sm text-th-secondary">Loading map...</div>
       </div>
     );
   }
@@ -217,13 +217,13 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
               {show_label && (
                 <Popup>
                   <div className="text-sm">
-                    <div className="font-semibold text-gray-900">
+                    <div className="font-semibold text-th-primary">
                       {device.name}
                     </div>
                     {device.location && (
-                      <div className="text-gray-600 mt-1">{device.location}</div>
+                      <div className="text-th-secondary mt-1">{device.location}</div>
                     )}
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-th-secondary mt-1">
                       {device.latitude.toFixed(6)}, {device.longitude.toFixed(6)}
                     </div>
                   </div>

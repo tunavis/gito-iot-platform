@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
+import { Pencil, Trash2, MapPin } from 'lucide-react';
+import { btn, input } from '@/components/ui/buttonStyles';
 
 interface Site {
   id: string;
@@ -97,37 +99,24 @@ export default function SitesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Sites</h1>
-          <p className="text-sm text-gray-600">Manage physical locations and hierarchies</p>
-        </div>
-        <button 
-          onClick={() => setShowNewForm(true)}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + New Site
+    <PageShell
+      title="Sites"
+      subtitle="Manage physical locations and hierarchies"
+      action={
+        <button onClick={() => setShowNewForm(true)} className={`${btn.primary} flex items-center gap-2`}>
+          <MapPin className="w-4 h-4" />New Site
         </button>
-      </div>
+      }
+    >
 
-      <div className="bg-white rounded border border-gray-200 p-4 mb-4">
+      <div className="gito-card p-4 mb-4">
         <div className="flex items-center gap-4">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Filter by Organization</label>
-            <select 
-              value={selectedOrg} 
-              onChange={e => setSelectedOrg(e.target.value)} 
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white"
-            >
-              <option value="all">All Organizations</option>
-              {organizations.map(org => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-          </div>
+          <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} className={input.select} style={{ width: 'auto' }}>
+            <option value="all">All Organizations</option>
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -156,9 +145,9 @@ export default function SitesPage() {
         />
       )}
 
-      <div className="bg-white rounded border border-gray-200">
-        <div className="border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase">
+      <div className="gito-card overflow-hidden">
+        <div className="border-b border-[var(--color-border)] px-6 py-3 bg-panel">
+          <div className="grid grid-cols-12 gap-4 text-[10px] font-bold text-th-muted uppercase tracking-widest">
             <div className="col-span-3">Name</div>
             <div className="col-span-2">Organization</div>
             <div className="col-span-2">Parent Site</div>
@@ -167,50 +156,40 @@ export default function SitesPage() {
             <div className="col-span-2 text-right">Actions</div>
           </div>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-[var(--color-border)]">
           {loading ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-600">Loading...</div>
+            <div className="px-6 py-8 text-center text-sm text-th-secondary">Loading...</div>
           ) : sites.length === 0 ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-600">
+            <div className="px-6 py-8 text-center text-sm text-th-secondary">
               No sites found. Click &quot;New Site&quot; to create one.
             </div>
           ) : (
             sites.map(site => (
-              <div key={site.id} className="px-6 py-4 hover:bg-gray-50">
+              <div key={site.id} className="px-6 py-4 hover:bg-panel transition-colors">
                 <div className="grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-3">
-                    <p className="text-sm font-semibold text-gray-900">{site.name}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">{site.timezone}</p>
+                    <p className="text-sm font-semibold text-th-primary">{site.name}</p>
+                    <p className="text-xs text-th-muted mt-0.5">{site.timezone}</p>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm text-gray-700">{getOrgName(site.organization_id)}</span>
+                    <span className="text-sm text-th-primary">{getOrgName(site.organization_id)}</span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-th-muted">
                       {site.parent_site_id ? getParentSiteName(site.parent_site_id) : '—'}
                     </span>
                   </div>
                   <div className="col-span-1">
-                    <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(37,99,235,0.08)', color: 'var(--color-primary-600)', border: '1px solid rgba(37,99,235,0.15)' }}>
                       {site.site_type || 'Default'}
                     </span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm text-gray-600">{site.address || '—'}</span>
+                    <span className="text-sm text-th-muted">{site.address || '—'}</span>
                   </div>
-                  <div className="col-span-2 flex gap-2 justify-end">
-                    <button 
-                      onClick={() => setEditingSite(site)}
-                      className="px-3 py-1 text-xs font-medium rounded bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={() => deleteSite(site.id)}
-                      className="px-3 py-1 text-xs font-medium rounded bg-red-50 text-red-600 hover:bg-red-100"
-                    >
-                      Delete
-                    </button>
+                  <div className="col-span-2 flex gap-1 justify-end">
+                    <button onClick={() => setEditingSite(site)} className={btn.icon} title="Edit"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => deleteSite(site.id)} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -218,8 +197,7 @@ export default function SitesPage() {
           )}
         </div>
       </div>
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
@@ -291,118 +269,53 @@ function SiteForm({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded p-6 mb-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-        {site ? 'Edit Site' : 'Create New Site'}
-      </h3>
+    <div className="gito-card p-6 mb-4">
+      <h3 className="text-lg font-bold text-th-primary mb-1">{site ? 'Edit Site' : 'Create New Site'}</h3>
+      <p className="text-sm text-th-secondary mb-5">{site ? 'Update site details' : 'Add a new physical location'}</p>
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-5">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Organization *</label>
-            <select
-              required
-              value={formData.organization_id}
-              onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value, parent_site_id: '' }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
-            >
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Organization *</label>
+            <select required value={formData.organization_id} onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value, parent_site_id: '' }))} className={input.select}>
               <option value="">Select organization...</option>
-              {organizations.map(org => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
+              {organizations.map(org => (<option key={org.id} value={org.id}>{org.name}</option>))}
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Parent Site</label>
-            <select
-              value={formData.parent_site_id}
-              onChange={e => setFormData(prev => ({ ...prev, parent_site_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
-              disabled={!formData.organization_id}
-            >
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Parent Site</label>
+            <select value={formData.parent_site_id} onChange={e => setFormData(prev => ({ ...prev, parent_site_id: e.target.value }))} className={`${input.select} disabled:opacity-50`} disabled={!formData.organization_id}>
               <option value="">None (Top Level)</option>
-              {sites.filter(s => s.id !== site?.id && s.organization_id === formData.organization_id).map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
+              {sites.filter(s => s.id !== site?.id && s.organization_id === formData.organization_id).map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Site Name *</label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="Building A"
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Site Name *</label>
+            <input type="text" required value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className={input.base} placeholder="Building A" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Site Type</label>
-            <input
-              type="text"
-              value={formData.site_type}
-              onChange={e => setFormData(prev => ({ ...prev, site_type: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="warehouse, office, factory..."
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Site Type</label>
+            <input type="text" value={formData.site_type} onChange={e => setFormData(prev => ({ ...prev, site_type: e.target.value }))} className={input.base} placeholder="warehouse, office, factory..." />
           </div>
           <div className="col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Address</label>
-            <input
-              type="text"
-              value={formData.address}
-              onChange={e => setFormData(prev => ({ ...prev, address: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="123 Main St, City, Country"
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Address</label>
+            <input type="text" value={formData.address} onChange={e => setFormData(prev => ({ ...prev, address: e.target.value }))} className={input.base} placeholder="123 Main St, City, Country" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Latitude</label>
-            <input
-              type="number"
-              step="any"
-              value={formData.coordinates_lat}
-              onChange={e => setFormData(prev => ({ ...prev, coordinates_lat: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="51.5074"
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Latitude</label>
+            <input type="number" step="any" value={formData.coordinates_lat} onChange={e => setFormData(prev => ({ ...prev, coordinates_lat: e.target.value }))} className={input.base} placeholder="51.5074" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Longitude</label>
-            <input
-              type="number"
-              step="any"
-              value={formData.coordinates_lng}
-              onChange={e => setFormData(prev => ({ ...prev, coordinates_lng: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="-0.1278"
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Longitude</label>
+            <input type="number" step="any" value={formData.coordinates_lng} onChange={e => setFormData(prev => ({ ...prev, coordinates_lng: e.target.value }))} className={input.base} placeholder="-0.1278" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Timezone</label>
-            <input
-              type="text"
-              value={formData.timezone}
-              onChange={e => setFormData(prev => ({ ...prev, timezone: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="UTC, America/New_York..."
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Timezone</label>
+            <input type="text" value={formData.timezone} onChange={e => setFormData(prev => ({ ...prev, timezone: e.target.value }))} className={input.base} placeholder="UTC, America/New_York..." />
           </div>
         </div>
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit"
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            {site ? 'Update' : 'Create'} Site
-          </button>
+        <div className="flex gap-3">
+          <button type="button" onClick={onCancel} className={btn.secondary}>Cancel</button>
+          <button type="submit" className={btn.primary}>{site ? 'Update' : 'Create'} Site</button>
         </div>
       </form>
     </div>
