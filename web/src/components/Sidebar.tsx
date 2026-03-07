@@ -108,7 +108,7 @@ export default function Sidebar() {
   return (
     <aside
       className="fixed left-0 top-0 h-screen w-64 flex flex-col overflow-hidden z-50"
-      style={{ background: 'var(--color-sidebar-bg)' }}
+      style={{ background: 'var(--color-sidebar-bg)', borderRight: '1px solid var(--color-sidebar-border)' }}
     >
       {/* Top accent gradient line */}
       <div
@@ -127,7 +127,7 @@ export default function Sidebar() {
           width={110}
           height={33}
           style={{ maxHeight: '34px', width: 'auto', height: 'auto' }}
-          className="brightness-0 invert opacity-90"
+          className="opacity-90 dark:brightness-0 dark:invert dark:opacity-90"
           priority
           unoptimized
         />
@@ -162,13 +162,13 @@ export default function Sidebar() {
                     href={entry.href}
                     className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150"
                     style={{
-                      color: isActive ? '#93c5fd' : 'var(--color-sidebar-muted)',
-                      background: isActive ? 'rgba(37,99,235,0.12)' : 'transparent',
+                      color: isActive ? 'var(--color-sidebar-active-text)' : 'var(--color-sidebar-muted)',
+                      background: isActive ? 'var(--color-sidebar-active)' : 'transparent',
                       fontWeight: isActive ? 600 : 400,
                       boxShadow: isActive ? 'inset 3px 0 0 #3b82f6' : 'none',
                     }}
                   >
-                    <span style={{ color: isActive ? '#60a5fa' : 'var(--color-sidebar-muted)' }}>
+                    <span style={{ color: isActive ? 'var(--color-sidebar-active-icon)' : 'var(--color-sidebar-muted)' }}>
                       {entry.icon}
                     </span>
                     {entry.label}
@@ -189,13 +189,13 @@ export default function Sidebar() {
                   onClick={() => toggleGroup(group.label)}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150"
                   style={{
-                    color: hasActiveChild ? '#93c5fd' : 'var(--color-sidebar-muted)',
-                    background: hasActiveChild ? 'rgba(37,99,235,0.1)' : 'transparent',
+                    color: hasActiveChild ? 'var(--color-sidebar-active-text)' : 'var(--color-sidebar-muted)',
+                    background: hasActiveChild ? 'var(--color-sidebar-active)' : 'transparent',
                     fontWeight: hasActiveChild ? 600 : 400,
                     boxShadow: hasActiveChild ? 'inset 3px 0 0 #3b82f6' : 'none',
                   }}
                 >
-                  <span style={{ color: hasActiveChild ? '#60a5fa' : 'var(--color-sidebar-muted)' }}>
+                  <span style={{ color: hasActiveChild ? 'var(--color-sidebar-active-icon)' : 'var(--color-sidebar-muted)' }}>
                     {group.icon}
                   </span>
                   <span className="flex-1 text-left">{group.label}</span>
@@ -222,8 +222,8 @@ export default function Sidebar() {
                             href={sub.href}
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-all duration-150"
                             style={{
-                              color: isActive ? '#93c5fd' : 'var(--color-sidebar-muted)',
-                              background: isActive ? 'rgba(37,99,235,0.1)' : 'transparent',
+                              color: isActive ? 'var(--color-sidebar-active-text)' : 'var(--color-sidebar-muted)',
+                              background: isActive ? 'var(--color-sidebar-active)' : 'transparent',
                               fontWeight: isActive ? 500 : 400,
                             }}
                           >
@@ -299,8 +299,8 @@ export default function Sidebar() {
             <span
               className="text-[10px] font-semibold px-2 py-0.5 rounded-md"
               style={{
-                color: '#60a5fa',
-                background: 'rgba(37,99,235,0.12)',
+                color: 'var(--color-sidebar-active-text)',
+                background: 'var(--color-sidebar-active)',
                 border: '1px solid rgba(59,130,246,0.2)',
                 letterSpacing: '0.05em',
               }}

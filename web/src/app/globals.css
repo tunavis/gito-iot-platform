@@ -27,13 +27,15 @@
   --color-border: #d4dff0;
   --color-border-subtle: #e8eef8;
 
-  /* Sidebar — always dark navy */
-  --color-sidebar-bg: #050a12;
-  --color-sidebar-text: #e8f0fe;
-  --color-sidebar-muted: #5d7ea0;
-  --color-sidebar-active: rgba(59, 130, 246, 0.12);
-  --color-sidebar-hover: rgba(255, 255, 255, 0.04);
-  --color-sidebar-border: rgba(59, 130, 246, 0.08);
+  /* Sidebar — light in light mode */
+  --color-sidebar-bg: #f0f4fa;
+  --color-sidebar-text: #0a1628;
+  --color-sidebar-muted: #4a6080;
+  --color-sidebar-active: rgba(37, 99, 235, 0.08);
+  --color-sidebar-hover: rgba(0, 0, 0, 0.04);
+  --color-sidebar-border: rgba(0, 0, 0, 0.07);
+  --color-sidebar-active-text: #2563eb;
+  --color-sidebar-active-icon: #1d4ed8;
 
   /* Input */
   --color-input-bg: #ffffff;
@@ -58,7 +60,11 @@
   --color-border-subtle: #141f33;
 
   --color-sidebar-bg: #040810;
+  --color-sidebar-text: #e8f0fe;
+  --color-sidebar-muted: #5d7ea0;
   --color-sidebar-border: rgba(59, 130, 246, 0.1);
+  --color-sidebar-active-text: #93c5fd;
+  --color-sidebar-active-icon: #60a5fa;
 
   --color-input-bg: #0a1020;
   --color-input-border: #1e2d45;
