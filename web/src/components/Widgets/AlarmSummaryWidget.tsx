@@ -87,8 +87,8 @@ export default function AlarmSummaryWidget({ config: _config, dataSources: _ds }
   return (
     <div className="h-full flex flex-col p-2 gap-2">
       {/* Total */}
-      <div className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded-lg border border-gray-200">
-        <span className="text-sm font-semibold text-gray-700">Active Alarms</span>
+      <div className="flex items-center justify-between px-2 py-1 bg-page rounded-lg border border-th-default">
+        <span className="text-sm font-semibold text-th-primary">Active Alarms</span>
         <span className="text-xl font-bold text-red-600">{total}</span>
       </div>
 

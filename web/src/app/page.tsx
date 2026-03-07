@@ -23,7 +23,7 @@ export default function Home() {
         <div className="inline-block animate-spin mb-4">
           <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-700 rounded-full"></div>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Gito IoT Platform</h1>
+        <h1 className="text-2xl font-bold text-th-primary">Gito IoT Platform</h1>
         <p className="text-gray-600 mt-2">Loading...</p>
       </div>
     </div>

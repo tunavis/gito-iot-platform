@@ -3,6 +3,7 @@
 import { X, Save, Link as LinkIcon } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import DeviceBindingModal from "./DeviceBindingModal";
+import { formatMetricLabel } from "@/lib/formatMetricLabel";
 
 interface WidgetConfigModalProps {
   isOpen: boolean;
@@ -48,22 +49,19 @@ export default function WidgetConfigModal({
     titleManuallyEdited.current = true;
   };
 
-  const formatMetricName = (metric: string) =>
-    metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
   const generateTitle = (bindings: any[]): string => {
     const deviceNames = [...new Set(bindings.map((b: any) => b.device_name).filter(Boolean))];
     const metricNames = [...new Set(bindings.map((b: any) => b.metric))];
 
     if (bindings.length === 1) {
-      const metric = formatMetricName(metricNames[0]);
+      const metric = formatMetricLabel(metricNames[0]);
       return deviceNames[0] ? `${metric} - ${deviceNames[0]}` : metric;
     }
     if (deviceNames.length === 1) {
-      return `${deviceNames[0]} - ${metricNames.map(formatMetricName).join(', ')}`;
+      return `${deviceNames[0]} - ${metricNames.map(m => formatMetricLabel(m)).join(', ')}`;
     }
     if (metricNames.length === 1) {
-      return `${formatMetricName(metricNames[0])} - ${deviceNames.join(' vs ')}`;
+      return `${formatMetricLabel(metricNames[0])} - ${deviceNames.join(' vs ')}`;
     }
     return `${deviceNames.join(', ')} - Comparison`;
   };
@@ -107,7 +105,7 @@ export default function WidgetConfigModal({
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-th-primary mb-2">
           Decimal Places
         </label>
         <input
@@ -118,12 +116,12 @@ export default function WidgetConfigModal({
           onChange={(e) =>
             setConfig({ ...config, decimal_places: parseInt(e.target.value) })
           }
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-th-primary mb-2">
           Color
         </label>
         <div className="flex gap-2">
@@ -131,13 +129,13 @@ export default function WidgetConfigModal({
             type="color"
             value={config.color || "#3b82f6"}
             onChange={(e) => setConfig({ ...config, color: e.target.value })}
-            className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer"
+            className="h-10 w-20 rounded-lg border border-[var(--color-input-border)] cursor-pointer"
           />
           <input
             type="text"
             value={config.color || "#3b82f6"}
             onChange={(e) => setConfig({ ...config, color: e.target.value })}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="#3b82f6"
           />
         </div>
@@ -151,11 +149,11 @@ export default function WidgetConfigModal({
           onChange={(e) =>
             setConfig({ ...config, show_trend: e.target.checked })
           }
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+          className="w-4 h-4 text-blue-600 bg-panel border-[var(--color-input-border)] rounded focus:ring-blue-500 focus:ring-2"
         />
         <label
           htmlFor="show_trend"
-          className="text-sm font-medium text-gray-700"
+          className="text-sm font-medium text-th-primary"
         >
           Show Trend Indicator
         </label>
@@ -163,7 +161,7 @@ export default function WidgetConfigModal({
 
       {config.show_trend && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Trend Period
           </label>
           <select
@@ -171,7 +169,7 @@ export default function WidgetConfigModal({
             onChange={(e) =>
               setConfig({ ...config, trend_period: e.target.value })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="1h">Last Hour</option>
             <option value="6h">Last 6 Hours</option>
@@ -183,7 +181,7 @@ export default function WidgetConfigModal({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Warning Threshold
           </label>
           <input
@@ -197,13 +195,13 @@ export default function WidgetConfigModal({
                   : undefined,
               })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="Optional"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Critical Threshold
           </label>
           <input
@@ -217,7 +215,7 @@ export default function WidgetConfigModal({
                   : undefined,
               })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="Optional"
           />
         </div>
@@ -244,13 +242,13 @@ export default function WidgetConfigModal({
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-th-primary mb-2">
           Chart Type
         </label>
         <select
           value={config.chart_type || "line"}
           onChange={(e) => setConfig({ ...config, chart_type: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="line">Line Chart</option>
           <option value="area">Area Chart</option>
@@ -262,13 +260,13 @@ export default function WidgetConfigModal({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-th-primary mb-2">
           Time Range
         </label>
         <select
           value={config.time_range || "24h"}
           onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="1h">Last Hour</option>
           <option value="6h">Last 6 Hours</option>
@@ -280,7 +278,7 @@ export default function WidgetConfigModal({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-th-primary mb-2">
           Primary Color
         </label>
         <div className="flex gap-2">
@@ -288,17 +286,17 @@ export default function WidgetConfigModal({
             type="color"
             value={config.color || "#3b82f6"}
             onChange={(e) => setConfig({ ...config, color: e.target.value })}
-            className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer"
+            className="h-10 w-20 rounded-lg border border-[var(--color-input-border)] cursor-pointer"
           />
           <input
             type="text"
             value={config.color || "#3b82f6"}
             onChange={(e) => setConfig({ ...config, color: e.target.value })}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="#3b82f6"
           />
         </div>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-th-secondary mt-1">
           Multiple series will use color variations
         </p>
       </div>
@@ -319,7 +317,7 @@ export default function WidgetConfigModal({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Minimum Value
           </label>
           <input
@@ -328,12 +326,12 @@ export default function WidgetConfigModal({
             onChange={(e) =>
               setConfig({ ...config, min: parseFloat(e.target.value) })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Maximum Value
           </label>
           <input
@@ -342,27 +340,27 @@ export default function WidgetConfigModal({
             onChange={(e) =>
               setConfig({ ...config, max: parseFloat(e.target.value) })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Unit
           </label>
           <input
             type="text"
             value={config.unit ?? "%"}
             onChange={(e) => setConfig({ ...config, unit: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="%"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Decimal Places
           </label>
           <input
@@ -373,14 +371,14 @@ export default function WidgetConfigModal({
             onChange={(e) =>
               setConfig({ ...config, decimal_places: parseInt(e.target.value) })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Warning Threshold (%)
           </label>
           <input
@@ -392,12 +390,12 @@ export default function WidgetConfigModal({
                 threshold_warning: parseFloat(e.target.value),
               })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-th-primary mb-2">
             Critical Threshold (%)
           </label>
           <input
@@ -409,47 +407,47 @@ export default function WidgetConfigModal({
                 threshold_critical: parseFloat(e.target.value),
               })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-th-primary mb-2">
           Color Zones
         </label>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Safe</label>
+            <label className="block text-xs text-th-secondary mb-1">Safe</label>
             <input
               type="color"
               value={config.color_safe || "#10b981"}
               onChange={(e) =>
                 setConfig({ ...config, color_safe: e.target.value })
               }
-              className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+              className="w-full h-10 rounded-lg border border-[var(--color-input-border)] cursor-pointer"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Warning</label>
+            <label className="block text-xs text-th-secondary mb-1">Warning</label>
             <input
               type="color"
               value={config.color_warning || "#f59e0b"}
               onChange={(e) =>
                 setConfig({ ...config, color_warning: e.target.value })
               }
-              className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+              className="w-full h-10 rounded-lg border border-[var(--color-input-border)] cursor-pointer"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Critical</label>
+            <label className="block text-xs text-th-secondary mb-1">Critical</label>
             <input
               type="color"
               value={config.color_critical || "#ef4444"}
               onChange={(e) =>
                 setConfig({ ...config, color_critical: e.target.value })
               }
-              className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+              className="w-full h-10 rounded-lg border border-[var(--color-input-border)] cursor-pointer"
             />
           </div>
         </div>
@@ -463,11 +461,11 @@ export default function WidgetConfigModal({
           onChange={(e) =>
             setConfig({ ...config, show_value: e.target.checked })
           }
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+          className="w-4 h-4 text-blue-600 bg-panel border-[var(--color-input-border)] rounded focus:ring-blue-500 focus:ring-2"
         />
         <label
           htmlFor="show_value"
-          className="text-sm font-medium text-gray-700"
+          className="text-sm font-medium text-th-primary"
         >
           Show Value in Center
         </label>
@@ -483,9 +481,9 @@ export default function WidgetConfigModal({
           id="donut"
           checked={config.donut ?? true}
           onChange={(e) => setConfig({ ...config, donut: e.target.checked })}
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+          className="w-4 h-4 text-blue-600 bg-panel border-[var(--color-input-border)] rounded focus:ring-blue-500"
         />
-        <label htmlFor="donut" className="text-sm font-medium text-gray-700">Donut style (hollow center)</label>
+        <label htmlFor="donut" className="text-sm font-medium text-th-primary">Donut style (hollow center)</label>
       </div>
       <div className="flex items-center gap-2">
         <input
@@ -493,9 +491,9 @@ export default function WidgetConfigModal({
           id="show_legend"
           checked={config.show_legend ?? true}
           onChange={(e) => setConfig({ ...config, show_legend: e.target.checked })}
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+          className="w-4 h-4 text-blue-600 bg-panel border-[var(--color-input-border)] rounded focus:ring-blue-500"
         />
-        <label htmlFor="show_legend" className="text-sm font-medium text-gray-700">Show legend</label>
+        <label htmlFor="show_legend" className="text-sm font-medium text-th-primary">Show legend</label>
       </div>
       {dataSources && dataSources.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -517,31 +515,31 @@ export default function WidgetConfigModal({
       )}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
+          <label className="block text-sm font-medium text-th-primary mb-2">Unit</label>
           <input
             type="text"
             value={config.unit ?? ""}
             onChange={(e) => setConfig({ ...config, unit: e.target.value })}
             placeholder="e.g. °C"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Decimal Places</label>
+          <label className="block text-sm font-medium text-th-primary mb-2">Decimal Places</label>
           <input
             type="number" min="0" max="6"
             value={config.decimal_places ?? 2}
             onChange={(e) => setConfig({ ...config, decimal_places: parseInt(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+        <label className="block text-sm font-medium text-th-primary mb-2">Time Range</label>
         <select
           value={config.time_range || "24h"}
           onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="1h">Last Hour</option>
           <option value="6h">Last 6 Hours</option>
@@ -550,10 +548,10 @@ export default function WidgetConfigModal({
         </select>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Accent Color</label>
+        <label className="block text-sm font-medium text-th-primary mb-2">Accent Color</label>
         <div className="flex gap-2">
-          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer" />
-          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-[var(--color-input-border)] cursor-pointer" />
+          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         </div>
       </div>
     </div>
@@ -575,18 +573,18 @@ export default function WidgetConfigModal({
       {dataSources && dataSources.length > 0 && (
         <div className="space-y-1">
           {dataSources.slice(0, 2).map((ds: any, i: number) => (
-            <div key={i} className="text-sm text-gray-700 bg-gray-50 px-3 py-1.5 rounded border border-gray-200">
-              <span className="font-medium text-gray-500">{i === 0 ? "X axis" : "Y axis"}:</span> {ds.alias || ds.metric}
+            <div key={i} className="text-sm text-th-primary bg-page px-3 py-1.5 rounded border border-th-default">
+              <span className="font-medium text-th-secondary">{i === 0 ? "X axis" : "Y axis"}:</span> {ds.alias || ds.metric}
             </div>
           ))}
         </div>
       )}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+        <label className="block text-sm font-medium text-th-primary mb-2">Time Range</label>
         <select
           value={config.time_range || "24h"}
           onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="1h">Last Hour</option>
           <option value="6h">Last 6 Hours</option>
@@ -595,10 +593,10 @@ export default function WidgetConfigModal({
         </select>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Dot Color</label>
+        <label className="block text-sm font-medium text-th-primary mb-2">Dot Color</label>
         <div className="flex gap-2">
-          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer" />
-          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-[var(--color-input-border)] cursor-pointer" />
+          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         </div>
       </div>
     </div>
@@ -612,21 +610,21 @@ export default function WidgetConfigModal({
         </div>
       )}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+        <label className="block text-sm font-medium text-th-primary mb-2">Time Range</label>
         <select
           value={config.time_range || "7d"}
           onChange={(e) => setConfig({ ...config, time_range: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="7d">Last 7 Days</option>
           <option value="30d">Last 30 Days</option>
         </select>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Heat Color</label>
+        <label className="block text-sm font-medium text-th-primary mb-2">Heat Color</label>
         <div className="flex gap-2">
-          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-gray-300 cursor-pointer" />
-          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <input type="color" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="h-10 w-20 rounded-lg border border-[var(--color-input-border)] cursor-pointer" />
+          <input type="text" value={config.color || "#3b82f6"} onChange={(e) => setConfig({ ...config, color: e.target.value })} className="flex-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         </div>
       </div>
     </div>
@@ -652,7 +650,7 @@ export default function WidgetConfigModal({
         return renderHeatmapConfig();
       default:
         return (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-th-secondary">
             <p>No configuration available for this widget type</p>
           </div>
         );
@@ -665,22 +663,22 @@ export default function WidgetConfigModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-surface rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-th-default">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-th-primary">
               Widget Configuration
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-th-secondary mt-1">
               Customize your widget settings
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-th-secondary hover:text-th-primary hover:bg-panel rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -689,23 +687,23 @@ export default function WidgetConfigModal({
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           {/* Widget Title - Common for all widget types */}
-          <div className="mb-6 pb-6 border-b border-gray-200">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="mb-6 pb-6 border-b border-th-default">
+            <label className="block text-sm font-medium text-th-primary mb-2">
               Widget Title
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg bg-surface text-th-primary focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter widget title"
             />
           </div>
 
           {/* Device Binding Section */}
-          <div className="mb-6 pb-6 border-b border-gray-200">
+          <div className="mb-6 pb-6 border-b border-th-default">
             <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-th-primary">
                 Data Sources
               </label>
               <button
@@ -721,9 +719,9 @@ export default function WidgetConfigModal({
                 {dataSources.map((source, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded text-sm"
+                    className="flex items-center justify-between p-2 bg-page border border-th-default rounded text-sm"
                   >
-                    <span className="text-gray-900">
+                    <span className="text-th-primary">
                       {source.alias || source.metric} ({source.metric})
                     </span>
                     <button
@@ -738,7 +736,7 @@ export default function WidgetConfigModal({
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-th-secondary">
                 No devices bound. Click &quot;Bind Device&quot; to add data sources.
               </p>
             )}
@@ -748,10 +746,10 @@ export default function WidgetConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-th-default bg-page">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-th-primary hover:bg-panel rounded-lg transition-colors"
           >
             Cancel
           </button>

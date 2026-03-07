@@ -157,11 +157,11 @@ void loop() {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-surface rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-surface/20 rounded-lg flex items-center justify-center">
               <CheckCircle2 className="w-7 h-7 text-white" />
             </div>
             <div>
@@ -180,30 +180,30 @@ void loop() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Device Info */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="bg-page border border-th-default rounded-lg p-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">Device Name</label>
-                <p className="text-sm font-semibold text-gray-900 mt-1">{device.name}</p>
+                <label className="text-xs font-medium text-th-secondary uppercase">Device Name</label>
+                <p className="text-sm font-semibold text-th-primary mt-1">{device.name}</p>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 uppercase">Device Type</label>
-                <p className="text-sm font-semibold text-gray-900 mt-1">{device.device_type?.name || 'Unknown'}</p>
+                <label className="text-xs font-medium text-th-secondary uppercase">Device Type</label>
+                <p className="text-sm font-semibold text-th-primary mt-1">{device.device_type?.name || 'Unknown'}</p>
               </div>
               <div className="col-span-2">
-                <label className="text-xs font-medium text-gray-600 uppercase mb-2 block">Device ID</label>
+                <label className="text-xs font-medium text-th-secondary uppercase mb-2 block">Device ID</label>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-sm font-mono bg-white border border-gray-300 rounded px-3 py-2 text-gray-900">
+                  <code className="flex-1 text-sm font-mono bg-surface border border-[var(--color-input-border)] rounded px-3 py-2 text-th-primary">
                     {device.id}
                   </code>
                   <button
                     onClick={() => copyToClipboard(device.id, 'device_id')}
-                    className="px-3 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                    className="px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded hover:bg-page transition-colors"
                   >
                     {copiedField === 'device_id' ? (
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                     ) : (
-                      <Copy className="w-4 h-4 text-gray-600" />
+                      <Copy className="w-4 h-4 text-th-secondary" />
                     )}
                   </button>
                 </div>
@@ -215,34 +215,34 @@ void loop() {
           {protocol === 'mqtt' && (
             <>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-th-primary mb-3 flex items-center gap-2">
                   <Wifi className="w-5 h-5 text-primary-600" />
                   MQTT Connection Details
                 </h3>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-medium text-gray-600 uppercase block mb-1">Broker Host</label>
+                      <label className="text-xs font-medium text-th-secondary uppercase block mb-1">Broker Host</label>
                       <div className="flex items-center gap-2">
-                        <code className="flex-1 text-sm font-mono bg-gray-50 border border-gray-200 rounded px-3 py-2 text-gray-900">
+                        <code className="flex-1 text-sm font-mono bg-page border border-th-default rounded px-3 py-2 text-th-primary">
                           {mqttConfig.host}
                         </code>
                         <button
                           onClick={() => copyToClipboard(mqttConfig.host, 'host')}
-                          className="p-2 hover:bg-gray-100 rounded transition-colors"
+                          className="p-2 hover:bg-panel rounded transition-colors"
                         >
                           {copiedField === 'host' ? (
                             <CheckCircle2 className="w-4 h-4 text-green-600" />
                           ) : (
-                            <Copy className="w-4 h-4 text-gray-600" />
+                            <Copy className="w-4 h-4 text-th-secondary" />
                           )}
                         </button>
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-600 uppercase block mb-1">Port</label>
+                      <label className="text-xs font-medium text-th-secondary uppercase block mb-1">Port</label>
                       <div className="flex items-center gap-2">
-                        <code className="flex-1 text-sm font-mono bg-gray-50 border border-gray-200 rounded px-3 py-2 text-gray-900">
+                        <code className="flex-1 text-sm font-mono bg-page border border-th-default rounded px-3 py-2 text-th-primary">
                           {mqttConfig.port} (Plain) / {mqttConfig.tlsPort} (TLS)
                         </code>
                       </div>
@@ -250,19 +250,19 @@ void loop() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 uppercase block mb-1">Telemetry Topic</label>
+                    <label className="text-xs font-medium text-th-secondary uppercase block mb-1">Telemetry Topic</label>
                     <div className="flex items-center gap-2">
-                      <code className="flex-1 text-sm font-mono bg-gray-50 border border-gray-200 rounded px-3 py-2 text-gray-900">
+                      <code className="flex-1 text-sm font-mono bg-page border border-th-default rounded px-3 py-2 text-th-primary">
                         {mqttConfig.topic}
                       </code>
                       <button
                         onClick={() => copyToClipboard(mqttConfig.topic, 'topic')}
-                        className="p-2 hover:bg-gray-100 rounded transition-colors"
+                        className="p-2 hover:bg-panel rounded transition-colors"
                       >
                         {copiedField === 'topic' ? (
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
                         ) : (
-                          <Copy className="w-4 h-4 text-gray-600" />
+                          <Copy className="w-4 h-4 text-th-secondary" />
                         )}
                       </button>
                     </div>
@@ -278,19 +278,19 @@ void loop() {
 
               {/* Code Examples */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-th-primary mb-3 flex items-center gap-2">
                   <Code className="w-5 h-5 text-primary-600" />
                   Code Examples
                 </h3>
 
                 {/* Tabs */}
-                <div className="flex gap-2 border-b border-gray-200 mb-4">
+                <div className="flex gap-2 border-b border-th-default mb-4">
                   <button
                     onClick={() => setActiveTab('mqtt')}
                     className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
                       activeTab === 'mqtt'
                         ? 'text-primary-600 border-primary-600'
-                        : 'text-gray-600 border-transparent hover:text-gray-900'
+                        : 'text-th-secondary border-transparent hover:text-th-primary'
                     }`}
                   >
                     MQTT Client
@@ -300,7 +300,7 @@ void loop() {
                     className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
                       activeTab === 'python'
                         ? 'text-primary-600 border-primary-600'
-                        : 'text-gray-600 border-transparent hover:text-gray-900'
+                        : 'text-th-secondary border-transparent hover:text-th-primary'
                     }`}
                   >
                     Python
@@ -310,7 +310,7 @@ void loop() {
                     className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
                       activeTab === 'arduino'
                         ? 'text-primary-600 border-primary-600'
-                        : 'text-gray-600 border-transparent hover:text-gray-900'
+                        : 'text-th-secondary border-transparent hover:text-th-primary'
                     }`}
                   >
                     Arduino/ESP32
@@ -321,7 +321,7 @@ void loop() {
                 <div className="relative">
                   {activeTab === 'mqtt' && (
                     <div className="space-y-3">
-                      <p className="text-sm text-gray-600">Test your device connection using any MQTT client:</p>
+                      <p className="text-sm text-th-secondary">Test your device connection using any MQTT client:</p>
                       <pre className="bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto text-xs">
 {`# Using mosquitto_pub (command line)
 mosquitto_pub -h ${mqttConfig.host} -p ${mqttConfig.port} \\
@@ -339,10 +339,10 @@ mosquitto_pub -h ${mqttConfig.host} -p ${mqttConfig.port} \\
                   {activeTab === 'python' && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-600">Python script with paho-mqtt library:</p>
+                        <p className="text-sm text-th-secondary">Python script with paho-mqtt library:</p>
                         <button
                           onClick={() => copyToClipboard(pythonExample, 'python')}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm transition-colors"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-panel hover:bg-panel rounded text-sm transition-colors"
                         >
                           {copiedField === 'python' ? (
                             <>
@@ -371,10 +371,10 @@ mosquitto_pub -h ${mqttConfig.host} -p ${mqttConfig.port} \\
                   {activeTab === 'arduino' && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-600">ESP32/ESP8266 Arduino sketch:</p>
+                        <p className="text-sm text-th-secondary">ESP32/ESP8266 Arduino sketch:</p>
                         <button
                           onClick={() => copyToClipboard(arduinoExample, 'arduino')}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm transition-colors"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-panel hover:bg-panel rounded text-sm transition-colors"
                         >
                           {copiedField === 'arduino' ? (
                             <>
@@ -452,10 +452,10 @@ mosquitto_pub -h ${mqttConfig.host} -p ${mqttConfig.port} \\
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between">
+        <div className="border-t border-th-default px-6 py-4 bg-page flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+            className="px-4 py-2 text-th-secondary hover:text-th-primary transition-colors"
           >
             Close
           </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight, Shield, Mail, Globe } from 'lucide-react';
 
@@ -144,31 +144,27 @@ export default function NotificationRulesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Alert Routing</h1>
-              <p className="text-gray-600 mt-2">Route alerts to notification channels</p>
-            </div>
-            <button
-              onClick={() => setShowNewForm(true)}
-              className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-sm"
-            >
-              <Plus className="w-5 h-5" />
-              Add Route
-            </button>
-          </div>
-
+    <PageShell
+      title="Alert Routing"
+      subtitle="Route alerts to notification channels"
+      action={
+        <button
+          onClick={() => setShowNewForm(true)}
+          className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-sm"
+        >
+          <Plus className="w-5 h-5" />
+          Add Route
+        </button>
+      }
+    >
+      <div className="mb-8">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            <div className="bg-white rounded-lg p-6 border border-primary-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-surface rounded-xl p-6 border border-primary-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Total Routes</p>
-                  <p className="text-3xl font-bold text-slate-900">{rules.length}</p>
+                  <p className="text-th-secondary text-sm font-medium mb-1">Total Routes</p>
+                  <p className="text-3xl font-bold text-th-primary">{rules.length}</p>
                 </div>
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
                   <Shield className="w-6 h-6 text-primary-600" />
@@ -176,10 +172,10 @@ export default function NotificationRulesPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-surface rounded-xl p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Enabled</p>
+                  <p className="text-th-secondary text-sm font-medium mb-1">Enabled</p>
                   <p className="text-3xl font-bold text-green-600">{rules.filter(r => r.enabled).length}</p>
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -188,14 +184,14 @@ export default function NotificationRulesPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-6 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-surface rounded-xl p-6 border border-primary-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium mb-1">Channels</p>
-                  <p className="text-3xl font-bold text-blue-600">{channels.filter(c => c.enabled).length}</p>
+                  <p className="text-th-secondary text-sm font-medium mb-1">Channels</p>
+                  <p className="text-3xl font-bold text-primary-600">{channels.filter(c => c.enabled).length}</p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Bell className="w-6 h-6 text-blue-600" />
+                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
+                  <Bell className="w-6 h-6 text-primary-600" />
                 </div>
               </div>
             </div>
@@ -214,9 +210,9 @@ export default function NotificationRulesPage() {
           />
         )}
 
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="border-b border-gray-200 px-6 py-3 bg-gray-50">
-            <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase">
+        <div className="bg-surface rounded-xl border border-th-default shadow-sm overflow-hidden">
+          <div className="border-b border-th-default px-6 py-3 bg-page">
+            <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-th-secondary uppercase">
               <div className="col-span-4">Alert Rule</div>
               <div className="col-span-3">Channel Type</div>
               <div className="col-span-2">Channel Detail</div>
@@ -224,23 +220,23 @@ export default function NotificationRulesPage() {
               <div className="col-span-2 text-right">Actions</div>
             </div>
           </div>
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-[var(--color-border)]">
             {loading ? (
-              <div className="px-6 py-8 text-center text-sm text-gray-600">Loading routes...</div>
+              <div className="px-6 py-8 text-center text-sm text-th-secondary">Loading routes...</div>
             ) : rules.length === 0 ? (
-              <div className="px-6 py-8 text-center text-sm text-gray-600">
+              <div className="px-6 py-8 text-center text-sm text-th-secondary">
                 No alert routes found. Click &quot;Add Route&quot; to create one.
               </div>
             ) : (
               rules.map(rule => {
                 const channel = getChannelDisplay(rule.channel_id);
                 return (
-                  <div key={rule.id} className="px-6 py-4 hover:bg-gray-50">
+                  <div key={rule.id} className="px-6 py-4 hover:bg-panel">
                     <div className="grid grid-cols-12 gap-4 items-center">
                       <div className="col-span-4">
                         <div className="flex items-center gap-2">
-                          <Bell className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-900">
+                          <Bell className="w-4 h-4 text-th-muted" />
+                          <span className="text-sm font-medium text-th-primary">
                             {getAlertRuleName(rule.alert_rule_id)}
                           </span>
                         </div>
@@ -248,17 +244,17 @@ export default function NotificationRulesPage() {
                       <div className="col-span-3">
                         <div className="flex items-center gap-2">
                           {channel.icon}
-                          <span className="text-sm text-gray-700 capitalize">{channel.type}</span>
+                          <span className="text-sm text-th-primary capitalize">{channel.type}</span>
                         </div>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-sm text-gray-600 truncate block">{channel.detail}</span>
+                        <span className="text-sm text-th-secondary truncate block">{channel.detail}</span>
                       </div>
                       <div className="col-span-1">
                         <button
                           onClick={() => toggleRule(rule.id, rule.enabled)}
                           className={`flex items-center gap-1 text-xs font-medium ${
-                            rule.enabled ? 'text-green-600' : 'text-gray-400'
+                            rule.enabled ? 'text-green-600' : 'text-th-muted'
                           }`}
                           title={rule.enabled ? 'Disable' : 'Enable'}
                         >
@@ -273,7 +269,7 @@ export default function NotificationRulesPage() {
                       <div className="col-span-2 flex justify-end">
                         <button
                           onClick={() => deleteRule(rule.id)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-th-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Delete rule"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -286,8 +282,7 @@ export default function NotificationRulesPage() {
             )}
           </div>
         </div>
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
@@ -352,8 +347,8 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Alert Route</h3>
+      <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 className="text-lg font-semibold text-th-primary mb-4">Add Alert Route</h3>
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
@@ -363,12 +358,12 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Alert Rule *</label>
+            <label className="block text-sm font-medium text-th-primary mb-1">Alert Rule *</label>
             <select
               required
               value={formData.alert_rule_id}
               onChange={(e) => setFormData({ ...formData, alert_rule_id: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Select alert rule...</option>
               {alertRules.map(rule => (
@@ -380,12 +375,12 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notification Channel *</label>
+            <label className="block text-sm font-medium text-th-primary mb-1">Notification Channel *</label>
             <select
               required
               value={formData.channel_id}
               onChange={(e) => setFormData({ ...formData, channel_id: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Select channel...</option>
               {channels.filter(c => c.enabled).map(channel => (
@@ -401,16 +396,16 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
               type="checkbox"
               checked={formData.enabled}
               onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-              className="w-4 h-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              className="w-4 h-4 text-primary-600 focus:ring-primary-500 border-[var(--color-input-border)] rounded"
             />
-            <label className="text-sm text-gray-700">Enable route immediately</label>
+            <label className="text-sm text-th-primary">Enable route immediately</label>
           </div>
 
           <div className="flex gap-3 pt-4">
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2.5 text-sm border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-panel transition-colors"
             >
               Cancel
             </button>

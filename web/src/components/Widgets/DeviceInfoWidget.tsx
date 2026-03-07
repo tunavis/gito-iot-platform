@@ -308,8 +308,8 @@ export default function DeviceInfoWidget({
   if (!device) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">
-          <Activity className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+        <div className="text-center text-th-secondary">
+          <Activity className="w-12 h-12 mx-auto mb-2 text-th-muted" />
           <p className="text-sm">No device selected</p>
         </div>
       </div>
@@ -321,15 +321,15 @@ export default function DeviceInfoWidget({
   const hasCustomSvg = isWaterType;
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-lg overflow-hidden">
+    <div className="h-full flex flex-col bg-surface rounded-lg overflow-hidden">
       {/* Header row - Device name + status */}
       <div className="px-4 pt-4 pb-2 flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-semibold text-gray-900 truncate">
+          <h3 className="text-base font-semibold text-th-primary truncate">
             {device.name || "Unknown Device"}
           </h3>
           {device.device_type && (
-            <p className="text-xs text-gray-500 capitalize mt-0.5">
+            <p className="text-xs text-th-secondary capitalize mt-0.5">
               {device.device_type.replace(/_/g, " ")}
             </p>
           )}
@@ -339,7 +339,7 @@ export default function DeviceInfoWidget({
             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
               online
                 ? "bg-green-50 text-green-700"
-                : "bg-gray-100 text-gray-500"
+                : "bg-panel text-th-secondary"
             }`}
           >
             <div

@@ -316,14 +316,14 @@ export default function EditDevicePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-page">
         <Sidebar />
         <main className="flex-1 ml-64 p-8 flex items-center justify-center">
           <div className="text-center">
             <div className="inline-block animate-spin mb-4">
               <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
             </div>
-            <p className="text-gray-600 font-medium">Loading device...</p>
+            <p className="text-th-secondary font-medium">Loading device...</p>
           </div>
         </main>
       </div>
@@ -331,7 +331,7 @@ export default function EditDevicePage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-page">
       <Sidebar />
       <main className="flex-1 ml-64 p-8">
         {/* Header */}
@@ -339,13 +339,13 @@ export default function EditDevicePage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.back()}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+              className="p-2 hover:bg-panel rounded-lg transition-colors text-th-secondary"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Edit Device</h1>
-              <p className="text-gray-600 mt-1">
+              <h1 className="text-3xl font-bold text-th-primary">Edit Device</h1>
+              <p className="text-th-secondary mt-1">
                 Update settings for <span className="font-medium">{device?.name}</span>
               </p>
             </div>
@@ -361,35 +361,35 @@ export default function EditDevicePage() {
 
         <form onSubmit={handleSubmit} className="max-w-4xl space-y-6">
           {/* Basic Info */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-th-primary mb-4">Basic Information</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Device Name *</label>
+                <label className="block text-sm font-medium text-th-primary mb-1">Device Name *</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
+                  <label className="block text-sm font-medium text-th-primary mb-1">Serial Number</label>
                   <input
                     type="text"
                     value={form.serial_number}
                     onChange={e => setForm(prev => ({ ...prev, serial_number: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Device Type</label>
+                  <label className="block text-sm font-medium text-th-primary mb-1">Device Type</label>
                   <select
                     value={form.device_type_id}
                     onChange={e => setForm(prev => ({ ...prev, device_type_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   >
                     {deviceTypes.map(dt => (
                       <option key={dt.id} value={dt.id}>{dt.name}</option>
@@ -399,23 +399,23 @@ export default function EditDevicePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-th-primary mb-1">Description</label>
                 <textarea
                   value={form.description}
                   onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50 resize-none"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50 resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                <label className="block text-sm font-medium text-th-primary mb-1">Tags</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {form.tags.map(tag => (
-                    <span key={tag} className="px-2 py-1 bg-gray-100 rounded text-sm text-gray-700 flex items-center gap-1">
+                    <span key={tag} className="px-2 py-1 bg-panel rounded text-sm text-th-primary flex items-center gap-1">
                       <Tag className="w-3 h-3" />
                       {tag}
-                      <button type="button" onClick={() => removeTag(tag)} className="ml-1 text-gray-500 hover:text-gray-900">×</button>
+                      <button type="button" onClick={() => removeTag(tag)} className="ml-1 text-th-secondary hover:text-th-primary">×</button>
                     </span>
                   ))}
                 </div>
@@ -426,9 +426,9 @@ export default function EditDevicePage() {
                     onChange={e => setForm(prev => ({ ...prev, newTag: e.target.value }))}
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
                     placeholder="Add a tag..."
-                    className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className="flex-1 px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   />
-                  <button type="button" onClick={addTag} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                  <button type="button" onClick={addTag} className="px-3 py-2 bg-panel hover:bg-panel rounded-lg transition-colors">
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
@@ -437,64 +437,64 @@ export default function EditDevicePage() {
           </div>
 
           {/* Firmware & Hardware */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Firmware & Hardware</h2>
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-th-primary mb-4">Firmware & Hardware</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Firmware Version</label>
+                <label className="block text-sm font-medium text-th-primary mb-1">Firmware Version</label>
                 <input
                   type="text"
                   value={form.firmware_version}
                   onChange={e => setForm(prev => ({ ...prev, firmware_version: e.target.value }))}
                   placeholder="e.g., 1.2.3"
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hardware Version</label>
+                <label className="block text-sm font-medium text-th-primary mb-1">Hardware Version</label>
                 <input
                   type="text"
                   value={form.hardware_version}
                   onChange={e => setForm(prev => ({ ...prev, hardware_version: e.target.value }))}
                   placeholder="e.g., rev2.1"
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
             </div>
           </div>
 
           {/* Connectivity */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Connectivity</h2>
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-th-primary mb-4">Connectivity</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Device EUI (DevEUI)</label>
+                <label className="block text-sm font-medium text-th-primary mb-1">Device EUI (DevEUI)</label>
                 <input
                   type="text"
                   value={form.lorawan_dev_eui}
                   onChange={e => setForm(prev => ({ ...prev, lorawan_dev_eui: e.target.value }))}
                   placeholder="70B3D57ED005XXXX"
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
-                <p className="text-xs text-gray-500 mt-1">16-character hexadecimal identifier for LoRaWAN devices</p>
+                <p className="text-xs text-th-secondary mt-1">16-character hexadecimal identifier for LoRaWAN devices</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">ChirpStack App ID</label>
+                  <label className="block text-sm font-medium text-th-primary mb-1">ChirpStack App ID</label>
                   <input
                     type="text"
                     value={form.chirpstack_app_id}
                     onChange={e => setForm(prev => ({ ...prev, chirpstack_app_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Device Profile ID</label>
+                  <label className="block text-sm font-medium text-th-primary mb-1">Device Profile ID</label>
                   <input
                     type="text"
                     value={form.device_profile_id}
                     onChange={e => setForm(prev => ({ ...prev, device_profile_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   />
                 </div>
               </div>
@@ -502,18 +502,18 @@ export default function EditDevicePage() {
           </div>
 
           {/* Placement */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Placement</h2>
+          <div className="bg-surface border border-th-default rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-th-primary mb-4">Placement</h2>
             <div className="space-y-4">
               {/* Organization (required) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-th-primary mb-1">
                   <Building className="w-4 h-4 inline mr-1" /> Organization <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.organization_id}
                   onChange={e => setForm(prev => ({ ...prev, organization_id: e.target.value, site_id: '', device_group_id: '' }))}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   required
                 >
                   <option value="">Select organization...</option>
@@ -525,13 +525,13 @@ export default function EditDevicePage() {
 
               {/* Site (required, filtered by org) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-th-primary mb-1">
                   <Building className="w-4 h-4 inline mr-1" /> Site <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.site_id}
                   onChange={e => setForm(prev => ({ ...prev, site_id: e.target.value, device_group_id: '' }))}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   disabled={!form.organization_id}
                   required
                 >
@@ -544,13 +544,13 @@ export default function EditDevicePage() {
 
               {/* Device Group (required, filtered by site) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-th-primary mb-1">
                   <Layers className="w-4 h-4 inline mr-1" /> Device Group <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.device_group_id}
                   onChange={e => setForm(prev => ({ ...prev, device_group_id: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                   disabled={!form.site_id}
                   required
                 >
@@ -561,31 +561,31 @@ export default function EditDevicePage() {
                 </select>
               </div>
 
-              <div className="pt-4 border-t border-gray-200">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="pt-4 border-t border-th-default">
+                <label className="block text-sm font-medium text-th-primary mb-2">
                   <MapPin className="w-4 h-4 inline mr-1" /> GPS Location
                 </label>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Latitude</label>
+                    <label className="block text-xs text-th-secondary mb-1">Latitude</label>
                     <input
                       type="number"
                       step="any"
                       value={form.latitude}
                       onChange={e => setForm(prev => ({ ...prev, latitude: e.target.value }))}
                       placeholder="-33.9249"
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                      className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Longitude</label>
+                    <label className="block text-xs text-th-secondary mb-1">Longitude</label>
                     <input
                       type="number"
                       step="any"
                       value={form.longitude}
                       onChange={e => setForm(prev => ({ ...prev, longitude: e.target.value }))}
                       placeholder="18.4241"
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                      className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                     />
                   </div>
                 </div>
@@ -598,7 +598,7 @@ export default function EditDevicePage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className="px-4 py-2 text-th-secondary hover:text-th-primary transition-colors"
             >
               Cancel
             </button>

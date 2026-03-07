@@ -90,7 +90,7 @@ export default function HeatmapWidget({ config, dataSources }: HeatmapWidgetProp
 
   if (!dataSources || dataSources.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-full flex items-center justify-center text-th-muted text-sm">
         No device bound — configure widget
       </div>
     );
@@ -120,7 +120,7 @@ export default function HeatmapWidget({ config, dataSources }: HeatmapWidgetProp
         {/* Day labels */}
         <div className="flex flex-col justify-around pr-1 flex-shrink-0">
           {DAY_LABELS.map((d) => (
-            <div key={d} className="text-xs text-gray-400 leading-none" style={{ fontSize: "10px" }}>
+            <div key={d} className="text-xs text-th-muted leading-none" style={{ fontSize: "10px" }}>
               {d}
             </div>
           ))}
@@ -149,7 +149,7 @@ export default function HeatmapWidget({ config, dataSources }: HeatmapWidgetProp
         {HOUR_LABELS.map((h, i) => (
           <div
             key={h}
-            className="text-gray-400 text-center"
+            className="text-th-muted text-center"
             style={{
               fontSize: "9px",
               position: "relative",
@@ -164,7 +164,7 @@ export default function HeatmapWidget({ config, dataSources }: HeatmapWidgetProp
 
       {/* Tooltip */}
       {tooltip && (
-        <div className="text-center text-xs text-gray-500">
+        <div className="text-center text-xs text-th-secondary">
           {DAY_LABELS[tooltip.day]} {String(tooltip.hour).padStart(2, "0")}:00 —{" "}
           <strong>{tooltip.count}</strong> reading{tooltip.count !== 1 ? "s" : ""}
         </div>
@@ -172,7 +172,7 @@ export default function HeatmapWidget({ config, dataSources }: HeatmapWidgetProp
 
       {/* Legend */}
       <div className="flex items-center gap-2 justify-end">
-        <span className="text-xs text-gray-400">Less</span>
+        <span className="text-xs text-th-muted">Less</span>
         {[0, 0.25, 0.5, 0.75, 1].map((t) => (
           <div
             key={t}
@@ -182,7 +182,7 @@ export default function HeatmapWidget({ config, dataSources }: HeatmapWidgetProp
             }}
           />
         ))}
-        <span className="text-xs text-gray-400">More</span>
+        <span className="text-xs text-th-muted">More</span>
       </div>
     </div>
   );

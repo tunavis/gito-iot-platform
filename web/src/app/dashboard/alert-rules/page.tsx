@@ -2,8 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
+import { formatMetricLabel } from '@/lib/formatMetricLabel';
+import { Badge, SeverityBadge } from '@/components/ui/Badge';
+import { btn, input } from '@/components/ui/buttonStyles';
+import { Plus, Edit2, Trash2, Bell } from 'lucide-react';
 
 // ============================================================================
 // TYPES - Unified Alert Rules (THRESHOLD + COMPOSITE)
@@ -52,8 +56,8 @@ interface Device {
 interface DeviceType {
   id: string;
   name: string;
-  data_model?: Array<{ name: string; type?: string; unit?: string }>;
-  telemetry_schema?: Record<string, { type?: string; unit?: string }>;
+  data_model?: Array<{ name: string; type?: string; unit?: string; description?: string }>;
+  telemetry_schema?: Record<string, { type?: string; unit?: string; description?: string }>;
 }
 
 // Helper to extract tenant_id from JWT token
@@ -182,18 +186,6 @@ export default function AlertRulesPage() {
     }
   };
 
-  const getSeverityColor = (severity: Severity) => {
-    switch (severity) {
-      case 'critical': return 'bg-red-100 text-red-700';
-      case 'warning': return 'bg-orange-100 text-orange-700';
-      default: return 'bg-blue-100 text-blue-700';
-    }
-  };
-
-  const getTypeColor = (type: RuleType) => {
-    return type === 'THRESHOLD' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700';
-  };
-
   const getOperatorSymbol = (op: string) => {
     const symbols: Record<string, string> = {
       gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠'
@@ -208,100 +200,99 @@ export default function AlertRulesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Alert Rules</h1>
-          <p className="text-gray-600">Configure threshold and composite alert rules for your devices</p>
-        </div>
+    <PageShell
+      title="Alert Rules"
+      subtitle="Configure threshold and composite alert rules for your devices"
+    >
 
         {/* Filters */}
-        <div className="bg-white rounded border border-gray-200 p-4 mb-6">
-          <div className="flex flex-wrap gap-4 items-end">
-            {/* Type Filter */}
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Type</label>
-              <div className="flex gap-1">
-                {(['ALL', 'THRESHOLD', 'COMPOSITE'] as const).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => setFilterType(type)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                      filterType === type 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {type === 'ALL' ? 'All' : type}
-                  </button>
-                ))}
+        <div className="gito-card p-4 mb-6">
+          <div className="flex flex-wrap gap-4 items-end justify-between">
+            <div className="flex flex-wrap gap-4 items-end">
+              {/* Type Filter */}
+              <div>
+                <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">Type</label>
+                <div className="flex gap-1 p-1 bg-panel rounded-lg border border-[var(--color-border)]">
+                  {(['ALL', 'THRESHOLD', 'COMPOSITE'] as const).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setFilterType(type)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        filterType === type
+                          ? 'bg-primary-600 text-white shadow-sm'
+                          : 'text-th-muted hover:text-th-primary'
+                      }`}
+                    >
+                      {type === 'ALL' ? 'All' : type}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            
-            {/* Severity Filter */}
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Severity</label>
-              <div className="flex gap-1">
-                {(['ALL', 'critical', 'warning', 'info'] as const).map(sev => (
-                  <button
-                    key={sev}
-                    onClick={() => setFilterSeverity(sev as Severity | 'ALL')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                      filterSeverity === sev 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {sev === 'ALL' ? 'All' : sev.charAt(0).toUpperCase() + sev.slice(1)}
-                  </button>
-                ))}
+
+              {/* Severity Filter */}
+              <div>
+                <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">Severity</label>
+                <div className="flex gap-1 p-1 bg-panel rounded-lg border border-[var(--color-border)]">
+                  {(['ALL', 'critical', 'warning', 'info'] as const).map(sev => (
+                    <button
+                      key={sev}
+                      onClick={() => setFilterSeverity(sev as Severity | 'ALL')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        filterSeverity === sev
+                          ? 'bg-primary-600 text-white shadow-sm'
+                          : 'text-th-muted hover:text-th-primary'
+                      }`}
+                    >
+                      {sev === 'ALL' ? 'All' : sev.charAt(0).toUpperCase() + sev.slice(1)}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            
-            {/* Status Filter */}
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Status</label>
-              <div className="flex gap-1">
-                {([null, true, false] as const).map((status, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setFilterEnabled(status)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                      filterEnabled === status 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {status === null ? 'All' : status ? 'Enabled' : 'Disabled'}
-                  </button>
-                ))}
+
+              {/* Status Filter */}
+              <div>
+                <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">Status</label>
+                <div className="flex gap-1 p-1 bg-panel rounded-lg border border-[var(--color-border)]">
+                  {([null, true, false] as const).map((status, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setFilterEnabled(status)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        filterEnabled === status
+                          ? 'bg-primary-600 text-white shadow-sm'
+                          : 'text-th-muted hover:text-th-primary'
+                      }`}
+                    >
+                      {status === null ? 'All' : status ? 'Enabled' : 'Disabled'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Device Filter */}
+              <div>
+                <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">Device</label>
+                <select
+                  value={filterDevice}
+                  onChange={e => setFilterDevice(e.target.value)}
+                  className={input.select}
+                  style={{ width: 'auto' }}
+                >
+                  <option value="all">All Devices</option>
+                  {devices.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* Device Filter */}
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Device</label>
-              <select 
-                value={filterDevice} 
-                onChange={e => setFilterDevice(e.target.value)} 
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white"
-              >
-                <option value="all">All Devices</option>
-                {devices.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="ml-auto">
-              <button
-                onClick={() => setShowNewRuleForm(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
-              >
-                + Create Rule
-              </button>
-            </div>
+            <button
+              onClick={() => setShowNewRuleForm(true)}
+              className={`${btn.primary} flex items-center gap-2`}
+            >
+              <Plus className="w-4 h-4" />
+              Create Rule
+            </button>
           </div>
         </div>
 
@@ -336,63 +327,84 @@ export default function AlertRulesPage() {
 
         {/* Rules List */}
         {loading ? (
-          <div className="text-center py-8 text-gray-600">Loading rules...</div>
+          <div className="gito-card p-12 text-center text-sm text-th-secondary">Loading rules...</div>
         ) : rules.length === 0 ? (
-          <div className="bg-white rounded border border-gray-200 p-12 text-center">
-            <p className="text-gray-600 mb-4">No alert rules configured</p>
-            <button
-              onClick={() => setShowNewRuleForm(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Create First Rule
+          <div className="gito-card p-12 text-center flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
+              <Bell className="w-7 h-7 text-th-muted" />
+            </div>
+            <h3 className="text-base font-bold text-th-primary mb-1.5">No alert rules configured</h3>
+            <p className="text-sm text-th-secondary mb-5">Create your first rule to monitor device metrics</p>
+            <button onClick={() => setShowNewRuleForm(true)} className={`${btn.primary} flex items-center gap-2`}>
+              <Plus className="w-4 h-4" />Create First Rule
             </button>
           </div>
         ) : (
           <div className="grid gap-4">
             {rules.map(rule => (
-              <div key={rule.id} className="bg-white rounded border border-gray-200 p-5">
+              <div key={rule.id} className="gito-card p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-gray-900">{rule.name}</h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getTypeColor(rule.rule_type)}`}>
-                        {rule.rule_type}
-                      </span>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getSeverityColor(rule.severity)}`}>
-                        {rule.severity}
-                      </span>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-th-primary">{rule.name}</h3>
+                      <Badge
+                        variant={rule.rule_type === 'THRESHOLD' ? 'purple' : 'info'}
+                        label={rule.rule_type}
+                        size="sm"
+                      />
+                      <SeverityBadge severity={rule.severity} />
+                      <Badge
+                        variant={rule.enabled ? 'success' : 'neutral'}
+                        label={rule.enabled ? 'Enabled' : 'Disabled'}
+                        size="sm"
+                      />
                     </div>
-                    {rule.description && <p className="text-sm text-gray-600">{rule.description}</p>}
+                    {rule.description && <p className="text-sm text-th-secondary">{rule.description}</p>}
+                  </div>
+                  <div className="flex items-center gap-1 ml-4">
+                    <button
+                      onClick={() => toggleRule(rule)}
+                      className={btn.icon}
+                      title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                    >
+                      <span className="text-xs font-medium">{rule.enabled ? 'ON' : 'OFF'}</span>
+                    </button>
+                    <button onClick={() => setEditingRule(rule)} className={btn.icon} title="Edit">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setDeleteConfirm({ id: rule.id, name: rule.name })} className={btn.iconDanger} title="Delete">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
                 {/* Rule Details */}
-                <div className="bg-gray-50 rounded p-3 mb-3 text-sm">
+                <div className="rounded-lg p-3 mb-3 text-sm" style={{ background: 'var(--color-page)', border: '1px solid var(--color-border)' }}>
                   {rule.rule_type === 'THRESHOLD' ? (
-                    <div className="flex items-center gap-4">
-                      <span className="text-gray-600">Device:</span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-th-muted text-xs">Device:</span>
                       {rule.device_id ? (
-                        <Link href={`/dashboard/devices/${rule.device_id}`} className="font-medium text-blue-600 hover:text-blue-700">
+                        <Link href={`/dashboard/devices/${rule.device_id}`} className="font-medium text-primary-500 hover:text-primary-400 text-xs">
                           {getDeviceName(rule.device_id)}
                         </Link>
                       ) : (
-                        <span className="text-gray-600">Global Rule</span>
+                        <span className="text-xs text-th-muted">Global Rule</span>
                       )}
-                      <span className="text-gray-400">|</span>
-                      <span className="font-medium text-gray-800">
-                        {rule.metric} {getOperatorSymbol(rule.operator || '')} {rule.threshold}
+                      <span className="text-th-muted opacity-40">|</span>
+                      <span className="font-mono text-xs font-medium text-th-primary">
+                        {formatMetricLabel(rule.metric || '')} {getOperatorSymbol(rule.operator || '')} {rule.threshold}
                       </span>
                     </div>
                   ) : (
                     <div>
-                      <div className="text-xs text-gray-500 uppercase mb-2">
+                      <div className="text-[10px] font-bold text-th-muted uppercase tracking-wider mb-2">
                         Conditions ({rule.logic} logic)
                       </div>
                       <ul className="space-y-1">
                         {rule.conditions?.map((cond, idx) => (
-                          <li key={idx} className="text-gray-700">
-                            • {cond.field} {getOperatorSymbol(cond.operator)} {cond.threshold}
-                            {cond.weight > 1 && <span className="text-gray-500 ml-2">(weight: {cond.weight})</span>}
+                          <li key={idx} className="text-xs font-mono text-th-primary">
+                            • {formatMetricLabel(cond.field)} {getOperatorSymbol(cond.operator)} {cond.threshold}
+                            {cond.weight > 1 && <span className="text-th-muted ml-2">(weight: {cond.weight})</span>}
                           </li>
                         ))}
                       </ul>
@@ -400,33 +412,8 @@ export default function AlertRulesPage() {
                   )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => toggleRule(rule)}
-                    className={`px-3 py-1 text-xs font-medium rounded ${
-                      rule.enabled
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {rule.enabled ? 'Enabled' : 'Disabled'}
-                  </button>
-                  <button
-                    onClick={() => setEditingRule(rule)}
-                    className="px-3 py-1 text-xs font-medium rounded bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm({ id: rule.id, name: rule.name })}
-                    className="px-3 py-1 text-xs font-medium rounded bg-red-50 text-red-600 hover:bg-red-100"
-                  >
-                    Delete
-                  </button>
-                  <span className="ml-auto text-xs text-gray-500">
-                    Cooldown: {rule.cooldown_minutes}m
-                  </span>
+                <div className="flex items-center">
+                  <span className="text-xs text-th-muted">Cooldown: <span className="font-medium text-th-secondary">{rule.cooldown_minutes}m</span></span>
                 </div>
               </div>
             ))}
@@ -435,32 +422,22 @@ export default function AlertRulesPage() {
 
         {/* Delete Confirmation Modal */}
         {deleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Deletion</h3>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete the alert rule{' '}
-                <span className="font-medium text-gray-900">&quot;{deleteConfirm.name}&quot;</span>?
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="gito-card p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold text-th-primary mb-1">Delete Alert Rule</h3>
+              <p className="text-sm text-th-secondary mb-5">
+                Are you sure you want to delete{' '}
+                <span className="font-semibold text-th-primary">&quot;{deleteConfirm.name}&quot;</span>?
+                This action cannot be undone.
               </p>
               <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="px-4 py-2 text-sm font-medium border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={deleteRule}
-                  className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700"
-                >
-                  Delete
-                </button>
+                <button onClick={() => setDeleteConfirm(null)} className={btn.secondary}>Cancel</button>
+                <button onClick={deleteRule} className={btn.danger}>Delete</button>
               </div>
             </div>
           </div>
         )}
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
@@ -471,7 +448,7 @@ export default function AlertRulesPage() {
 
 // ── Schema helpers ────────────────────────────────────────────────────────────
 
-type SchemaField = { type?: string; unit?: string; min?: number; max?: number };
+type SchemaField = { type?: string; unit?: string; description?: string; min?: number; max?: number };
 type Schema = Record<string, SchemaField>;
 
 const NUMERIC_FIELD_TYPES = new Set(['float', 'integer', 'number']);
@@ -481,7 +458,7 @@ function getSchemaForDevice(deviceId: string, devices: Device[], deviceTypes: De
     if (dt.telemetry_schema) return dt.telemetry_schema as Schema;
     if (dt.data_model && Array.isArray(dt.data_model)) {
       return Object.fromEntries(
-        dt.data_model.filter(f => f.name).map(f => [f.name, { type: f.type, unit: f.unit }])
+        dt.data_model.filter(f => f.name).map(f => [f.name, { type: f.type, unit: f.unit, description: f.description }])
       );
     }
     return {};
@@ -617,12 +594,12 @@ function NewRuleForm({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Create Alert Rule</h3>
+    <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
+      <h3 className="text-lg font-semibold text-th-primary mb-6">Create Alert Rule</h3>
       <form onSubmit={handleSubmit}>
         {/* Rule Type Selection */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Rule Type</label>
+          <label className="block text-sm font-medium text-th-primary mb-2">Rule Type</label>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -631,10 +608,10 @@ function NewRuleForm({
                 value="THRESHOLD"
                 checked={ruleType === 'THRESHOLD'}
                 onChange={() => setRuleType('THRESHOLD')}
-                className="text-blue-600"
+                className="text-primary-600"
               />
               <span className="text-sm font-medium">Threshold</span>
-              <span className="text-xs text-gray-500">(single metric)</span>
+              <span className="text-xs text-th-secondary">(single metric)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -643,10 +620,10 @@ function NewRuleForm({
                 value="COMPOSITE"
                 checked={ruleType === 'COMPOSITE'}
                 onChange={() => setRuleType('COMPOSITE')}
-                className="text-blue-600"
+                className="text-primary-600"
               />
               <span className="text-sm font-medium">Composite</span>
-              <span className="text-xs text-gray-500">(multiple conditions)</span>
+              <span className="text-xs text-th-secondary">(multiple conditions)</span>
             </label>
           </div>
         </div>
@@ -654,22 +631,22 @@ function NewRuleForm({
         {/* Common Fields */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-th-primary mb-1">Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="e.g., High Temperature Alert"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <label className="block text-sm font-medium text-th-primary mb-1">Severity</label>
             <select
               value={severity}
               onChange={e => setSeverity(e.target.value as Severity)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
             >
               <option value="info">Info</option>
               <option value="warning">Warning</option>
@@ -679,11 +656,11 @@ function NewRuleForm({
         </div>
 
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+          <label className="block text-sm font-medium text-th-primary mb-1">Description (optional)</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
             rows={2}
             placeholder="Optional description..."
           />
@@ -691,15 +668,15 @@ function NewRuleForm({
 
         {/* THRESHOLD-specific fields */}
         {ruleType === 'THRESHOLD' && (
-          <div className="bg-purple-50 border border-purple-200 rounded p-4 mb-6">
+          <div className="bg-purple-50 border border-purple-200 rounded-lgp-4 mb-6">
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Device</label>
+                <label className="block text-sm text-th-primary mb-1">Device</label>
                 <select
                   value={deviceId}
                   onChange={e => { setDeviceId(e.target.value); setMetric(''); }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                 >
                   <option value="">Global (all devices)</option>
                   {devices.map(d => (
@@ -708,23 +685,23 @@ function NewRuleForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">
+                <label className="block text-sm text-th-primary mb-1">
                   Metric
                   {availableMetrics.length > 0 && (
-                    <span className="ml-1 text-xs text-gray-400 font-normal">(numeric only)</span>
+                    <span className="ml-1 text-xs text-th-muted font-normal">(numeric only)</span>
                   )}
                 </label>
                 <select
                   value={metric}
                   onChange={e => { setMetric(e.target.value); if (e.target.value !== '__custom__') setCustomMetric(''); }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                 >
                   <option value="">Select metric...</option>
                   {availableMetrics.map(m => {
                     const s = deviceSchema[m];
                     return (
                       <option key={m} value={m}>
-                        {m}{s?.unit ? ` (${s.unit})` : ''}
+                        {s?.description || formatMetricLabel(m)}{s?.unit ? ` (${s.unit})` : ''}
                       </option>
                     );
                   })}
@@ -735,7 +712,7 @@ function NewRuleForm({
                     type="text"
                     value={customMetric}
                     onChange={e => setCustomMetric(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 border border-gray-300 rounded text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                     placeholder="Enter metric key"
                     required
                   />
@@ -753,11 +730,11 @@ function NewRuleForm({
                 )}
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Operator</label>
+                <label className="block text-sm text-th-primary mb-1">Operator</label>
                 <select
                   value={operator}
                   onChange={e => setOperator(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
                   <option value="gte">&ge; Greater or equal</option>
@@ -768,17 +745,17 @@ function NewRuleForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">
+                <label className="block text-sm text-th-primary mb-1">
                   Threshold
                   {selectedMetricSchema?.unit && (
-                    <span className="ml-1 text-xs text-gray-400 font-normal">({selectedMetricSchema.unit})</span>
+                    <span className="ml-1 text-xs text-th-muted font-normal">({selectedMetricSchema.unit})</span>
                   )}
                 </label>
                 <input
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                   step="0.1"
                   placeholder={
                     selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined
@@ -787,7 +764,7 @@ function NewRuleForm({
                   }
                 />
                 {selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined && (
-                  <p className="mt-1 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-th-muted">
                     Valid range: {selectedMetricSchema.min} – {selectedMetricSchema.max}
                   </p>
                 )}
@@ -798,14 +775,14 @@ function NewRuleForm({
 
         {/* COMPOSITE-specific fields */}
         {ruleType === 'COMPOSITE' && (
-          <div className="bg-teal-50 border border-teal-200 rounded p-4 mb-6">
+          <div className="bg-teal-50 border border-teal-200 rounded-lgp-4 mb-6">
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-sm font-semibold text-teal-900">Conditions</h4>
               <div className="flex items-center gap-3">
                 <select
                   value={logic}
                   onChange={e => setLogic(e.target.value as ConditionLogic)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded"
+                  className="px-3 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                 >
                   <option value="AND">AND (all must match)</option>
                   <option value="OR">OR (any can match)</option>
@@ -813,7 +790,7 @@ function NewRuleForm({
                 <button
                   type="button"
                   onClick={addCondition}
-                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded hover:bg-teal-700"
+                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lghover:bg-teal-700"
                 >
                   + Add Condition
                 </button>
@@ -825,28 +802,28 @@ function NewRuleForm({
             ) : (
               <div className="space-y-2">
                 {conditions.map((cond, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded border">
+                  <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lgborder">
                     <select
                       value={cond.field}
                       onChange={e => updateCondition(idx, { field: e.target.value })}
-                      className="px-2 py-1 text-sm border border-gray-300 rounded"
+                      className="px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                     >
                       {allMetrics.map(m => {
                         const s = deviceSchema[m];
                         return (
                           <option key={m} value={m}>
-                            {m}{s?.unit ? ` (${s.unit})` : ''}
+                            {s?.description || formatMetricLabel(m)}{s?.unit ? ` (${s.unit})` : ''}
                           </option>
                         );
                       })}
                       {!allMetrics.includes(cond.field) && (
-                        <option value={cond.field}>{cond.field}</option>
+                        <option value={cond.field}>{formatMetricLabel(cond.field)}</option>
                       )}
                     </select>
                     <select
                       value={cond.operator}
                       onChange={e => updateCondition(idx, { operator: e.target.value })}
-                      className="px-2 py-1 text-sm border border-gray-300 rounded"
+                      className="px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                     >
                       <option value="gt">&gt;</option>
                       <option value="gte">&ge;</option>
@@ -859,15 +836,15 @@ function NewRuleForm({
                       type="number"
                       value={cond.threshold}
                       onChange={e => updateCondition(idx, { threshold: parseFloat(e.target.value) })}
-                      className="w-24 px-2 py-1 text-sm border border-gray-300 rounded"
+                      className="w-24 px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                       step="0.1"
                     />
-                    <span className="text-xs text-gray-500">Weight:</span>
+                    <span className="text-xs text-th-secondary">Weight:</span>
                     <input
                       type="number"
                       value={cond.weight}
                       onChange={e => updateCondition(idx, { weight: parseInt(e.target.value) || 1 })}
-                      className="w-16 px-2 py-1 text-sm border border-gray-300 rounded"
+                      className="w-16 px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                       min="1"
                       max="100"
                     />
@@ -890,18 +867,18 @@ function NewRuleForm({
 
         {/* Cooldown */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-th-primary mb-1">
             Cooldown (minutes)
           </label>
           <input
             type="number"
             value={cooldownMinutes}
             onChange={e => setCooldownMinutes(parseInt(e.target.value) || 5)}
-            className="w-32 px-3 py-2 border border-gray-300 rounded"
+            className="w-32 px-3 py-2 border border-[var(--color-input-border)] rounded-lg"
             min="1"
             max="1440"
           />
-          <p className="text-xs text-gray-500 mt-1">Minimum time between alerts (1-1440 minutes)</p>
+          <p className="text-xs text-th-secondary mt-1">Minimum time between alerts (1-1440 minutes)</p>
         </div>
 
         {/* Actions */}
@@ -909,13 +886,13 @@ function NewRuleForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium border border-gray-300 rounded hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lghover:bg-page"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lghover:bg-primary-700"
           >
             Create Rule
           </button>
@@ -1011,29 +988,29 @@ function EditRuleForm({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">
+    <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
+      <h3 className="text-lg font-semibold text-th-primary mb-6">
         Edit {rule.rule_type} Rule
       </h3>
       <form onSubmit={handleSubmit}>
         {/* Common Fields */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-th-primary mb-1">Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <label className="block text-sm font-medium text-th-primary mb-1">Severity</label>
             <select
               value={severity}
               onChange={e => setSeverity(e.target.value as Severity)}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg"
             >
               <option value="info">Info</option>
               <option value="warning">Warning</option>
@@ -1043,41 +1020,41 @@ function EditRuleForm({
         </div>
 
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label className="block text-sm font-medium text-th-primary mb-1">Description</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg"
             rows={2}
           />
         </div>
 
         {/* THRESHOLD fields */}
         {rule.rule_type === 'THRESHOLD' && (
-          <div className="bg-purple-50 border border-purple-200 rounded p-4 mb-6">
+          <div className="bg-purple-50 border border-purple-200 rounded-lgp-4 mb-6">
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Metric</label>
+                <label className="block text-sm text-th-primary mb-1">Metric</label>
                 <select
                   value={metric}
                   onChange={e => setMetric(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                 >
                   {availableMetrics.map(m => (
-                    <option key={m} value={m}>{m}</option>
+                    <option key={m} value={m}>{formatMetricLabel(m)}</option>
                   ))}
                   {metric && !availableMetrics.includes(metric) && (
-                    <option value={metric}>{metric}</option>
+                    <option value={metric}>{formatMetricLabel(metric)}</option>
                   )}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Operator</label>
+                <label className="block text-sm text-th-primary mb-1">Operator</label>
                 <select
                   value={operator}
                   onChange={e => setOperator(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
                   <option value="gte">&ge; Greater or equal</option>
@@ -1088,12 +1065,12 @@ function EditRuleForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Threshold</label>
+                <label className="block text-sm text-th-primary mb-1">Threshold</label>
                 <input
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                   step="0.1"
                 />
               </div>
@@ -1103,14 +1080,14 @@ function EditRuleForm({
 
         {/* COMPOSITE fields */}
         {rule.rule_type === 'COMPOSITE' && (
-          <div className="bg-teal-50 border border-teal-200 rounded p-4 mb-6">
+          <div className="bg-teal-50 border border-teal-200 rounded-lgp-4 mb-6">
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-sm font-semibold text-teal-900">Conditions</h4>
               <div className="flex items-center gap-3">
                 <select
                   value={logic}
                   onChange={e => setLogic(e.target.value as ConditionLogic)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded"
+                  className="px-3 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                 >
                   <option value="AND">AND (all must match)</option>
                   <option value="OR">OR (any can match)</option>
@@ -1118,7 +1095,7 @@ function EditRuleForm({
                 <button
                   type="button"
                   onClick={addCondition}
-                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded hover:bg-teal-700"
+                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lghover:bg-teal-700"
                 >
                   + Add Condition
                 </button>
@@ -1127,11 +1104,11 @@ function EditRuleForm({
             
             <div className="space-y-2">
               {conditions.map((cond, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded border">
+                <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lgborder">
                   <select
                     value={cond.field}
                     onChange={e => updateCondition(idx, { field: e.target.value })}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded"
+                    className="px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                   >
                     {availableMetrics.map(m => (
                       <option key={m} value={m}>{m}</option>
@@ -1143,7 +1120,7 @@ function EditRuleForm({
                   <select
                     value={cond.operator}
                     onChange={e => updateCondition(idx, { operator: e.target.value })}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded"
+                    className="px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                   >
                     <option value="gt">&gt;</option>
                     <option value="gte">&ge;</option>
@@ -1156,15 +1133,15 @@ function EditRuleForm({
                     type="number"
                     value={cond.threshold}
                     onChange={e => updateCondition(idx, { threshold: parseFloat(e.target.value) })}
-                    className="w-24 px-2 py-1 text-sm border border-gray-300 rounded"
+                    className="w-24 px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                     step="0.1"
                   />
-                  <span className="text-xs text-gray-500">Weight:</span>
+                  <span className="text-xs text-th-secondary">Weight:</span>
                   <input
                     type="number"
                     value={cond.weight}
                     onChange={e => updateCondition(idx, { weight: parseInt(e.target.value) || 1 })}
-                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded"
+                    className="w-16 px-2 py-1 text-sm border border-[var(--color-input-border)] rounded-lg"
                     min="1"
                     max="100"
                   />
@@ -1183,12 +1160,12 @@ function EditRuleForm({
 
         {/* Cooldown */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Cooldown (minutes)</label>
+          <label className="block text-sm font-medium text-th-primary mb-1">Cooldown (minutes)</label>
           <input
             type="number"
             value={cooldownMinutes}
             onChange={e => setCooldownMinutes(parseInt(e.target.value) || 5)}
-            className="w-32 px-3 py-2 border border-gray-300 rounded"
+            className="w-32 px-3 py-2 border border-[var(--color-input-border)] rounded-lg"
             min="1"
             max="1440"
           />
@@ -1199,13 +1176,13 @@ function EditRuleForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium border border-gray-300 rounded hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lghover:bg-page"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lghover:bg-primary-700"
           >
             Update Rule
           </button>

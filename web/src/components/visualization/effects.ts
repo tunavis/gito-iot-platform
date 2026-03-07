@@ -102,19 +102,20 @@ function inferEffect(key: string, unit = ''): FlowEffect {
  */
 export function classifyMetric(
   key: string,
-  schema: { type?: string; unit?: string; min?: number; max?: number } = {}
+  schema: { type?: string; unit?: string; description?: string; min?: number; max?: number } = {}
 ): MetricDefinition {
   const k = key.toLowerCase();
   const unit = schema.unit ?? '';
+  const label = schema.description || undefined;
 
   // State metrics: string type OR state-like keywords
   if (schema.type === 'string' || schema.type === 'boolean' || matchesAny(k, STATE_KEYWORDS)) {
-    return { category: 'state', unit, label: key };
+    return { category: 'state', unit, label };
   }
 
   // Level metrics
   if (matchesAny(k, LEVEL_KEYWORDS)) {
-    return { category: 'level', unit, min: schema.min, max: schema.max ?? 100, label: key };
+    return { category: 'level', unit, min: schema.min, max: schema.max ?? 100, label };
   }
 
   // Flow metrics
@@ -125,12 +126,12 @@ export function classifyMetric(
       min: schema.min,
       max: schema.max,
       effect: inferEffect(key, unit),
-      label: key,
+      label,
     };
   }
 
   // Default: scalar
-  return { category: 'scalar', unit, min: schema.min, max: schema.max, label: key };
+  return { category: 'scalar', unit, min: schema.min, max: schema.max, label };
 }
 
 /**

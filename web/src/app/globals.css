@@ -2,143 +2,212 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Gito brand colors CSS variables */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ─── Theme Variables ─────────────────────────────────────────────────────── */
 :root {
-  --color-primary: #0066CC;
-  --color-accent: #00A8E8;
+  --color-primary: #2563eb;
+  --color-accent: #22d3ee;
   --color-dark: #001F3F;
   --color-light: #E8F4F8;
+
+  /* Page & surface — cool blue-tinted */
+  --color-page: #f4f7fb;
+  --color-surface: #ffffff;
+  --color-panel: #eef2f8;
+  --color-card: #ffffff;
+  --color-card-hover: #f4f7fb;
+
+  /* Text — cool navy, not pure black */
+  --color-text-primary: #0a1628;
+  --color-text-secondary: #4a6080;
+  --color-text-muted: #7c9bc2;
+
+  /* Borders — blue-tinted */
+  --color-border: #d4dff0;
+  --color-border-subtle: #e8eef8;
+
+  /* Sidebar — always dark navy */
+  --color-sidebar-bg: #050a12;
+  --color-sidebar-text: #e8f0fe;
+  --color-sidebar-muted: #5d7ea0;
+  --color-sidebar-active: rgba(59, 130, 246, 0.12);
+  --color-sidebar-hover: rgba(255, 255, 255, 0.04);
+  --color-sidebar-border: rgba(59, 130, 246, 0.08);
+
+  /* Input */
+  --color-input-bg: #ffffff;
+  --color-input-border: #c8d6ec;
+
+  /* Dot grid */
+  --dot-color: rgba(100, 130, 180, 0.1);
 }
 
-/* Global styles */
+.dark {
+  --color-page: #070c16;
+  --color-surface: #0d1422;
+  --color-panel: #111b2e;
+  --color-card: #0f1928;
+  --color-card-hover: #152035;
+
+  --color-text-primary: #e8f0fe;
+  --color-text-secondary: #7c9bc2;
+  --color-text-muted: #4a6080;
+
+  --color-border: #1e2d45;
+  --color-border-subtle: #141f33;
+
+  --color-sidebar-bg: #040810;
+  --color-sidebar-border: rgba(59, 130, 246, 0.1);
+
+  --color-input-bg: #0a1020;
+  --color-input-border: #1e2d45;
+
+  --dot-color: rgba(59, 130, 246, 0.05);
+}
+
+/* ─── Global Styles ───────────────────────────────────────────────────────── */
 html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+html.transitioning,
+html.transitioning *,
+html.transitioning *::before,
+html.transitioning *::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease !important;
+}
+
 body {
-  background-color: #f9fafb;
-  color: #111827;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--color-page);
+  color: var(--color-text-primary);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
 }
 
-/* Typography */
 h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-  color: #001f3f;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
 }
+h1 { font-size: 2.25rem; line-height: 2.5rem; }
+h2 { font-size: 1.875rem; line-height: 2.25rem; }
+h3 { font-size: 1.5rem; line-height: 2rem; }
 
-h1 {
-  font-size: 2.25rem;
-  line-height: 2.5rem;
-}
-
-h2 {
-  font-size: 1.875rem;
-  line-height: 2.25rem;
-}
-
-h3 {
-  font-size: 1.5rem;
-  line-height: 2rem;
-}
-
-/* Links */
 a {
   color: var(--color-primary);
   text-decoration: none;
-  transition: color 0.2s ease-in-out;
+  transition: color 0.15s ease;
 }
+a:hover { opacity: 0.8; }
 
-a:hover {
-  color: var(--color-dark);
-  text-decoration: underline;
-}
-
-/* Buttons */
 button {
   font-family: inherit;
-  font-size: 1rem;
-  border-radius: 0.375rem;
-  transition: all 0.2s ease-in-out;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  transition: all 0.15s ease;
 }
-
 button:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
-/* Forms */
-input,
-textarea,
-select {
-  border-radius: 0.375rem;
-  border: 1px solid #d1d5db;
+input, textarea, select {
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-input-border);
+  background-color: var(--color-input-bg);
+  color: var(--color-text-primary);
   padding: 0.5rem 0.75rem;
   font-family: inherit;
-  font-size: 1rem;
-  transition: border-color 0.2s ease-in-out;
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
+input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
-
-input:disabled,
-textarea:disabled,
-select:disabled {
-  background-color: #f3f4f6;
-  color: #9ca3af;
+input:disabled, textarea:disabled, select:disabled {
+  background-color: var(--color-panel);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
-/* Loading animation */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+/* ─── Card System ─────────────────────────────────────────────────────────── */
+.gito-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.dark .gito-card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.gito-card:hover {
+  border-color: rgba(37,99,235,0.25);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(37,99,235,0.07);
+}
+.dark .gito-card:hover {
+  border-color: rgba(59,130,246,0.2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 8px 32px rgba(37,99,235,0.1);
 }
 
-.animate-spin {
-  animation: spin 1s linear infinite;
+/* ─── Sticky Page Header ──────────────────────────────────────────────────── */
+.gito-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--color-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(244, 247, 251, 0.9);
+}
+.dark .gito-page-header {
+  background: rgba(7, 12, 22, 0.9);
 }
 
-/* Accessibility */
+/* ─── Loading ─────────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-spin { animation: spin 1s linear infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--color-panel) 25%, var(--color-surface) 50%, var(--color-panel) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ─── Accessibility ───────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-/* HMI Industrial Design Tokens */
+/* ─── HMI Industrial Design Tokens ───────────────────────────────────────── */
 :root {
-  /* HMI Surface colors - muted, industrial */
-  --hmi-bg-primary: #f8fafc;
+  --hmi-bg-primary: #f4f7fb;
   --hmi-bg-surface: #ffffff;
-  --hmi-bg-panel: #f1f5f9;
-  --hmi-bg-inset: #e2e8f0;
-
-  /* HMI Border colors */
-  --hmi-border: #cbd5e1;
-  --hmi-border-subtle: #e2e8f0;
-  --hmi-border-strong: #94a3b8;
-
-  /* HMI Text colors */
-  --hmi-text-primary: #0f172a;
-  --hmi-text-secondary: #475569;
-  --hmi-text-muted: #94a3b8;
-  --hmi-text-value: #1e293b;
-
-  /* HMI Status colors - desaturated industrial */
+  --hmi-bg-panel: #eef2f8;
+  --hmi-bg-inset: #d4dff0;
+  --hmi-border: #c8d6ec;
+  --hmi-border-subtle: #d4dff0;
+  --hmi-border-strong: #7c9bc2;
+  --hmi-text-primary: #0a1628;
+  --hmi-text-secondary: #4a6080;
+  --hmi-text-muted: #7c9bc2;
+  --hmi-text-value: #0d1422;
   --hmi-status-online: #16a34a;
   --hmi-status-ok: #16a34a;
   --hmi-status-ok-bg: #f0fdf4;
@@ -149,75 +218,72 @@ select:disabled {
   --hmi-status-offline: #64748b;
   --hmi-status-offline-bg: #f1f5f9;
   --hmi-status-idle: #f59e0b;
-
-  /* HMI Gauge colors */
-  --hmi-gauge-track: #e2e8f0;
-  --hmi-gauge-fill: #3b82f6;
-  --hmi-gauge-tick: #94a3b8;
-  --hmi-gauge-face: #f8fafc;
-
-  /* HMI Font for numeric readouts */
-  --hmi-font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', ui-monospace, monospace;
-
-  /* HMI Sizing */
+  --hmi-gauge-track: #d4dff0;
+  --hmi-gauge-fill: #2563eb;
+  --hmi-gauge-tick: #7c9bc2;
+  --hmi-gauge-face: #f4f7fb;
+  --hmi-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   --hmi-gauge-size-lg: 180px;
   --hmi-gauge-size-md: 120px;
   --hmi-gauge-size-sm: 64px;
   --hmi-tile-height: 220px;
-
-  /* SVG HMI Card tokens */
-  --hmi-svg-card-bg: #f8fafc;
-  --hmi-svg-card-border: #e2e8f0;
-
-  /* Category accent colors */
-  --hmi-accent-meter: #0ea5e9;
-  --hmi-accent-sensor: #22c55e;
-  --hmi-accent-gateway: #8b5cf6;
-  --hmi-accent-controller: #f59e0b;
-  --hmi-accent-actuator: #ef4444;
-  --hmi-accent-tracker: #06b6d4;
+  --hmi-svg-card-bg: #f4f7fb;
+  --hmi-svg-card-border: #d4dff0;
+  --hmi-accent-meter: #2563eb;
+  --hmi-accent-sensor: #16a34a;
+  --hmi-accent-gateway: #7c3aed;
+  --hmi-accent-controller: #d97706;
+  --hmi-accent-actuator: #dc2626;
+  --hmi-accent-tracker: #0891b2;
 }
 
 @keyframes hmi-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+.hmi-pulse { animation: hmi-pulse 2s ease-in-out infinite; }
+.hmi-svg-transition { transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
 
-.hmi-pulse {
-  animation: hmi-pulse 2s ease-in-out infinite;
-}
-
-/* SVG HMI transition class — GPU-accelerated value changes */
-.hmi-svg-transition {
-  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* SVG skeleton shimmer animation */
 @keyframes hmi-skeleton-pulse {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 0.6; }
 }
+.hmi-skeleton-pulse { animation: hmi-skeleton-pulse 1.5s ease-in-out infinite; }
 
-.hmi-skeleton-pulse {
-  animation: hmi-skeleton-pulse 1.5s ease-in-out infinite;
+.dark {
+  --hmi-status-ok-bg: rgba(22, 163, 74, 0.15);
+  --hmi-status-warn-bg: rgba(217, 119, 6, 0.15);
+  --hmi-status-alarm-bg: rgba(220, 38, 38, 0.15);
+  --hmi-status-offline-bg: rgba(100, 116, 139, 0.15);
+  --hmi-bg-primary: #070c16;
+  --hmi-bg-surface: #0d1422;
+  --hmi-bg-panel: #111b2e;
+  --hmi-bg-inset: #1e2d45;
+  --hmi-border: #1e2d45;
+  --hmi-border-subtle: #141f33;
+  --hmi-border-strong: #4a6080;
+  --hmi-text-primary: #e8f0fe;
+  --hmi-text-secondary: #7c9bc2;
+  --hmi-text-muted: #4a6080;
+  --hmi-text-value: #c8d6ec;
+  --hmi-gauge-track: #1e2d45;
+  --hmi-gauge-face: #0d1422;
+  --hmi-svg-card-bg: #0d1422;
+  --hmi-svg-card-border: #1e2d45;
 }
 
-/* Dark mode (optional for future) */
-@media (prefers-color-scheme: dark) {
-  /* Add dark mode styles here when needed */
-}
-
-/* ─── Visualization Layer — Flow Animation Keyframes ─────────────────────────
- * Used by FlowLine component (web/src/components/visualization/FlowLine.tsx).
- * stroke-dashoffset of 200 covers all dash patterns (max patternLength ≈ 15px).
- * Speed is controlled via animation-duration set inline per component.
- * ─────────────────────────────────────────────────────────────────────────── */
+/* ─── Visualization Layer ─────────────────────────────────────────────────── */
 @keyframes viz-flow-fwd {
   from { stroke-dashoffset: 200; }
   to   { stroke-dashoffset: 0; }
 }
-
 @keyframes viz-flow-rev {
   from { stroke-dashoffset: 0; }
   to   { stroke-dashoffset: 200; }
 }
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }

@@ -94,7 +94,7 @@ export default function StatusMatrixWidget({ config }: StatusMatrixWidgetProps) 
 
   if (devices.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-full flex items-center justify-center text-th-muted text-sm">
         No devices found
       </div>
     );
@@ -120,19 +120,19 @@ export default function StatusMatrixWidget({ config }: StatusMatrixWidgetProps) 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Fleet health summary bar */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+      <div className="flex items-center gap-3 px-3 py-2 border-b border-th-subtle bg-page flex-shrink-0">
         {/* Health score */}
         <div className="flex items-center gap-1.5">
           <div
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: healthPct >= 80 ? "#22c55e" : healthPct >= 50 ? "#f59e0b" : "#ef4444" }}
           />
-          <span className="text-sm font-bold text-gray-900">{healthPct}%</span>
-          <span className="text-xs text-gray-500">fleet health</span>
+          <span className="text-sm font-bold text-th-primary">{healthPct}%</span>
+          <span className="text-xs text-th-secondary">fleet health</span>
         </div>
 
         {/* Progress bar */}
-        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div className="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-500"
             style={{
@@ -146,17 +146,17 @@ export default function StatusMatrixWidget({ config }: StatusMatrixWidgetProps) 
         <div className="flex items-center gap-2 text-xs flex-shrink-0">
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-            <span className="text-gray-600">{onlineCount}</span>
+            <span className="text-th-secondary">{onlineCount}</span>
           </span>
           {idleCount > 0 && (
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />
-              <span className="text-gray-600">{idleCount}</span>
+              <span className="text-th-secondary">{idleCount}</span>
             </span>
           )}
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
-            <span className="text-gray-600">{offlineCount}</span>
+            <span className="text-th-secondary">{offlineCount}</span>
           </span>
         </div>
       </div>
@@ -180,7 +180,7 @@ export default function StatusMatrixWidget({ config }: StatusMatrixWidgetProps) 
                     style={{ backgroundColor: cfg.dot }}
                   />
                   <span
-                    className="text-xs font-semibold leading-tight line-clamp-2 text-gray-800"
+                    className="text-xs font-semibold leading-tight line-clamp-2 text-th-primary"
                     title={device.name}
                   >
                     {device.name}
@@ -190,12 +190,12 @@ export default function StatusMatrixWidget({ config }: StatusMatrixWidgetProps) 
                 {/* Bottom metadata */}
                 <div className="mt-1 flex flex-col gap-0.5">
                   {device.device_type && tile_size !== "sm" && (
-                    <span className="text-[10px] text-gray-400 truncate capitalize">
+                    <span className="text-[10px] text-th-muted truncate capitalize">
                       {device.device_type.replace(/_/g, " ")}
                     </span>
                   )}
                   {show_location && device.location && (
-                    <span className="text-[10px] text-gray-400 truncate">{device.location}</span>
+                    <span className="text-[10px] text-th-muted truncate">{device.location}</span>
                   )}
                   {show_last_seen && tile_size !== "sm" && (
                     <span className="text-[10px]" style={{ color: cfg.dot }}>

@@ -231,33 +231,33 @@ export default function WidgetLibrary({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+        className="bg-surface rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-th-default">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Widget Library</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h2 className="text-xl font-semibold text-th-primary">Widget Library</h2>
+            <p className="text-sm text-th-secondary mt-0.5">
               {WIDGET_TYPES.length} widget types available
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-th-secondary hover:text-th-primary hover:bg-panel rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Category tabs */}
-        <div className="flex gap-2 px-6 py-3 border-b border-gray-200 overflow-x-auto">
+        <div className="flex gap-2 px-6 py-3 border-b border-th-default overflow-x-auto">
           <button
             onClick={() => setSelectedCategory(null)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
               selectedCategory === null
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-panel text-th-primary hover:bg-panel"
             }`}
           >
             All ({WIDGET_TYPES.length})
@@ -271,7 +271,7 @@ export default function WidgetLibrary({
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
                   selectedCategory === cat
                     ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    : "bg-panel text-th-primary hover:bg-panel"
                 }`}
               >
                 {cat} ({count})
@@ -290,7 +290,7 @@ export default function WidgetLibrary({
                   onSelectWidget(widget);
                   onClose();
                 }}
-                className="group p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-md transition-all text-left"
+                className="group p-4 border-2 border-th-default rounded-xl hover:border-blue-500 hover:shadow-md transition-all text-left"
               >
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
@@ -298,14 +298,14 @@ export default function WidgetLibrary({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors text-sm">
+                      <h3 className="font-semibold text-th-primary group-hover:text-blue-600 transition-colors text-sm">
                         {widget.name}
                       </h3>
-                      <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                      <span className="text-xs text-th-muted bg-panel px-1.5 py-0.5 rounded flex-shrink-0">
                         {widget.defaultWidth ?? 3}×{widget.defaultHeight ?? 2}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                    <p className="text-xs text-th-secondary mt-1 line-clamp-2">
                       {widget.description}
                     </p>
                   </div>
@@ -316,8 +316,8 @@ export default function WidgetLibrary({
 
           {filteredWidgets.length === 0 && (
             <div className="text-center py-12">
-              <Info className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-500">No widgets in this category</p>
+              <Info className="w-12 h-12 mx-auto text-th-muted mb-3" />
+              <p className="text-th-secondary">No widgets in this category</p>
             </div>
           )}
         </div>

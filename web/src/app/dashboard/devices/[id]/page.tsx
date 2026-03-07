@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import {
   Activity,
   Battery,
@@ -30,7 +31,9 @@ import {
   Navigation,
   Cpu,
   HardDrive,
-  Package
+  Package,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DeviceVisualization } from '@/components/visualization';
@@ -136,6 +139,7 @@ export default function DeviceDetailPage() {
   const [tenantId, setTenantId] = useState<string>('');
   const [alarms, setAlarms] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
 
   // Single real-time data source — shared by header strip AND Live Device tab.
   // This means both always show the same value with no stale-data divergence.
@@ -338,14 +342,14 @@ export default function DeviceDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-page">
         <Sidebar />
         <main className="flex-1 ml-64 p-8 flex items-center justify-center">
           <div className="text-center">
             <div className="inline-block animate-spin mb-4">
               <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
             </div>
-            <p className="text-gray-600 font-medium">Loading device...</p>
+            <p className="text-th-secondary font-medium">Loading device...</p>
           </div>
         </main>
       </div>
@@ -354,7 +358,7 @@ export default function DeviceDetailPage() {
 
   if (!device) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-page">
         <Sidebar />
         <main className="flex-1 ml-64 p-8">
           <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
@@ -374,20 +378,20 @@ export default function DeviceDetailPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-page">
       <Sidebar />
       <main className="flex-1 ml-64 p-8">
         {/* Header */}
         <div className="mb-6">
           <button
             onClick={() => router.push('/dashboard/devices')}
-            className="text-sm text-gray-400 hover:text-gray-700 font-medium mb-4 transition-colors flex items-center gap-1.5"
+            className="text-sm text-th-muted hover:text-th-primary font-medium mb-4 transition-colors flex items-center gap-1.5"
           >
             ← Devices
           </button>
 
           {/* Hero card */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-surface rounded-xl border border-th-default shadow-sm overflow-hidden">
             {/* Status stripe */}
             <div className={`h-1 w-full ${
               device.status === 'online' ? 'bg-green-400' :
@@ -399,7 +403,7 @@ export default function DeviceDetailPage() {
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-xl font-bold text-gray-900 truncate">{device.name}</h1>
+                    <h1 className="text-xl font-bold text-th-primary truncate">{device.name}</h1>
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border flex-shrink-0 ${
                       device.status === 'online'
                         ? 'bg-green-50 text-green-700 border-green-200'
@@ -420,8 +424,8 @@ export default function DeviceDetailPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
-                    <span className="font-mono bg-gray-50 border border-gray-100 px-2 py-0.5 rounded">{deviceId.substring(0, 16)}…</span>
+                  <div className="flex items-center gap-2 text-xs text-th-muted flex-wrap">
+                    <span className="font-mono bg-page border border-th-subtle px-2 py-0.5 rounded">{deviceId.substring(0, 16)}…</span>
                     <span>·</span>
                     <span>{device.device_type}</span>
                     {device.location && (
@@ -451,7 +455,44 @@ export default function DeviceDetailPage() {
                         </span>
                       </>
                     )}
+                    <button
+                      onClick={() => setShowDetails(v => !v)}
+                      className="ml-1 flex items-center gap-0.5 text-th-muted hover:text-th-secondary transition-colors"
+                    >
+                      {showDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      Details
+                    </button>
                   </div>
+                  {showDetails && (
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <p className="text-xs text-th-muted mb-0.5">Device ID</p>
+                        <p className="text-xs font-mono text-th-primary bg-page border border-th-subtle px-2 py-1 rounded truncate">{deviceId}</p>
+                      </div>
+                      {device.dev_eui && (
+                        <div>
+                          <p className="text-xs text-th-muted mb-0.5">Device EUI</p>
+                          <p className="text-xs font-mono text-th-primary bg-page border border-th-subtle px-2 py-1 rounded">{device.dev_eui}</p>
+                        </div>
+                      )}
+                      {device.firmware_version && (
+                        <div>
+                          <p className="text-xs text-th-muted mb-0.5">Firmware</p>
+                          <p className="text-xs text-th-primary bg-page border border-th-subtle px-2 py-1 rounded">{device.firmware_version}</p>
+                        </div>
+                      )}
+                      {device.hardware_version && (
+                        <div>
+                          <p className="text-xs text-th-muted mb-0.5">Hardware</p>
+                          <p className="text-xs text-th-primary bg-page border border-th-subtle px-2 py-1 rounded">{device.hardware_version}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-xs text-th-muted mb-0.5">Created</p>
+                        <p className="text-xs text-th-primary bg-page border border-th-subtle px-2 py-1 rounded">{new Date(device.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className={`flex-shrink-0 px-3 py-2 rounded-lg border text-xs font-semibold ${getHealthColor(healthScore)}`}>
                   Health {healthScore}%
@@ -470,20 +511,20 @@ export default function DeviceDetailPage() {
                 const stripMetrics = schemaKeys.filter(k => latestValues[k] != null).slice(0, 6);
                 if (stripMetrics.length === 0) return null;
                 return (
-                  <div className="flex items-stretch gap-0 border border-gray-100 rounded-lg overflow-hidden">
+                  <div className="flex items-stretch gap-0 border border-th-subtle rounded-lg overflow-hidden">
                     {stripMetrics.map((metric, i) => {
                       const value = latestValues[metric];
                       const trend = calculateTrend(metric);
                       const meta = getMetricMetadata(metric);
                       const isUp = trend && trend.direction === 'up';
                       return (
-                        <div key={metric} className={`flex-1 px-4 py-3 text-center ${i > 0 ? 'border-l border-gray-100' : ''} bg-gray-50`}>
-                          <p className="text-xs text-gray-400 capitalize mb-1 truncate">
-                            {metric.replace(/_/g, ' ')}
+                        <div key={metric} className={`flex-1 px-4 py-3 text-center ${i > 0 ? 'border-l border-th-subtle' : ''} bg-page`}>
+                          <p className="text-xs text-th-muted mb-1 truncate">
+                            {formatMetricLabel(metric, deviceType?.telemetry_schema)}
                           </p>
-                          <p className="text-lg font-bold text-gray-900 leading-none">
+                          <p className="text-lg font-bold text-th-primary leading-none">
                             {typeof value === 'number' ? value.toFixed(1) : '—'}
-                            {meta.unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{meta.unit}</span>}
+                            {meta.unit && <span className="text-xs font-normal text-th-muted ml-0.5">{meta.unit}</span>}
                           </p>
                           {trend && (
                             <p className={`text-xs font-medium mt-0.5 ${isUp ? 'text-orange-500' : 'text-green-500'}`}>
@@ -501,14 +542,14 @@ export default function DeviceDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 mb-6">
+        <div className="border-b border-th-default mb-6">
           <nav className="flex gap-6">
             {([
-              { key: 'live', label: 'Live Device' },
+              { key: 'live', label: 'Monitor' },
               { key: 'overview', label: 'Overview' },
-              { key: 'telemetry', label: 'Telemetry' },
+              { key: 'telemetry', label: 'History' },
               { key: 'alarms', label: 'Alarms' },
-              { key: 'settings', label: 'Settings' },
+              { key: 'settings', label: 'Configure' },
             ] as const).map(tab => (
               <button
                 key={tab.key}
@@ -516,7 +557,7 @@ export default function DeviceDetailPage() {
                 className={`pb-3 px-2 border-b-2 font-medium transition-colors ${
                   activeTab === tab.key
                     ? 'border-primary-600 text-primary-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                    : 'border-transparent text-th-secondary hover:text-th-primary'
                 }`}
               >
                 {tab.label}
@@ -527,7 +568,7 @@ export default function DeviceDetailPage() {
 
         {/* Live Device Tab — Visualization Layer */}
         {activeTab === 'live' && tenantId && (
-          <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
             <DeviceVisualization
               deviceId={deviceId}
               tenantId={tenantId}
@@ -542,19 +583,19 @@ export default function DeviceDetailPage() {
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Device Information */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Device Information</h3>
+            <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-th-primary mb-4">Device Information</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Device ID</p>
-                  <p className="font-mono text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{deviceId}</p>
+                  <p className="text-sm text-th-secondary mb-1">Device ID</p>
+                  <p className="font-mono text-sm text-th-primary bg-page px-3 py-2 rounded border border-th-default">{deviceId}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Device Type</p>
-                  <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.device_type}</p>
+                  <p className="text-sm text-th-secondary mb-1">Device Type</p>
+                  <p className="text-sm text-th-primary bg-page px-3 py-2 rounded border border-th-default">{device.device_type}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Status</p>
+                  <p className="text-sm text-th-secondary mb-1">Status</p>
                   <p className={`text-sm font-semibold px-3 py-2 rounded border capitalize ${
                     device.status === 'online'
                       ? 'bg-green-50 text-green-700 border-green-200'
@@ -567,35 +608,35 @@ export default function DeviceDetailPage() {
                 </div>
                 {device.dev_eui && (
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Device EUI</p>
-                    <p className="font-mono text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.dev_eui}</p>
+                    <p className="text-sm text-th-secondary mb-1">Device EUI</p>
+                    <p className="font-mono text-sm text-th-primary bg-page px-3 py-2 rounded border border-th-default">{device.dev_eui}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Created</p>
-                  <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">
+                  <p className="text-sm text-th-secondary mb-1">Created</p>
+                  <p className="text-sm text-th-primary bg-page px-3 py-2 rounded border border-th-default">
                     {new Date(device.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 {device.firmware_version && (
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Firmware Version</p>
-                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200">{device.firmware_version}</p>
+                    <p className="text-sm text-th-secondary mb-1">Firmware Version</p>
+                    <p className="text-sm text-th-primary bg-page px-3 py-2 rounded border border-th-default">{device.firmware_version}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Recent Activity */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-th-primary mb-4 flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary-600" />
                 Recent Activity
               </h3>
               <div className="space-y-3">
                 {telemetryData.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                  <div className="text-center py-8 text-th-secondary">
+                    <BarChart3 className="w-12 h-12 mx-auto mb-3 text-th-muted" />
                     <p className="font-medium">No telemetry data available</p>
                     <p className="text-sm mt-1">This device hasn&apos;t sent any data yet.</p>
                   </div>
@@ -605,21 +646,21 @@ export default function DeviceDetailPage() {
                     const ts = point.time_bucket || point.timestamp;
                     const tsDate = ts ? new Date(ts) : null;
                     return (
-                      <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                      <div key={idx} className="flex items-center justify-between py-2 border-b border-th-subtle last:border-0">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                             <Activity className="w-4 h-4 text-primary-600" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900">Telemetry received</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-sm font-medium text-th-primary">Telemetry received</p>
+                            <p className="text-xs text-th-secondary">
                               {tsDate && !isNaN(tsDate.getTime()) ? tsDate.toLocaleString() : 'Unknown time'}
                             </p>
                           </div>
                         </div>
-                        <div className="text-right text-xs text-gray-600">
+                        <div className="text-right text-xs text-th-secondary">
                           {numericMetrics.slice(0, 2).map(m => point[m] != null && (
-                            <p key={m}>{m.replace(/_/g, ' ')}: {typeof point[m] === 'number' ? (point[m] as number).toFixed(1) : point[m]}</p>
+                            <p key={m}>{formatMetricLabel(m, deviceType?.telemetry_schema)}: {typeof point[m] === 'number' ? (point[m] as number).toFixed(1) : point[m]}</p>
                           ))}
                         </div>
                       </div>
@@ -637,8 +678,8 @@ export default function DeviceDetailPage() {
             {/* Time Range Selector */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Calendar className="w-5 h-5 text-gray-400" />
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-1">
+                <Calendar className="w-5 h-5 text-th-muted" />
+                <div className="flex items-center gap-2 bg-surface border border-th-default rounded-lg p-1">
                   {(['1h', '6h', '24h', '7d', '30d'] as TimeRange[]).map(range => (
                     <button
                       key={range}
@@ -646,7 +687,7 @@ export default function DeviceDetailPage() {
                       className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
                         timeRange === range
                           ? 'bg-primary-600 text-white'
-                          : 'text-gray-600 hover:bg-gray-50'
+                          : 'text-th-secondary hover:bg-panel'
                       }`}
                     >
                       {range}
@@ -658,7 +699,7 @@ export default function DeviceDetailPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setRefreshKey(k => k + 1)}
-                  className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  className="px-4 py-2 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors flex items-center gap-2"
                 >
                   <RefreshCw className={`w-4 h-4 ${telemetryLoading ? 'animate-spin' : ''}`} />
                   Refresh
@@ -675,17 +716,17 @@ export default function DeviceDetailPage() {
             </div>
 
             {telemetryLoading ? (
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-12 text-center">
+              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-12 text-center">
                 <div className="inline-block animate-spin mb-4">
                   <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
                 </div>
-                <p className="text-gray-600">Loading telemetry data...</p>
+                <p className="text-th-secondary">Loading telemetry data...</p>
               </div>
             ) : telemetryData.length === 0 ? (
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-12 text-center">
+              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-12 text-center">
                 <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-900 font-semibold mb-2">No telemetry data available</p>
-                <p className="text-gray-600 text-sm">
+                <p className="text-th-primary font-semibold mb-2">No telemetry data available</p>
+                <p className="text-th-secondary text-sm">
                   This device hasn&apos;t sent any telemetry data in the selected time range.
                 </p>
               </div>
@@ -699,7 +740,7 @@ export default function DeviceDetailPage() {
                   return (
                     <TelemetryChartCard
                       key={metricKey}
-                      title={metadata.description || metricKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      title={formatMetricLabel(metricKey, deviceType?.telemetry_schema)}
                       data={telemetryData}
                       metricKey={metricKey}
                       unit={metadata.unit || ''}
@@ -763,12 +804,12 @@ function TelemetryChartCard({
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center min-h-[320px]">
+      <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6 flex flex-col items-center justify-center min-h-[320px]">
         <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: `${color}15` }}>
           <BarChart3 className="w-6 h-6" style={{ color }} />
         </div>
-        <p className="text-sm font-medium text-gray-700">{title}</p>
-        <p className="text-xs text-gray-400 mt-1">No data in selected range</p>
+        <p className="text-sm font-medium text-th-primary">{title}</p>
+        <p className="text-xs text-th-muted mt-1">No data in selected range</p>
       </div>
     );
   }
@@ -779,11 +820,11 @@ function TelemetryChartCard({
   const avgValue = chartData.reduce((acc, d) => acc + d.value, 0) / chartData.length;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+    <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-base font-semibold text-th-primary">{title}</h3>
         <span className="text-2xl font-bold" style={{ color }}>
-          {typeof latestValue === 'number' ? latestValue.toFixed(1) : '—'} <span className="text-sm font-normal text-gray-500">{unit}</span>
+          {typeof latestValue === 'number' ? latestValue.toFixed(1) : '—'} <span className="text-sm font-normal text-th-secondary">{unit}</span>
         </span>
       </div>
 
@@ -834,18 +875,18 @@ function TelemetryChartCard({
         </AreaChart>
       </ResponsiveContainer>
 
-      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-th-subtle">
         <div className="text-center">
-          <p className="text-xs text-gray-400 mb-0.5">Min</p>
-          <p className="text-sm font-semibold text-gray-800">{minValue.toFixed(1)} <span className="font-normal text-gray-400">{unit}</span></p>
+          <p className="text-xs text-th-muted mb-0.5">Min</p>
+          <p className="text-sm font-semibold text-th-primary">{minValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
         <div className="text-center">
-          <p className="text-xs text-gray-400 mb-0.5">Avg</p>
-          <p className="text-sm font-semibold text-gray-800">{avgValue.toFixed(1)} <span className="font-normal text-gray-400">{unit}</span></p>
+          <p className="text-xs text-th-muted mb-0.5">Avg</p>
+          <p className="text-sm font-semibold text-th-primary">{avgValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
         <div className="text-center">
-          <p className="text-xs text-gray-400 mb-0.5">Max</p>
-          <p className="text-sm font-semibold text-gray-800">{maxValue.toFixed(1)} <span className="font-normal text-gray-400">{unit}</span></p>
+          <p className="text-xs text-th-muted mb-0.5">Max</p>
+          <p className="text-sm font-semibold text-th-primary">{maxValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
       </div>
     </div>
@@ -943,16 +984,16 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Filters */}
-      <div className="lg:col-span-3 bg-white border border-gray-200 rounded-lg p-4">
+      <div className="lg:col-span-3 bg-surface border border-th-default rounded-xl p-4">
         <div className="flex flex-wrap gap-3 items-center">
-          <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value as any)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm">
+          <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value as any)} className="px-3 py-2.5 border border-[var(--color-input-border)] rounded-lg bg-surface text-sm">
             <option value="all">All severities</option>
             <option value="CRITICAL">Critical</option>
             <option value="MAJOR">Major</option>
             <option value="MINOR">Minor</option>
             <option value="WARNING">Warning</option>
           </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="px-3 py-2.5 border border-[var(--color-input-border)] rounded-lg bg-surface text-sm">
             <option value="all">All statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="ACKNOWLEDGED">Acknowledged</option>
@@ -962,30 +1003,30 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
       </div>
 
       {/* List */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-        <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between bg-gray-50">
-          <span className="text-sm font-semibold text-gray-800">Device Alarms</span>
+      <div className="bg-surface border border-th-default rounded-xl overflow-hidden shadow-sm">
+        <div className="border-b border-th-default px-4 py-3 flex items-center justify-between bg-page">
+          <span className="text-sm font-semibold text-th-primary">Device Alarms</span>
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
           {loading ? (
-            <div className="p-6 text-center text-gray-600">Loading alarms...</div>
+            <div className="p-6 text-center text-th-secondary">Loading alarms...</div>
           ) : error ? (
             <div className="p-6 text-center text-red-600">{error}</div>
           ) : alarms.length === 0 ? (
-            <div className="p-6 text-center text-gray-600">
+            <div className="p-6 text-center text-th-secondary">
               <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
               <p className="font-medium">No alarms for this device</p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-200">
+            <ul className="divide-y divide-[var(--color-border)]">
               {alarms.map(a => (
                 <li key={a.id}>
-                  <button onClick={() => setSelectedId(a.id)} className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors ${selectedId === a.id ? 'bg-blue-50' : ''}`}>
+                  <button onClick={() => setSelectedId(a.id)} className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-panel transition-colors ${selectedId === a.id ? 'bg-blue-50' : ''}`}>
                     <div className={severityChip(a.severity)}>{a.severity}</div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{a.alarm_type}</p>
-                      <p className="text-xs text-gray-600">{new Date(a.fired_at).toLocaleString()}</p>
-                      <p className="text-xs text-gray-700 mt-1 line-clamp-2">{a.message || '—'}</p>
+                      <p className="text-sm font-medium text-th-primary">{a.alarm_type}</p>
+                      <p className="text-xs text-th-secondary">{new Date(a.fired_at).toLocaleString()}</p>
+                      <p className="text-xs text-th-primary mt-1 line-clamp-2">{a.message || '—'}</p>
                     </div>
                     <div className="ml-auto">{statusBadge(a.status)}</div>
                   </button>
@@ -997,9 +1038,9 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
       </div>
 
       {/* Detail */}
-      <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+      <div className="lg:col-span-2 bg-surface border border-th-default rounded-xl p-6 shadow-sm">
         {!selectedId ? (
-          <div className="text-gray-600 text-center py-8">Select an alarm to view details</div>
+          <div className="text-th-secondary text-center py-8">Select an alarm to view details</div>
         ) : (
           (() => {
             const a = alarms.find(x => x.id === selectedId)!;
@@ -1009,7 +1050,7 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={severityChip(a.severity)}>{a.severity}</div>
-                    <h3 className="text-lg font-semibold text-gray-900">{a.alarm_type}</h3>
+                    <h3 className="text-lg font-semibold text-th-primary">{a.alarm_type}</h3>
                   </div>
                   <div className="flex items-center gap-2">
                     {statusBadge(a.status)}
@@ -1024,40 +1065,40 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-600">Status</p>
-                    <p className="text-sm text-gray-900">{a.status}</p>
+                    <p className="text-xs text-th-secondary">Status</p>
+                    <p className="text-sm text-th-primary">{a.status}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Fired at</p>
-                    <p className="text-sm text-gray-900">{new Date(a.fired_at).toLocaleString()}</p>
+                    <p className="text-xs text-th-secondary">Fired at</p>
+                    <p className="text-sm text-th-primary">{new Date(a.fired_at).toLocaleString()}</p>
                   </div>
                   {a.acknowledged_at && (
                     <div>
-                      <p className="text-xs text-gray-600">Acknowledged at</p>
-                      <p className="text-sm text-gray-900">{new Date(a.acknowledged_at).toLocaleString()}</p>
+                      <p className="text-xs text-th-secondary">Acknowledged at</p>
+                      <p className="text-sm text-th-primary">{new Date(a.acknowledged_at).toLocaleString()}</p>
                     </div>
                   )}
                   {a.cleared_at && (
                     <div>
-                      <p className="text-xs text-gray-600">Cleared at</p>
-                      <p className="text-sm text-gray-900">{new Date(a.cleared_at).toLocaleString()}</p>
+                      <p className="text-xs text-th-secondary">Cleared at</p>
+                      <p className="text-sm text-th-primary">{new Date(a.cleared_at).toLocaleString()}</p>
                     </div>
                   )}
                 </div>
 
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-xs text-gray-600 mb-1">Message</p>
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{a.message || '—'}</p>
+                <div className="border-t border-th-default pt-4">
+                  <p className="text-xs text-th-secondary mb-1">Message</p>
+                  <p className="text-sm text-th-primary whitespace-pre-wrap">{a.message || '—'}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-600">Source</p>
-                    <p className="text-sm text-gray-900">{a.source || '—'}</p>
+                    <p className="text-xs text-th-secondary">Source</p>
+                    <p className="text-sm text-th-primary">{a.source || '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Metric</p>
-                    <p className="text-sm text-gray-900">{a.metric_name || '—'} {a.metric_value != null ? `(${a.metric_value})` : ''}</p>
+                    <p className="text-xs text-th-secondary">Metric</p>
+                    <p className="text-sm text-th-primary">{a.metric_name || '—'} {a.metric_value != null ? `(${a.metric_value})` : ''}</p>
                   </div>
                 </div>
               </div>
@@ -1209,53 +1250,53 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
   return (
     <div className="space-y-6">
       {/* Device Information */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Device Information</h3>
+          <h3 className="text-lg font-semibold text-th-primary">Device Information</h3>
           {!editing ? (
-            <button onClick={() => setEditing(true)} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
+            <button onClick={() => setEditing(true)} className="px-4 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors flex items-center gap-2">
               <Edit2 className="w-4 h-4" />
               Edit
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className="px-4 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors">Cancel</button>
               <button onClick={saveDevice} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">Save Changes</button>
             </div>
           )}
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Device Name</label>
+            <label className="block text-sm text-th-secondary mb-1">Device Name</label>
             {editing ? (
-              <input value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <input value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className="w-full px-3 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
             ) : (
-              <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-200">{device.name}</p>
+              <p className="text-sm text-th-primary bg-page px-3 py-2.5 rounded-lg border border-th-default">{device.name}</p>
             )}
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Device Type</label>
+            <label className="block text-sm text-th-secondary mb-1">Device Type</label>
             {editing ? (
-              <input value={formData.device_type} onChange={e => setFormData(prev => ({ ...prev, device_type: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <input value={formData.device_type} onChange={e => setFormData(prev => ({ ...prev, device_type: e.target.value }))} className="w-full px-3 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
             ) : (
-              <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-200">{device.device_type}</p>
+              <p className="text-sm text-th-primary bg-page px-3 py-2.5 rounded-lg border border-th-default">{device.device_type}</p>
             )}
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Device ID</label>
-            <p className="text-sm font-mono text-gray-900 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-200">{deviceId}</p>
+            <label className="block text-sm text-th-secondary mb-1">Device ID</label>
+            <p className="text-sm font-mono text-th-primary bg-page px-3 py-2.5 rounded-lg border border-th-default">{deviceId}</p>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Status</label>
-            <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-200 capitalize">{device.status}</p>
+            <label className="block text-sm text-th-secondary mb-1">Status</label>
+            <p className="text-sm text-th-primary bg-page px-3 py-2.5 rounded-lg border border-th-default capitalize">{device.status}</p>
           </div>
         </div>
       </div>
 
       {/* Alert Rules */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-th-primary flex items-center gap-2">
             <Bell className="w-5 h-5 text-primary-600" />
             Alert Rules
           </h3>
@@ -1266,18 +1307,18 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
 
         <div className="space-y-2">
           {alertRules.length === 0 ? (
-            <p className="text-sm text-gray-600 text-center py-6">No alert rules configured</p>
+            <p className="text-sm text-th-secondary text-center py-6">No alert rules configured</p>
           ) : (
             alertRules.map(rule => (
-              <div key={rule.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <div key={rule.id} className="flex items-center justify-between p-3 border border-th-default rounded-lg hover:bg-panel transition-colors">
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-th-primary">
                     {rule.name || `${rule.metric?.toUpperCase() || 'Alert'} ${rule.operator === 'gt' ? '>' : rule.operator === 'lt' ? '<' : rule.operator === 'gte' ? '≥' : rule.operator === 'lte' ? '≤' : '='} ${rule.threshold || ''}`}
                   </p>
-                  <p className="text-xs text-gray-600">Cooldown: {rule.cooldown_minutes}min • Severity: {rule.severity}</p>
+                  <p className="text-xs text-th-secondary">Cooldown: {rule.cooldown_minutes}min • Severity: {rule.severity}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => toggleRule(rule.id, !rule.enabled)} className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${rule.enabled ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  <button onClick={() => toggleRule(rule.id, !rule.enabled)} className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${rule.enabled ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-panel text-th-secondary hover:bg-panel'}`}>
                     {rule.enabled ? 'Enabled' : 'Disabled'}
                   </button>
                   <button onClick={() => deleteRule(rule.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-1">
@@ -1292,11 +1333,11 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
       </div>
 
       {/* API Credentials */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">API Credentials</h3>
-            <p className="text-sm text-gray-500 mt-0.5">Device tokens let hardware push telemetry without a user account.</p>
+            <h3 className="text-lg font-semibold text-th-primary">API Credentials</h3>
+            <p className="text-sm text-th-secondary mt-0.5">Device tokens let hardware push telemetry without a user account.</p>
           </div>
         </div>
 
@@ -1305,7 +1346,7 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
           <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm font-semibold text-amber-800 mb-2">⚠ Save this token — it will not be shown again</p>
             <div className="flex items-center gap-2 mb-3">
-              <code className="flex-1 text-xs font-mono bg-white border border-amber-300 rounded px-3 py-2 text-gray-900 break-all">{revealedToken.token}</code>
+              <code className="flex-1 text-xs font-mono bg-surface border border-amber-300 rounded px-3 py-2 text-th-primary break-all">{revealedToken.token}</code>
               <button onClick={() => copyToken(revealedToken.token)} className="px-3 py-2 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors whitespace-nowrap">
                 {copiedToken ? '✓ Copied' : 'Copy'}
               </button>
@@ -1325,7 +1366,7 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
             value={newTokenName}
             onChange={e => setNewTokenName(e.target.value)}
             placeholder="Token name (e.g. Factory Floor Sensor)"
-            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="flex-1 px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <button
             onClick={generateToken}
@@ -1338,18 +1379,18 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
 
         {/* Token list */}
         {tokens.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">No tokens yet — generate one above</p>
+          <p className="text-sm text-th-secondary text-center py-4">No tokens yet — generate one above</p>
         ) : (
           <div className="space-y-2">
             {tokens.map((t: any) => (
-              <div key={t.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <div key={t.id} className="flex items-center justify-between p-3 border border-th-default rounded-lg hover:bg-panel transition-colors">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{t.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm font-medium text-th-primary">{t.name}</p>
+                  <p className="text-xs text-th-secondary">
                     Created {new Date(t.created_at).toLocaleDateString()}
                     {t.expires_at ? ` · Expires ${new Date(t.expires_at).toLocaleDateString()}` : ' · Never expires'}
                     {' · '}
-                    <span className={t.status === 'active' ? 'text-green-600' : 'text-gray-400'}>{t.status}</span>
+                    <span className={t.status === 'active' ? 'text-green-600' : 'text-th-muted'}>{t.status}</span>
                   </p>
                 </div>
                 <button
@@ -1365,12 +1406,12 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
       </div>
 
       {/* Danger Zone */}
-      <div className="bg-white rounded-lg border border-red-200 shadow-sm p-6">
+      <div className="bg-surface rounded-xl border border-red-200 shadow-sm p-6">
         <h3 className="text-lg font-semibold text-red-900 mb-2 flex items-center gap-2">
           <AlertTriangle className="w-5 h-5" />
           Danger Zone
         </h3>
-        <p className="text-sm text-gray-600 mb-4">Once you delete a device, there is no going back. All telemetry data, alarms, and configurations will be permanently removed.</p>
+        <p className="text-sm text-th-secondary mb-4">Once you delete a device, there is no going back. All telemetry data, alarms, and configurations will be permanently removed.</p>
         {!deleting ? (
           <button onClick={() => setDeleting(true)} className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
             <Trash2 className="w-4 h-4" />
@@ -1378,7 +1419,7 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
           </button>
         ) : (
           <div className="flex gap-2">
-            <button onClick={() => setDeleting(false)} className="px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+            <button onClick={() => setDeleting(false)} className="px-4 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors">Cancel</button>
             <button onClick={deleteDevice} className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold">Confirm Delete</button>
           </div>
         )}
@@ -1418,34 +1459,34 @@ function NewAlertRuleForm({ deviceId, discoveredMetrics, onCreated, onCancel }: 
   };
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-      <h4 className="text-sm font-semibold text-gray-900 mb-3">New Alert Rule</h4>
+    <div className="bg-page border border-th-default rounded-lg p-4 mb-4">
+      <h4 className="text-sm font-semibold text-th-primary mb-3">New Alert Rule</h4>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="col-span-2">
-          <label className="block text-xs text-gray-600 mb-1">Rule Name</label>
+          <label className="block text-xs text-th-secondary mb-1">Rule Name</label>
           <input
             type="text"
             value={formData.name}
             onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
             placeholder="High Temperature Alert"
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Metric</label>
-          <select value={formData.metric} onChange={e => setFormData(prev => ({ ...prev, metric: e.target.value as any }))} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <label className="block text-xs text-th-secondary mb-1">Metric</label>
+          <select value={formData.metric} onChange={e => setFormData(prev => ({ ...prev, metric: e.target.value as any }))} className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500">
             {discoveredMetrics.length === 0 ? (
               <option value="">No metrics available</option>
             ) : (
               discoveredMetrics.map(m => (
-                <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>
+                <option key={m} value={m}>{formatMetricLabel(m)}</option>
               ))
             )}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Operator</label>
-          <select value={formData.operator} onChange={e => setFormData(prev => ({ ...prev, operator: e.target.value as any }))} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <label className="block text-xs text-th-secondary mb-1">Operator</label>
+          <select value={formData.operator} onChange={e => setFormData(prev => ({ ...prev, operator: e.target.value as any }))} className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500">
             <option value="gt">&gt; Greater than</option>
             <option value="gte">≥ Greater or equal</option>
             <option value="lt">&lt; Less than</option>
@@ -1455,16 +1496,16 @@ function NewAlertRuleForm({ deviceId, discoveredMetrics, onCreated, onCancel }: 
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Threshold</label>
-          <input type="number" value={formData.threshold} onChange={e => setFormData(prev => ({ ...prev, threshold: parseFloat(e.target.value) || 0 }))} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <label className="block text-xs text-th-secondary mb-1">Threshold</label>
+          <input type="number" value={formData.threshold} onChange={e => setFormData(prev => ({ ...prev, threshold: parseFloat(e.target.value) || 0 }))} className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Cooldown (minutes)</label>
-          <input type="number" value={formData.cooldown_minutes} onChange={e => setFormData(prev => ({ ...prev, cooldown_minutes: parseInt(e.target.value) || 5 }))} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <label className="block text-xs text-th-secondary mb-1">Cooldown (minutes)</label>
+          <input type="number" value={formData.cooldown_minutes} onChange={e => setFormData(prev => ({ ...prev, cooldown_minutes: parseInt(e.target.value) || 5 }))} className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
       </div>
       <div className="flex gap-2">
-        <button onClick={onCancel} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white transition-colors">Cancel</button>
+        <button onClick={onCancel} className="px-4 py-2 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-surface transition-colors">Cancel</button>
         <button onClick={create} disabled={submitting || discoveredMetrics.length === 0} className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">
           {submitting ? 'Creating...' : 'Create Rule'}
         </button>

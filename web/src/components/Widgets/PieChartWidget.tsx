@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatMetricLabel } from "@/lib/formatMetricLabel";
 import {
   PieChart,
   Pie,
@@ -55,14 +56,14 @@ export default function PieChartWidget({ config, dataSources }: PieChartWidgetPr
               `/api/v1/tenants/${tenantId}/devices/${src.device_id}/telemetry?${params}`,
               { headers: { Authorization: `Bearer ${token}` } }
             );
-            if (!res.ok) return { name: src.alias || src.metric, value: 0 };
+            if (!res.ok) return { name: src.alias || formatMetricLabel(src.metric), value: 0 };
             const json = await res.json();
             const point = (json.data || [])[0];
             const raw = point?.[src.metric];
             const value = raw !== undefined && raw !== null ? Math.abs(Number(raw)) : 0;
-            return { name: src.alias || src.metric, value: isNaN(value) ? 0 : value };
+            return { name: src.alias || formatMetricLabel(src.metric), value: isNaN(value) ? 0 : value };
           } catch {
-            return { name: src.alias || src.metric, value: 0 };
+            return { name: src.alias || formatMetricLabel(src.metric), value: 0 };
           }
         })
       );
@@ -78,7 +79,7 @@ export default function PieChartWidget({ config, dataSources }: PieChartWidgetPr
 
   if (!dataSources || dataSources.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-full flex items-center justify-center text-th-muted text-sm">
         No device bound — configure widget
       </div>
     );
@@ -130,10 +131,10 @@ export default function PieChartWidget({ config, dataSources }: PieChartWidgetPr
         {donut && total > 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center">
-              <div className="text-lg font-bold text-gray-800">
+              <div className="text-lg font-bold text-th-primary">
                 {total.toLocaleString(undefined, { maximumFractionDigits: 1 })}
               </div>
-              <div className="text-xs text-gray-500">total</div>
+              <div className="text-xs text-th-secondary">total</div>
             </div>
           </div>
         )}

@@ -123,10 +123,10 @@ export default function DeviceMapView({ devices, selectedDevice, onSelectDevice 
           >
             <Popup>
               <div className="p-2 min-w-[200px]">
-                <h4 className="font-semibold text-gray-900 mb-2">{device.name}</h4>
+                <h4 className="font-semibold text-th-primary mb-2">{device.name}</h4>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Status:</span>
+                    <span className="text-th-secondary">Status:</span>
                     <span className={`font-semibold capitalize ${
                       device.status === 'online' ? 'text-green-600' :
                       device.status === 'offline' ? 'text-red-600' :
@@ -136,7 +136,7 @@ export default function DeviceMapView({ devices, selectedDevice, onSelectDevice 
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Type:</span>
+                    <span className="text-th-secondary">Type:</span>
                     <span
                       className="text-xs font-medium px-2 py-0.5 rounded"
                       style={{
@@ -149,16 +149,16 @@ export default function DeviceMapView({ devices, selectedDevice, onSelectDevice 
                   </div>
                   {device.battery_level !== null && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Battery:</span>
-                      <span className="text-gray-900 font-medium">
+                      <span className="text-th-secondary">Battery:</span>
+                      <span className="text-th-primary font-medium">
                         {Math.round(device.battery_level)}%
                       </span>
                     </div>
                   )}
                   {device.last_seen && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Last seen:</span>
-                      <span className="text-gray-900 text-xs">
+                      <span className="text-th-secondary">Last seen:</span>
+                      <span className="text-th-primary text-xs">
                         {new Date(device.last_seen).toLocaleDateString()}
                       </span>
                     </div>
@@ -180,27 +180,27 @@ export default function DeviceMapView({ devices, selectedDevice, onSelectDevice 
       </MapContainer>
 
       {/* Legend */}
-      <div className="absolute bottom-8 left-8 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-[1000]">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">Device Status</h4>
+      <div className="absolute bottom-8 left-8 bg-surface border border-th-default rounded-lg shadow-lg p-4 z-[1000]">
+        <h4 className="text-sm font-semibold text-th-primary mb-3">Device Status</h4>
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow"></div>
-            <span className="text-sm text-gray-700">Online ({devices.filter(d => d.status === 'online').length})</span>
+            <span className="text-sm text-th-primary">Online ({devices.filter(d => d.status === 'online').length})</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow"></div>
-            <span className="text-sm text-gray-700">Offline ({devices.filter(d => d.status === 'offline').length})</span>
+            <span className="text-sm text-th-primary">Offline ({devices.filter(d => d.status === 'offline').length})</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 bg-yellow-500 rounded-full border-2 border-white shadow"></div>
-            <span className="text-sm text-gray-700">Idle ({devices.filter(d => d.status === 'idle').length})</span>
+            <span className="text-sm text-th-primary">Idle ({devices.filter(d => d.status === 'idle').length})</span>
           </div>
         </div>
       </div>
 
       {/* Map Controls Info */}
-      <div className="absolute top-8 left-8 bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-2 z-[1000]">
-        <p className="text-sm text-gray-700">
+      <div className="absolute top-8 left-8 bg-surface border border-th-default rounded-lg shadow-lg px-4 py-2 z-[1000]">
+        <p className="text-sm text-th-primary">
           <span className="font-semibold">{devices.length}</span> devices on map
         </p>
       </div>

@@ -541,7 +541,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
   function renderContent() {
     if (!dataSources || dataSources.length === 0) {
       return (
-        <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+        <div className="h-full flex items-center justify-center text-th-muted text-sm">
           No device bound - configure widget
         </div>
       );
@@ -549,7 +549,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
 
     if (loading) {
       return (
-        <div className="h-full flex items-center justify-center text-gray-400">
+        <div className="h-full flex items-center justify-center text-th-muted">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
       );
@@ -565,7 +565,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
 
     if (!chartData || chartData.length === 0) {
       return (
-        <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+        <div className="h-full flex items-center justify-center text-th-muted text-sm">
           No data available for selected time range
         </div>
       );
@@ -586,7 +586,7 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
               className={`px-2 py-0.5 text-xs rounded transition-colors ${
                 activeRange === opt.value
                   ? "bg-blue-600 text-white"
-                  : "text-gray-500 hover:bg-gray-100"
+                  : "text-th-secondary hover:bg-panel"
               }`}
             >
               {opt.label}

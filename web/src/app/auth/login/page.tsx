@@ -76,18 +76,18 @@ export default function LoginPage() {
   // Prevent hydration mismatch by showing a loading state until mounted
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-page via-primary-50/30 to-page dark:from-page dark:via-primary-900/10 dark:to-page flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
-              <div className="bg-white p-4 rounded-xl shadow-md">
+              <div className="bg-surface p-4 rounded-xl shadow-md">
                 <div style={{ width: 168, height: 50 }} />
               </div>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-            <p className="text-gray-600">Sign in to your IoT Platform account</p>
+            <h1 className="text-3xl font-bold text-th-primary mb-2">Welcome Back</h1>
+            <p className="text-th-secondary">Sign in to your IoT Platform account</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8">
+          <div className="bg-surface rounded-xl border border-th-default shadow-lg p-8">
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
             </div>
@@ -98,12 +98,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-page via-primary-50/30 to-page dark:from-page dark:via-primary-900/10 dark:to-page flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <div className="bg-white p-4 rounded-xl shadow-md">
+            <div className="bg-surface p-4 rounded-xl shadow-md">
               <Image
                 src="/images/GitoLogo.png"
                 alt="Gito IT Solutions"
@@ -115,12 +115,12 @@ export default function LoginPage() {
               />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to your IoT Platform account</p>
+          <h1 className="text-3xl font-bold text-th-primary mb-2">Welcome Back</h1>
+          <p className="text-th-secondary">Sign in to your IoT Platform account</p>
         </div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8">
+        <div className="bg-surface rounded-xl border border-th-default shadow-lg p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Error Alert */}
             {error && (
@@ -135,12 +135,12 @@ export default function LoginPage() {
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-semibold text-th-primary mb-2">
                 Email Address
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+                  <Mail className="h-5 w-5 text-th-muted" />
                 </span>
                 <input
                   id="email"
@@ -148,7 +148,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  className="block w-full pl-11 pr-4 py-3 border border-[var(--color-input-border)] rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   placeholder="name@example.com"
                 />
               </div>
@@ -156,12 +156,12 @@ export default function LoginPage() {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-semibold text-th-primary mb-2">
                 Password
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+                  <Lock className="h-5 w-5 text-th-muted" />
                 </span>
                 <input
                   id="password"
@@ -169,13 +169,13 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-11 pr-12 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  className="block w-full pl-11 pr-12 py-3 border border-[var(--color-input-border)] rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-th-muted hover:text-th-secondary transition-colors"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? (
@@ -193,9 +193,9 @@ export default function LoginPage() {
                 <input
                   id="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-primary-600 border-[var(--color-input-border)] rounded focus:ring-primary-500"
                 />
-                <span className="ml-2 block text-sm text-gray-700">
+                <span className="ml-2 block text-sm text-th-primary">
                   Remember me
                 </span>
               </label>
@@ -208,7 +208,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading || isRedirecting}
-              className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3.5 px-4 rounded-lg transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+              className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-[var(--color-text-muted)] disabled:cursor-not-allowed text-white font-semibold py-3.5 px-4 rounded-lg transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
             >
               {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
               <span>{isRedirecting ? 'Redirecting to Dashboard...' : isLoading ? 'Signing in...' : 'Sign in to Dashboard'}</span>
@@ -218,25 +218,25 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-th-secondary">
             Don&apos;t have an account?{' '}
             <button type="button" className="font-medium text-primary-600 hover:text-primary-700">
               Contact administrator
             </button>
           </p>
-          <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center justify-center gap-2 text-sm text-th-secondary">
             <span>Phase 1 Demo</span>
             <span>•</span>
             <span>Production-grade IoT Platform</span>
           </div>
           <div className="flex items-center justify-center gap-1 pt-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-th-muted"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-th-muted"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-th-muted"></div>
             <div className="w-1.5 h-1.5 rounded-full bg-primary-600"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-th-muted"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-th-muted"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-th-muted"></div>
           </div>
         </div>
       </div>

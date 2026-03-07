@@ -118,7 +118,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {confirmState && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => handleConfirm(false)} />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+          <div className="relative bg-surface rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
             <div className="flex items-start gap-4 mb-5">
               <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                 confirmState.confirmVariant === 'danger' ? 'bg-red-100' : 'bg-amber-100'
@@ -129,14 +129,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 }
               </div>
               <div>
-                <h3 className="text-base font-semibold text-gray-900">{confirmState.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">{confirmState.message}</p>
+                <h3 className="text-base font-semibold text-th-primary">{confirmState.title}</h3>
+                <p className="text-sm text-th-secondary mt-1">{confirmState.message}</p>
               </div>
             </div>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => handleConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-th-primary bg-surface border border-[var(--color-input-border)] rounded-lg hover:bg-page transition-colors"
               >
                 Cancel
               </button>
@@ -166,14 +166,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               {ICONS[toast.type]}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900">{toast.title}</p>
+              <p className="text-sm font-semibold text-th-primary">{toast.title}</p>
               {toast.message && (
-                <p className="text-sm text-gray-600 mt-0.5">{toast.message}</p>
+                <p className="text-sm text-th-secondary mt-0.5">{toast.message}</p>
               )}
             </div>
             <button
               onClick={() => removeToast(toast.id)}
-              className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+              className="flex-shrink-0 text-th-muted hover:text-th-secondary transition-colors"
             >
               <X className="w-4 h-4" />
             </button>

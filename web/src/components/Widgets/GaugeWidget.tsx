@@ -129,7 +129,7 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
 
   if (!dataSources || dataSources.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-full text-th-muted text-sm">
         No device bound — configure widget
       </div>
     );
@@ -181,17 +181,17 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
                 <span className="text-3xl font-bold leading-none" style={{ color: currentColor }}>
                   {value.toFixed(decimal_places)}
                 </span>
-                <span className="text-xs text-gray-500 mt-0.5">{unit}</span>
+                <span className="text-xs text-th-secondary mt-0.5">{unit}</span>
               </>
             ) : (
-              <span className="text-sm text-gray-400">No data</span>
+              <span className="text-sm text-th-muted">No data</span>
             )}
           </div>
         )}
       </div>
 
       {/* Min / Max labels */}
-      <div className="flex justify-between w-full max-w-[180px] text-xs text-gray-400 -mt-3">
+      <div className="flex justify-between w-full max-w-[180px] text-xs text-th-muted -mt-3">
         <span>{min}{unit}</span>
         <span>{max}{unit}</span>
       </div>
@@ -200,11 +200,11 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
       <div className="flex gap-3 text-xs">
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color_warning }} />
-          <span className="text-gray-500">Warn {threshold_warning}%</span>
+          <span className="text-th-secondary">Warn {threshold_warning}%</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color_critical }} />
-          <span className="text-gray-500">Crit {threshold_critical}%</span>
+          <span className="text-th-secondary">Crit {threshold_critical}%</span>
         </div>
       </div>
     </div>

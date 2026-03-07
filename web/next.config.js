@@ -3,6 +3,18 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
 
+  // Required for hot reload on Windows + Docker Desktop
+  // Windows filesystem events don't propagate into Linux containers via inotify
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        poll: 1000,
+        aggregateTimeout: 300,
+      };
+    }
+    return config;
+  },
+
   // API proxy for development
   async rewrites() {
     // Use FASTAPI_URL for server-side rewrites (Docker service name)

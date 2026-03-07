@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
+import { Pencil, Trash2, Layers } from 'lucide-react';
+import { btn, input } from '@/components/ui/buttonStyles';
 
 interface DeviceGroup {
   id: string;
@@ -113,37 +115,24 @@ export default function DeviceGroupsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Device Groups</h1>
-          <p className="text-sm text-gray-600">Organize devices for bulk operations and management</p>
-        </div>
-        <button 
-          onClick={() => setShowNewForm(true)}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + New Device Group
+    <PageShell
+      title="Device Groups"
+      subtitle="Organize devices for bulk operations and management"
+      action={
+        <button onClick={() => setShowNewForm(true)} className={`${btn.primary} flex items-center gap-2`}>
+          <Layers className="w-4 h-4" />New Device Group
         </button>
-      </div>
+      }
+    >
 
-      <div className="bg-white rounded border border-gray-200 p-4 mb-4">
+      <div className="gito-card p-4 mb-4">
         <div className="flex items-center gap-4">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Filter by Organization</label>
-            <select 
-              value={selectedOrg} 
-              onChange={e => setSelectedOrg(e.target.value)} 
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white"
-            >
-              <option value="all">All Organizations</option>
-              {organizations.map(org => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-          </div>
+          <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} className={input.select} style={{ width: 'auto' }}>
+            <option value="all">All Organizations</option>
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -172,9 +161,9 @@ export default function DeviceGroupsPage() {
         />
       )}
 
-      <div className="bg-white rounded border border-gray-200">
-        <div className="border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase">
+      <div className="gito-card overflow-hidden">
+        <div className="border-b border-[var(--color-border)] px-6 py-3 bg-panel">
+          <div className="grid grid-cols-12 gap-4 text-[10px] font-bold text-th-muted uppercase tracking-widest">
             <div className="col-span-3">Name</div>
             <div className="col-span-2">Organization</div>
             <div className="col-span-2">Site</div>
@@ -183,47 +172,37 @@ export default function DeviceGroupsPage() {
             <div className="col-span-2 text-right">Actions</div>
           </div>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-[var(--color-border)]">
           {loading ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-600">Loading...</div>
+            <div className="px-6 py-8 text-center text-sm text-th-secondary">Loading...</div>
           ) : groups.length === 0 ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-600">
+            <div className="px-6 py-8 text-center text-sm text-th-secondary">
               No device groups found. Click &quot;New Device Group&quot; to create one.
             </div>
           ) : (
             groups.map(group => (
-              <div key={group.id} className="px-6 py-4 hover:bg-gray-50">
+              <div key={group.id} className="px-6 py-4 hover:bg-panel transition-colors">
                 <div className="grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-3">
-                    <p className="text-sm font-semibold text-gray-900">{group.name}</p>
+                    <p className="text-sm font-semibold text-th-primary">{group.name}</p>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm text-gray-700">{getOrgName(group.organization_id)}</span>
+                    <span className="text-sm text-th-primary">{getOrgName(group.organization_id)}</span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm text-gray-600">{getSiteName(group.site_id)}</span>
+                    <span className="text-sm text-th-muted">{getSiteName(group.site_id)}</span>
                   </div>
                   <div className="col-span-1">
-                    <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(37,99,235,0.08)', color: 'var(--color-primary-600)', border: '1px solid rgba(37,99,235,0.15)' }}>
                       {group.group_type || 'Default'}
                     </span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-sm text-gray-600">{group.description || '—'}</span>
+                    <span className="text-sm text-th-muted">{group.description || '—'}</span>
                   </div>
-                  <div className="col-span-2 flex gap-2 justify-end">
-                    <button 
-                      onClick={() => setEditingGroup(group)}
-                      className="px-3 py-1 text-xs font-medium rounded bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={() => deleteGroup(group.id)}
-                      className="px-3 py-1 text-xs font-medium rounded bg-red-50 text-red-600 hover:bg-red-100"
-                    >
-                      Delete
-                    </button>
+                  <div className="col-span-2 flex gap-1 justify-end">
+                    <button onClick={() => setEditingGroup(group)} className={btn.icon} title="Edit"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => deleteGroup(group.id)} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -231,8 +210,7 @@ export default function DeviceGroupsPage() {
           )}
         </div>
       </div>
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
@@ -304,87 +282,41 @@ function DeviceGroupForm({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded p-6 mb-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-        {group ? 'Edit Device Group' : 'Create New Device Group'}
-      </h3>
+    <div className="gito-card p-6 mb-4">
+      <h3 className="text-lg font-bold text-th-primary mb-1">{group ? 'Edit Device Group' : 'Create New Device Group'}</h3>
+      <p className="text-sm text-th-secondary mb-5">{group ? 'Update group details' : 'Organize devices for bulk operations'}</p>
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-5">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Group Name *</label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="Production Sensors"
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Group Name *</label>
+            <input type="text" required value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className={input.base} placeholder="Production Sensors" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Group Type</label>
-            <input
-              type="text"
-              value={formData.group_type}
-              onChange={e => setFormData(prev => ({ ...prev, group_type: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              placeholder="static, dynamic, test..."
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Group Type</label>
+            <input type="text" value={formData.group_type} onChange={e => setFormData(prev => ({ ...prev, group_type: e.target.value }))} className={input.base} placeholder="static, dynamic, test..." />
           </div>
           <div className="col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              rows={2}
-              placeholder="Optional description..."
-            />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Description</label>
+            <textarea value={formData.description} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))} className={`${input.base} resize-none`} rows={2} placeholder="Optional description..." />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Organization <span className="text-red-500">*</span></label>
-            <select
-              value={formData.organization_id}
-              onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value, site_id: '' }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
-              required
-            >
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Organization *</label>
+            <select value={formData.organization_id} onChange={e => setFormData(prev => ({ ...prev, organization_id: e.target.value, site_id: '' }))} className={input.select} required>
               <option value="">Select organization...</option>
-              {organizations.map(org => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
+              {organizations.map(org => (<option key={org.id} value={org.id}>{org.name}</option>))}
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Site <span className="text-red-500">*</span></label>
-            <select
-              value={formData.site_id}
-              onChange={e => setFormData(prev => ({ ...prev, site_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
-              disabled={!formData.organization_id}
-              required
-            >
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Site *</label>
+            <select value={formData.site_id} onChange={e => setFormData(prev => ({ ...prev, site_id: e.target.value }))} className={`${input.select} disabled:opacity-50`} disabled={!formData.organization_id} required>
               <option value="">{formData.organization_id ? 'Select site...' : 'Select organization first'}</option>
-              {filteredSites.map(site => (
-                <option key={site.id} value={site.id}>{site.name}</option>
-              ))}
+              {filteredSites.map(site => (<option key={site.id} value={site.id}>{site.name}</option>))}
             </select>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit"
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            {group ? 'Update' : 'Create'} Device Group
-          </button>
+        <div className="flex gap-3">
+          <button type="button" onClick={onCancel} className={btn.secondary}>Cancel</button>
+          <button type="submit" className={btn.primary}>{group ? 'Update' : 'Create'} Device Group</button>
         </div>
       </form>
     </div>

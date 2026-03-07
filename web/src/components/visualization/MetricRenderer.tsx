@@ -17,6 +17,7 @@
 import React, { useMemo } from 'react';
 import FlowLine from './FlowLine';
 import type { MetricDefinition } from './types';
+import { formatMetricLabel } from '@/lib/formatMetricLabel';
 
 export interface MetricRendererProps {
   /** The metric key (e.g. "flow_rate", "temperature") */
@@ -31,9 +32,6 @@ export interface MetricRendererProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatLabel(key: string): string {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
 
 function formatNumeric(val: number): string {
   if (Math.abs(val) >= 1000) return val.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -147,7 +145,7 @@ function StateRenderer({ value }: { value: string }) {
 // ─── MetricRenderer ───────────────────────────────────────────────────────────
 
 export default function MetricRenderer({ metricKey, value, definition, label }: MetricRendererProps) {
-  const displayLabel = label ?? definition.label ?? formatLabel(metricKey);
+  const displayLabel = label ?? definition.label ?? formatMetricLabel(metricKey);
 
   const content = useMemo(() => {
     // No data
