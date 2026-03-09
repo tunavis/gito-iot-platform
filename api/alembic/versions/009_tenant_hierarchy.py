@@ -59,18 +59,24 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION is_ancestor_tenant(
             ancestor_id UUID,
             descendant_id UUID
-        ) RETURNS BOOLEAN AS $$
-        WITH RECURSIVE chain AS (
-            SELECT id, parent_tenant_id
-            FROM tenants
-            WHERE id = descendant_id
-          UNION ALL
-            SELECT t.id, t.parent_tenant_id
-            FROM tenants t
-            JOIN chain c ON t.id = c.parent_tenant_id
-        )
-        SELECT EXISTS (SELECT 1 FROM chain WHERE id = ancestor_id);
-        $$ LANGUAGE sql STABLE
+        ) RETURNS BOOLEAN AS $func$
+        DECLARE
+            result BOOLEAN;
+        BEGIN
+            WITH RECURSIVE chain AS (
+                SELECT id, parent_tenant_id
+                FROM tenants
+                WHERE id = descendant_id
+              UNION ALL
+                SELECT t.id, t.parent_tenant_id
+                FROM tenants t
+                JOIN chain c ON t.id = c.parent_tenant_id
+            )
+            SELECT EXISTS (SELECT 1 FROM chain WHERE id = ancestor_id)
+            INTO result;
+            RETURN result;
+        END;
+        $func$ LANGUAGE plpgsql STABLE
     """)
 
     # ── 5. Seed: mark the first/only tenant as management type ─────────────

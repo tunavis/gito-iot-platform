@@ -24,6 +24,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   # Redis (KeyDB-compatible — dev uses KeyDB, staging uses stable Redis 7)
   redis:
