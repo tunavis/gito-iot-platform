@@ -26,6 +26,7 @@ Create Date: 2026-03-09
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+import psycopg2
 
 revision: str = "010_timescaledb"
 down_revision: Union[str, None] = "009_tenant_hierarchy"
@@ -36,20 +37,29 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # -------------------------------------------------------------------------
     # 1. Enable TimescaleDB extension
-    #    Must run in AUTOCOMMIT — CREATE EXTENSION timescaledb resets the
-    #    backend connection when loaded, which kills any open transaction.
-    #    We bypass SQLAlchemy's transaction management by setting autocommit
-    #    directly on the raw psycopg2 DBAPI connection.
+    #    CREATE EXTENSION timescaledb must run in AUTOCOMMIT mode — the
+    #    extension resets the backend connection when loaded, killing any
+    #    open transaction. psycopg2 refuses to set autocommit on a connection
+    #    that already has an open transaction (which Alembic always has).
+    #    Solution: open a brand-new psycopg2 connection in autocommit mode,
+    #    run the CREATE EXTENSION, then close it — never touching Alembic's
+    #    own connection.
     # -------------------------------------------------------------------------
     bind = op.get_bind()
-    raw_conn = bind.connection.dbapi_connection
-    old_autocommit = raw_conn.autocommit
-    raw_conn.autocommit = True
+    url = bind.engine.url
+    ext_conn = psycopg2.connect(
+        host=url.host,
+        port=url.port or 5432,
+        dbname=url.database,
+        user=url.username,
+        password=url.password,
+    )
+    ext_conn.autocommit = True
     try:
-        with raw_conn.cursor() as cur:
+        with ext_conn.cursor() as cur:
             cur.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
     finally:
-        raw_conn.autocommit = old_autocommit
+        ext_conn.close()
 
     # -------------------------------------------------------------------------
     # 2. Fix primary key: drop old (id-only) PK, add composite (id, ts)
