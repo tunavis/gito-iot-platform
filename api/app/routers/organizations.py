@@ -8,6 +8,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.organization import Organization
 from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
@@ -50,8 +51,8 @@ async def list_organizations(
     status: Optional[str] = Query(None, pattern="^(active|inactive|suspended)$"),
 ):
     """List all organizations for a tenant."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -90,8 +91,8 @@ async def create_organization(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Create a new organization."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -135,8 +136,8 @@ async def get_organization(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Get a specific organization."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -163,8 +164,8 @@ async def update_organization(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update an organization."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -200,8 +201,8 @@ async def delete_organization(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete an organization."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -230,8 +231,8 @@ async def list_organization_devices(
     per_page: int = Query(50, ge=1, le=100),
 ):
     """List all devices in an organization."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     

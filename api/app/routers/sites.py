@@ -8,6 +8,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.site import Site
 from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
@@ -52,8 +53,8 @@ async def list_sites(
     parent_site_id: Optional[UUID] = Query(None),
 ):
     """List all sites for a tenant with optional filtering."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -100,8 +101,8 @@ async def create_site(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Create a new site."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -147,8 +148,8 @@ async def get_site(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Get a specific site."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -175,8 +176,8 @@ async def update_site(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update a site."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -212,8 +213,8 @@ async def delete_site(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete a site."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -242,8 +243,8 @@ async def list_site_devices(
     per_page: int = Query(50, ge=1, le=100),
 ):
     """List all devices at a site."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -298,8 +299,8 @@ async def list_child_sites(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """List all child sites (nested hierarchy)."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     

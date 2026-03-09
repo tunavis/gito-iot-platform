@@ -1,9 +1,11 @@
-"""Background task scheduler for notification retry and queue processing.
+"""Background task scheduler for notification retry, queue processing, and device/telemetry maintenance.
 
 Uses APScheduler to periodically:
 - Process pending notifications from queue
 - Retry failed notifications with exponential backoff
 - Clean up old completed notifications
+- Enforce per-tenant telemetry retention policies
+- Mark stale devices as offline
 """
 
 import logging
@@ -11,7 +13,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -64,7 +66,27 @@ class NotificationBackgroundTasks:
                 coalesce=True,
                 max_instances=1,
             )
-            
+
+            # Enforce telemetry retention policy per tenant (runs every 6 hours)
+            self.scheduler.add_job(
+                self.enforce_telemetry_retention,
+                IntervalTrigger(hours=6),
+                id="enforce_telemetry_retention",
+                name="Enforce telemetry retention policies",
+                coalesce=True,
+                max_instances=1,
+            )
+
+            # Mark stale devices as offline (runs every 5 minutes)
+            self.scheduler.add_job(
+                self.detect_offline_devices,
+                IntervalTrigger(minutes=5),
+                id="detect_offline_devices",
+                name="Detect and mark offline devices",
+                coalesce=True,
+                max_instances=1,
+            )
+
             self.scheduler.start()
             logger.info("✅ Background task scheduler started")
         except Exception as e:
@@ -280,6 +302,147 @@ class NotificationBackgroundTasks:
                 await session_gen.aclose()
         except Exception as e:
             logger.error(f"Error in cleanup processor: {e}")
+
+    async def enforce_telemetry_retention(self) -> None:
+        """Enforce per-tenant telemetry and event retention policies.
+
+        Strategy:
+        1. Per-tenant DELETE for granular retention (TimescaleDB only scans
+           chunks that overlap ts < cutoff — much faster than plain Postgres).
+        2. After per-tenant deletes, call drop_chunks() at the global minimum
+           retention floor so any fully-expired chunks are physically removed
+           from disk (instant — drops entire files, no row scanning).
+
+        retention_days read from tenants.metadata (Settings → Retention tab).
+        Defaults to 90 days if not configured.
+        """
+        try:
+            session_gen = get_session()
+            session = await session_gen.__anext__()
+
+            try:
+                tenants = (await session.execute(
+                    text(
+                        "SELECT id, metadata->>'retention_days' AS retention_days "
+                        "FROM tenants WHERE status = 'active'"
+                    )
+                )).fetchall()
+
+                total_telemetry = 0
+                total_events    = 0
+                min_retention   = 90  # track minimum across tenants for drop_chunks
+
+                for row in tenants:
+                    tenant_id      = str(row[0])
+                    retention_days = int(row[1]) if row[1] else 90
+                    cutoff         = datetime.utcnow() - timedelta(days=retention_days)
+                    min_retention  = min(min_retention, retention_days)
+
+                    # Per-tenant DELETE — TimescaleDB chunk pruning makes this fast
+                    result = await session.execute(
+                        text("DELETE FROM telemetry WHERE tenant_id = :tid AND ts < :cutoff"),
+                        {"tid": tenant_id, "cutoff": cutoff},
+                    )
+                    deleted_telemetry  = result.rowcount
+                    total_telemetry   += deleted_telemetry
+
+                    result = await session.execute(
+                        text("DELETE FROM events WHERE tenant_id = :tid AND ts < :cutoff"),
+                        {"tid": tenant_id, "cutoff": cutoff},
+                    )
+                    deleted_events  = result.rowcount
+                    total_events   += deleted_events
+
+                    if deleted_telemetry or deleted_events:
+                        logger.info(
+                            f"Retention cleanup for tenant {tenant_id}: "
+                            f"{deleted_telemetry} telemetry rows, {deleted_events} events "
+                            f"(>{retention_days} days old)"
+                        )
+
+                await session.commit()
+
+                # TimescaleDB: physically drop fully-expired chunks at the global
+                # minimum retention floor. This reclaims disk space instantly.
+                # cascade => TRUE propagates to continuous aggregates.
+                global_cutoff = datetime.utcnow() - timedelta(days=min_retention)
+                try:
+                    await session.execute(
+                        text("SELECT drop_chunks('telemetry', :cutoff)"),
+                        {"cutoff": global_cutoff},
+                    )
+                    await session.commit()
+                    logger.info(
+                        f"TimescaleDB drop_chunks: removed chunks older than {min_retention} days"
+                    )
+                except Exception as e:
+                    # Non-fatal: drop_chunks may fail if TimescaleDB is not available
+                    # or if there are no chunks to drop
+                    logger.debug(f"drop_chunks skipped: {e}")
+
+                logger.info(
+                    f"Retention enforcement complete: "
+                    f"{total_telemetry} telemetry rows, {total_events} events deleted"
+                )
+            finally:
+                await session_gen.aclose()
+        except Exception as e:
+            logger.error(f"Error in telemetry retention enforcement: {e}")
+
+    async def detect_offline_devices(self) -> None:
+        """Mark devices as offline when they have not sent telemetry within their threshold.
+
+        Uses offline_threshold (seconds) from device_types.default_settings.
+        Falls back to 600 seconds (10 minutes) if not configured.
+        """
+        try:
+            session_gen = get_session()
+            session = await session_gen.__anext__()
+
+            try:
+                # Single query: join devices with their device type threshold, filter stale online devices
+                result = await session.execute(
+                    text("""
+                        UPDATE devices d
+                        SET status = 'offline', updated_at = now()
+                        FROM device_types dt
+                        WHERE d.device_type_id = dt.id
+                          AND d.status = 'online'
+                          AND d.last_seen IS NOT NULL
+                          AND d.last_seen < now() - (
+                              COALESCE(
+                                  (dt.default_settings->>'offline_threshold')::int,
+                                  600
+                              ) * interval '1 second'
+                          )
+                        RETURNING d.id, d.tenant_id
+                    """)
+                )
+                rows = result.fetchall()
+
+                # Also catch devices with no device_type_id using the default threshold
+                result2 = await session.execute(
+                    text("""
+                        UPDATE devices
+                        SET status = 'offline', updated_at = now()
+                        WHERE device_type_id IS NULL
+                          AND status = 'online'
+                          AND last_seen IS NOT NULL
+                          AND last_seen < now() - interval '10 minutes'
+                        RETURNING id, tenant_id
+                    """)
+                )
+                rows2 = result2.fetchall()
+
+                total = len(rows) + len(rows2)
+                if total:
+                    logger.info(f"Marked {total} device(s) as offline")
+
+                await session.commit()
+            finally:
+                await session_gen.aclose()
+        except Exception as e:
+            logger.error(f"Error in offline device detection: {e}")
 
     @staticmethod
     def _calculate_backoff(attempt: int) -> int:

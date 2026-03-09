@@ -35,6 +35,7 @@ def create_access_token(
     email: str = "",
     name: str = "",
     tenant_name: str = "",
+    tenant_type: str = "client",
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """Create JWT access token."""
@@ -53,6 +54,7 @@ def create_access_token(
     payload = {
         "sub":         user_id,
         "tenant_id":   tenant_id,
+        "tenant_type": tenant_type,
         "role":        user_role,
         "email":       email,
         "name":        name,

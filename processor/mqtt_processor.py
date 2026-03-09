@@ -1,6 +1,21 @@
 """
 MQTT Processor Service
-Subscribes to device telemetry, validates, inserts to TimescaleDB, and updates Redis.
+Subscribes to device telemetry, validates, buffers via KeyDB Streams,
+and batch-inserts to TimescaleDB.
+
+Architecture (Phase 2):
+  MQTT message
+    → validate / deduplicate / rate-limit
+    → XADD  telemetry:ingest  (KeyDB Stream, ~0.1 ms)
+    → publish Redis pub/sub   (WebSocket delivery)
+    → evaluate alert rules    (inline, reads from payload)
+
+  StreamConsumer (separate asyncio task)
+    → XREADGROUP  COUNT 500  BLOCK 100 ms
+    → group rows by tenant
+    → executemany  INSERT INTO telemetry  (one round-trip per tenant)
+    → batch UPDATE devices.last_seen      (UNNEST, one query per tenant)
+    → XACK all processed message IDs
 """
 
 import asyncio
@@ -9,7 +24,8 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta
 from uuid import UUID
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -19,45 +35,58 @@ import aiomqtt
 import redis.asyncio as aioredis
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
-import psycopg
 
-# Configure structured logging
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Configuration from environment variables
-MQTT_BROKER = os.getenv('MQTT_BROKER', 'mosquitto')
-MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+MQTT_BROKER   = os.getenv('MQTT_BROKER', 'mosquitto')
+MQTT_PORT     = int(os.getenv('MQTT_PORT', 1883))
 MQTT_USERNAME = os.getenv('MQTT_USERNAME', 'processor')
 MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', 'processor')
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@postgres:5432/gito')
+REDIS_URL    = os.getenv('REDIS_URL', 'redis://keydb:6379')
 
-REDIS_URL = os.getenv('REDIS_URL', 'redis://keydb:6379')
-
-# Email / SMTP Configuration
-SMTP_HOST = os.getenv('SMTP_HOST', '')
-SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-SMTP_USER = os.getenv('SMTP_USER', '')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+SMTP_HOST       = os.getenv('SMTP_HOST', '')
+SMTP_PORT_NUM   = int(os.getenv('SMTP_PORT', '587'))
+SMTP_USER       = os.getenv('SMTP_USER', '')
+SMTP_PASSWORD   = os.getenv('SMTP_PASSWORD', '')
 SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', 'noreply@gito-iot.local')
-SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
+SMTP_USE_TLS    = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
 
-# Message validation constants
-MAX_PAYLOAD_SIZE = 256 * 1024  # 256KB
-MAX_TELEMETRY_VALUE = 1e10  # Prevent overflow
+MAX_PAYLOAD_SIZE    = 256 * 1024   # 256 KB
+MAX_TELEMETRY_VALUE = 1e10
 MIN_TELEMETRY_VALUE = -1e10
 
-# Metadata keys devices commonly include — strip before storing as metrics
 SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id", "time", "datetime"}
 
+RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
 
+# KeyDB Streams config
+STREAM_KEY       = 'telemetry:ingest'
+STREAM_GROUP     = 'telemetry-processors'
+STREAM_CONSUMER  = 'worker-1'
+STREAM_BATCH     = 500   # rows per read
+STREAM_BLOCK_MS  = 100   # ms to block waiting for messages
+# Reclaim pending messages older than this (ms) — handles crash recovery
+PENDING_CLAIM_MS = 30_000
+
+UNIT_CACHE_TTL = 300  # seconds
+
+
+# ---------------------------------------------------------------------------
+# Email
+# ---------------------------------------------------------------------------
 class EmailService:
-    """Service for sending email notifications."""
-
     @staticmethod
     async def send_alert_email(
         recipient: str,
@@ -68,7 +97,6 @@ class EmailService:
         operator: str,
         tenant_name: str,
     ) -> bool:
-        """Send alert notification email."""
         try:
             if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
                 logger.warning("SMTP configuration incomplete - skipping email")
@@ -79,65 +107,46 @@ class EmailService:
                 device_name, metric, value, threshold, operator, tenant_name
             )
 
-            # Create message
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = SMTP_FROM_EMAIL
-            msg["To"] = recipient
+            msg["From"]    = SMTP_FROM_EMAIL
+            msg["To"]      = recipient
+            msg.attach(MIMEText(body, "plain"))
+            msg.attach(MIMEText(EmailService._convert_to_html(body), "html"))
 
-            # Attach plain text and HTML versions
-            part1 = MIMEText(body, "plain")
-            part2 = MIMEText(EmailService._convert_to_html(body), "html")
-            msg.attach(part1)
-            msg.attach(part2)
-
-            # Send email via SMTP
             if SMTP_USE_TLS:
-                with SMTP(SMTP_HOST, SMTP_PORT) as server:
+                with SMTP(SMTP_HOST, SMTP_PORT_NUM) as server:
                     server.starttls()
                     server.login(SMTP_USER, SMTP_PASSWORD)
                     server.send_message(msg)
             else:
-                with SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+                with SMTP_SSL(SMTP_HOST, SMTP_PORT_NUM) as server:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                     server.send_message(msg)
 
             logger.info(f"Alert email sent to {recipient} for {device_name}")
             return True
-
         except Exception as e:
             logger.error(f"Failed to send alert email: {e}")
             return False
 
     @staticmethod
-    def _generate_alert_email_body(
-        device_name: str,
-        metric: str,
-        value: float,
-        threshold: float,
-        operator: str,
-        tenant_name: str,
-    ) -> str:
-        """Generate alert email body text."""
-        operator_text = {
-            ">": "greater than",
-            "<": "less than",
-            ">=": "greater than or equal to",
-            "<=": "less than or equal to",
-            "==": "equal to",
-            "!=": "not equal to",
+    def _generate_alert_email_body(device_name, metric, value, threshold, operator, tenant_name) -> str:
+        op_text = {
+            ">": "greater than", "<": "less than",
+            ">=": "greater than or equal to", "<=": "less than or equal to",
+            "==": "equal to", "!=": "not equal to",
         }.get(operator, operator)
-
         return f"""Alert Notification
 
 Device: {device_name}
 Tenant: {tenant_name}
 Metric: {metric}
 Current Value: {value}
-Threshold: {threshold} ({operator_text})
+Threshold: {threshold} ({op_text})
 Status: THRESHOLD BREACHED
 
-This alert was triggered because the {metric} value ({value}) is {operator_text} the configured threshold ({threshold}).
+This alert was triggered because the {metric} value ({value}) is {op_text} the configured threshold ({threshold}).
 
 Please investigate the device status and take appropriate action.
 
@@ -147,76 +156,45 @@ Gito IoT Platform
 
     @staticmethod
     def _convert_to_html(text: str) -> str:
-        """Convert plain text to HTML format."""
         html = "<html><body><pre style='font-family: monospace'>"
         html += text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         html += "</pre></body></html>"
         return html
 
 
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
 class TelemetryValidator:
-    """Validates incoming telemetry payloads."""
-
     @staticmethod
     def validate_payload(payload: dict) -> bool:
-        """
-        Validate telemetry payload structure.
-        Expected format: { "metric_name": value, ... }
-        Values can be numeric, string, bool (stored as string), dict/list (stored as JSON), or null.
-        """
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or not payload:
             return False
-
-        if not payload:  # Empty dict
-            return False
-
         for key, value in payload.items():
-            # Metric names must be non-empty strings
             if not isinstance(key, str) or not key:
                 return False
-
-            # Numeric values must be within range (prevent overflow)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 if value > MAX_TELEMETRY_VALUE or value < MIN_TELEMETRY_VALUE:
                     return False
-
         return True
 
     @staticmethod
     def flatten_payload(payload: dict, prefix: str = "", max_depth: int = 5) -> dict:
         """
         Recursively flatten nested dicts into __ separated keys.
-
-        Allows devices that emit nested JSON (Tasmota, Shelly, LoRaWAN decoders, etc.)
-        to be stored as queryable numeric metrics without any bridge or custom firmware.
-
-        Examples:
-            {"SI7021": {"Temperature": 24.5, "Humidity": 61.2}}
-                → {"SI7021__Temperature": 24.5, "SI7021__Humidity": 61.2}
-
-            {"energy": {"power": 120.5, "today": {"kwh": 1.2}}}
-                → {"energy__power": 120.5, "energy__today__kwh": 1.2}
-
-            {"temperature": 24.5}   → {"temperature": 24.5}   (unchanged)
-            {"status": "online"}    → {"status": "online"}    (unchanged)
-            {"data": [1, 2, 3]}     → {"data": [1, 2, 3]}    (arrays kept as-is)
-
-        Non-dict values (numbers, strings, booleans, lists) are kept at their
-        flattened key. max_depth prevents runaway recursion on malicious input.
+        {"SI7021": {"Temperature": 24.5}} → {"SI7021__Temperature": 24.5}
         """
         result = {}
         for key, value in payload.items():
             full_key = f"{prefix}__{key}" if prefix else key
             if isinstance(value, dict) and value and max_depth > 0:
-                nested = TelemetryValidator.flatten_payload(value, full_key, max_depth - 1)
-                result.update(nested)
+                result.update(TelemetryValidator.flatten_payload(value, full_key, max_depth - 1))
             else:
                 result[full_key] = value
         return result
 
     @staticmethod
     def is_valid_uuid(value: str) -> bool:
-        """Validate UUID format."""
         try:
             UUID(value)
             return True
@@ -224,45 +202,32 @@ class TelemetryValidator:
             return False
 
 
-UNIT_CACHE_TTL = 300  # seconds — how long to cache device type unit maps
-
-
+# ---------------------------------------------------------------------------
+# Database service
+# ---------------------------------------------------------------------------
 class DatabaseService:
-    """Handles database operations for telemetry and alerts."""
-
     def __init__(self, db_url: str):
-        self.db_url = db_url
-        self.conn_pool = None
-        # Cache: device_id → (timestamp, {metric_key: unit})
+        self.db_url   = db_url
+        self.conn_pool: AsyncConnectionPool | None = None
         self._unit_cache: dict[str, tuple[float, dict[str, str]]] = {}
 
     async def connect(self):
-        """Initialize database connection pool."""
-        try:
-            self.conn_pool = AsyncConnectionPool(
-                self.db_url,
-                min_size=5,
-                max_size=20,
-                kwargs={"row_factory": dict_row},
-            )
-            await self.conn_pool.open()
-            logger.info("Database connection pool created")
-        except Exception as e:
-            logger.error(f"Failed to create database pool: {e}")
-            raise
+        self.conn_pool = AsyncConnectionPool(
+            self.db_url,
+            min_size=5,
+            max_size=20,
+            kwargs={"row_factory": dict_row},
+        )
+        await self.conn_pool.open()
+        logger.info("Database connection pool created")
 
     async def disconnect(self):
-        """Close database connection pool."""
         if self.conn_pool:
             await self.conn_pool.close()
             logger.info("Database connection pool closed")
 
     async def get_unit_map(self, device_id: str) -> dict[str, str]:
-        """Return {metric_key: unit} for a device, resolved from its device type's data_model.
-
-        Uses an in-memory cache with a 5-minute TTL to avoid repeated DB lookups.
-        Returns an empty dict if the device has no type or no data_model.
-        """
+        """Return {metric_key: unit} from device type's data_model. Cached 5 min."""
         now = time.monotonic()
         cached = self._unit_cache.get(device_id)
         if cached and (now - cached[0]) < UNIT_CACHE_TTL:
@@ -272,12 +237,8 @@ class DatabaseService:
         try:
             async with self.conn_pool.connection() as conn:
                 result = await conn.execute(
-                    """
-                    SELECT dt.data_model
-                    FROM devices d
-                    JOIN device_types dt ON d.device_type_id = dt.id
-                    WHERE d.id = %s
-                    """,
+                    "SELECT dt.data_model FROM devices d "
+                    "JOIN device_types dt ON d.device_type_id = dt.id WHERE d.id = %s",
                     (device_id,),
                 )
                 row = await result.fetchone()
@@ -293,110 +254,87 @@ class DatabaseService:
         self._unit_cache[device_id] = (now, unit_map)
         return unit_map
 
-    async def insert_telemetry(
-        self,
-        tenant_id: str,
-        device_id: str,
-        payload: dict,
-        timestamp: datetime
-    ) -> bool:
+    async def batch_insert_telemetry(self, rows: list[tuple]) -> bool:
         """
-        Insert telemetry into TimescaleDB using key-value format.
+        Bulk-insert telemetry rows grouped by tenant (one executemany per tenant).
+        Each row tuple: (tenant_id, device_id, metric_key, value_float,
+                         value_str, value_json, unit, ts)
 
-        Each metric in the payload becomes a separate row in the telemetry table.
-        This enables unlimited dynamic metrics per device (industry-standard pattern).
-        Unit is populated from the device type's data_model when available.
-
-        Returns True on success, False on failure.
+        Also batch-updates devices.last_seen per tenant using UNNEST.
+        Returns True on full success, False if any tenant group failed.
         """
-        try:
-            # Resolve units from device type schema (cached, lightweight)
-            unit_map = await self.get_unit_map(device_id)
+        # Group rows by tenant for RLS context setting
+        tenant_groups: dict[str, list[tuple]] = defaultdict(list)
+        for row in rows:
+            tenant_groups[row[0]].append(row)
 
-            async with self.conn_pool.connection() as conn:
-                # Set tenant context for RLS (must match current_setting('app.current_tenant_id') in RLS policies)
-                await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)",
-                    (tenant_id,)
-                )
-
-                # Insert one row per metric (key-value format)
-                # This enables unlimited dynamic metrics
-                for metric_key, metric_value in payload.items():
-                    if metric_value is None:
-                        continue
-
-                    # Determine value type and column
-                    value_float = None
-                    value_str = None
-                    value_json = None
-
-                    if isinstance(metric_value, (int, float)):
-                        value_float = float(metric_value)
-                    elif isinstance(metric_value, str):
-                        value_str = metric_value
-                    elif isinstance(metric_value, (dict, list)):
-                        value_json = json.dumps(metric_value)
-                    else:
-                        # Convert other types to string
-                        value_str = str(metric_value)
-
-                    unit = unit_map.get(metric_key)
-
+        success = True
+        for tenant_id, tenant_rows in tenant_groups.items():
+            try:
+                async with self.conn_pool.connection() as conn:
+                    # Set RLS context for this tenant
                     await conn.execute(
-                        """
-                        INSERT INTO telemetry (tenant_id, device_id, metric_key, metric_value, metric_value_str, metric_value_json, unit, ts)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (tenant_id, device_id, metric_key, value_float, value_str, value_json, unit, timestamp)
+                        "SELECT set_config('app.current_tenant_id', %s, false)",
+                        (tenant_id,)
                     )
 
-                # Update device last_seen
-                await conn.execute(
-                    """
-                    UPDATE devices
-                    SET last_seen = %s, status = 'online', updated_at = now()
-                    WHERE id = %s AND tenant_id = %s
-                    """,
-                    (timestamp, device_id, tenant_id)
+                    # Batch insert all metrics for this tenant
+                    async with conn.cursor() as cur:
+                        await cur.executemany(
+                            """
+                            INSERT INTO telemetry
+                                (tenant_id, device_id, metric_key,
+                                 metric_value, metric_value_str, metric_value_json,
+                                 unit, ts)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            tenant_rows,
+                        )
+
+                    # Batch update device last_seen: collect max ts per device
+                    device_ts: dict[str, datetime] = {}
+                    for row in tenant_rows:
+                        device_id, ts = row[1], row[7]
+                        if device_id not in device_ts or ts > device_ts[device_id]:
+                            device_ts[device_id] = ts
+
+                    if device_ts:
+                        device_ids  = list(device_ts.keys())
+                        tenant_ids  = [tenant_id] * len(device_ids)
+                        timestamps  = [device_ts[d] for d in device_ids]
+                        await conn.execute(
+                            """
+                            UPDATE devices
+                            SET last_seen = v.ts, status = 'online', updated_at = now()
+                            FROM (
+                                SELECT
+                                    UNNEST(%s::uuid[])          AS id,
+                                    UNNEST(%s::uuid[])          AS tid,
+                                    UNNEST(%s::timestamptz[])   AS ts
+                            ) v
+                            WHERE devices.id = v.id
+                              AND devices.tenant_id = v.tid
+                            """,
+                            (device_ids, tenant_ids, timestamps),
+                        )
+
+                    await conn.commit()
+
+            except Exception as e:
+                logger.error(
+                    f"Batch insert failed for tenant {tenant_id}: {e}",
+                    exc_info=True,
                 )
+                success = False
 
-                await conn.commit()
+        return success
 
-                logger.debug(
-                    "Telemetry inserted",
-                    extra={
-                        "tenant_id": tenant_id,
-                        "device_id": device_id,
-                        "metrics_count": len(payload)
-                    }
-                )
-                return True
-        except Exception as e:
-            logger.error(
-                "Failed to insert telemetry",
-                extra={
-                    "tenant_id": tenant_id,
-                    "device_id": device_id,
-                    "error": str(e)
-                },
-                exc_info=True
-            )
-            return False
-
-    async def get_active_alert_rules(
-        self,
-        tenant_id: str,
-        device_id: str
-    ) -> list:
-        """Fetch active alert rules for a device."""
+    async def get_active_alert_rules(self, tenant_id: str, device_id: str) -> list:
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)",
-                    (tenant_id,)
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
                 )
-                
                 cursor = await conn.execute(
                     """
                     SELECT id, metric, operator, threshold, cooldown_minutes, last_fired_at
@@ -404,119 +342,12 @@ class DatabaseService:
                     WHERE device_id = %s AND active = true AND tenant_id = %s
                     ORDER BY created_at
                     """,
-                    (device_id, tenant_id)
+                    (device_id, tenant_id),
                 )
-                rows = await cursor.fetchall()
-                
-                return [dict(row) for row in rows]
+                return [dict(row) for row in await cursor.fetchall()]
         except Exception as e:
-            logger.error(
-                "Failed to fetch alert rules",
-                extra={
-                    "tenant_id": tenant_id,
-                    "device_id": device_id,
-                    "error": str(e)
-                },
-                exc_info=True
-            )
+            logger.error(f"Failed to fetch alert rules: {e}", exc_info=True)
             return []
-
-    async def get_tenant_admin_emails(
-        self,
-        tenant_id: str
-    ) -> list:
-        """Fetch email addresses of tenant admins."""
-        try:
-            async with self.conn_pool.connection() as conn:
-                await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)",
-                    (tenant_id,)
-                )
-                
-                cursor = await conn.execute(
-                    """
-                    SELECT DISTINCT email
-                    FROM users
-                    WHERE tenant_id = %s AND status = 'active' AND email IS NOT NULL
-                    """,
-                    (tenant_id,)
-                )
-                rows = await cursor.fetchall()
-                
-                return [row["email"] for row in rows]
-        except Exception as e:
-            logger.error(
-                "Failed to fetch tenant admin emails",
-                extra={
-                    "tenant_id": tenant_id,
-                    "error": str(e)
-                },
-                exc_info=True
-            )
-            return []
-
-    async def get_device_and_tenant_info(
-        self,
-        tenant_id: str,
-        device_id: str
-    ) -> dict:
-        """Fetch device name and tenant name for alert context."""
-        try:
-            async with self.conn_pool.connection() as conn:
-                await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)",
-                    (tenant_id,)
-                )
-                
-                cursor = await conn.execute(
-                    """
-                    SELECT d.name as device_name, t.name as tenant_name
-                    FROM devices d
-                    JOIN tenants t ON d.tenant_id = t.id
-                    WHERE d.id = %s AND d.tenant_id = %s
-                    """,
-                    (device_id, tenant_id)
-                )
-                row = await cursor.fetchone()
-                
-                if row:
-                    return dict(row)
-                return {"device_name": device_id, "tenant_name": tenant_id}
-        except Exception as e:
-            logger.error(
-                "Failed to fetch device/tenant info",
-                extra={
-                    "tenant_id": tenant_id,
-                    "device_id": device_id,
-                    "error": str(e)
-                }
-            )
-            return {"device_name": device_id, "tenant_name": tenant_id}
-
-    async def mark_notification_sent(
-        self,
-        alert_event_id: str,
-        sent_successfully: bool
-    ) -> bool:
-        """Update alert event with notification status."""
-        try:
-            async with self.conn_pool.connection() as conn:
-                await conn.execute(
-                    """
-                    UPDATE alert_events
-                    SET notification_sent = %s, notification_sent_at = now()
-                    WHERE id = %s
-                    """,
-                    (sent_successfully, alert_event_id)
-                )
-                await conn.commit()
-                return True
-        except Exception as e:
-            logger.error(
-                "Failed to mark notification sent",
-                extra={"alert_event_id": alert_event_id, "error": str(e)}
-            )
-            return False
 
     async def fire_alert(
         self,
@@ -525,209 +356,357 @@ class DatabaseService:
         device_id: str,
         metric_name: str,
         metric_value: float,
-        message: str
+        message: str,
     ) -> str | None:
-        """Record a fired alert. Returns alert_event_id or None on failure."""
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)",
-                    (tenant_id,)
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
                 )
-                
-                # Insert and get the generated ID
                 cursor = await conn.execute(
                     """
-                    INSERT INTO alert_events (
-                        tenant_id, alert_rule_id, device_id, metric_name,
-                        metric_value, message, fired_at, notification_sent
-                    ) VALUES (%s, %s, %s, %s, %s, %s, now(), false)
+                    INSERT INTO alert_events
+                        (tenant_id, alert_rule_id, device_id, metric_name,
+                         metric_value, message, fired_at, notification_sent)
+                    VALUES (%s, %s, %s, %s, %s, %s, now(), false)
                     RETURNING id
                     """,
-                    (tenant_id, alert_rule_id, device_id, metric_name, metric_value, message)
+                    (tenant_id, alert_rule_id, device_id, metric_name, metric_value, message),
                 )
-                alert_event_id = await cursor.fetchone()
-                
-                # Update alert_rule's last_fired_at
+                row = await cursor.fetchone()
                 await conn.execute(
-                    """
-                    UPDATE alert_rules
-                    SET last_fired_at = now()
-                    WHERE id = %s AND tenant_id = %s
-                    """,
-                    (alert_rule_id, tenant_id)
+                    "UPDATE alert_rules SET last_fired_at = now() WHERE id = %s AND tenant_id = %s",
+                    (alert_rule_id, tenant_id),
                 )
-                
                 await conn.commit()
-                return alert_event_id["id"] if alert_event_id else None
+                return row["id"] if row else None
         except Exception as e:
-            logger.error(
-                "Failed to fire alert",
-                extra={
-                    "tenant_id": tenant_id,
-                    "alert_rule_id": alert_rule_id,
-                    "error": str(e)
-                }
-            )
+            logger.error(f"Failed to fire alert: {e}")
             return None
 
+    async def get_device_and_tenant_info(self, tenant_id: str, device_id: str) -> dict:
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
+                )
+                cursor = await conn.execute(
+                    """
+                    SELECT d.name as device_name, t.name as tenant_name
+                    FROM devices d JOIN tenants t ON d.tenant_id = t.id
+                    WHERE d.id = %s AND d.tenant_id = %s
+                    """,
+                    (device_id, tenant_id),
+                )
+                row = await cursor.fetchone()
+                return dict(row) if row else {"device_name": device_id, "tenant_name": tenant_id}
+        except Exception:
+            return {"device_name": device_id, "tenant_name": tenant_id}
 
+
+# ---------------------------------------------------------------------------
+# Redis / KeyDB service
+# ---------------------------------------------------------------------------
 class RedisService:
-    """Handles Redis pub/sub for real-time updates."""
-
     def __init__(self, redis_url: str):
         self.redis_url = redis_url
-        self.redis = None
+        self.redis: aioredis.Redis | None = None
 
     async def connect(self):
-        """Connect to Redis."""
-        try:
-            self.redis = await aioredis.from_url(self.redis_url, encoding="utf-8", decode_responses=True)
-            logger.info("Connected to Redis")
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            raise
+        self.redis = await aioredis.from_url(
+            self.redis_url, encoding="utf-8", decode_responses=True
+        )
+        logger.info("Connected to Redis/KeyDB")
 
     async def disconnect(self):
-        """Close Redis connection."""
         if self.redis:
             await self.redis.close()
-            logger.info("Disconnected from Redis")
+            logger.info("Disconnected from Redis/KeyDB")
 
-    async def publish_telemetry(
-        self,
-        tenant_id: str,
-        device_id: str,
-        payload: dict
-    ):
-        """Publish telemetry to Redis for WebSocket subscribers."""
+    async def publish_telemetry(self, tenant_id: str, device_id: str, payload: dict):
         try:
             channel = f"telemetry:{tenant_id}:{device_id}"
             message = json.dumps({
                 "device_id": device_id,
                 "payload": payload,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             })
             await self.redis.publish(channel, message)
         except Exception as e:
-            logger.error(
-                "Failed to publish to Redis",
-                extra={
-                    "channel": f"telemetry:{tenant_id}:{device_id}",
-                    "error": str(e)
-                }
-            )
+            logger.error(f"Failed to publish telemetry to Redis: {e}")
 
-    async def publish_alert(
+    async def publish_alert(self, tenant_id: str, device_id: str, alert_data: dict):
+        try:
+            channel = f"alerts:{tenant_id}:{device_id}"
+            message = json.dumps({**alert_data, "timestamp": datetime.utcnow().isoformat()})
+            await self.redis.publish(channel, message)
+        except Exception as e:
+            logger.error(f"Failed to publish alert: {e}")
+
+    async def stream_add(
         self,
         tenant_id: str,
         device_id: str,
-        alert_data: dict
-    ):
-        """Publish alert to Redis for real-time notification."""
+        payload: dict,
+        timestamp: datetime,
+    ) -> str | None:
+        """Write one telemetry message to the KeyDB Stream. Returns stream entry ID."""
         try:
-            channel = f"alerts:{tenant_id}:{device_id}"
-            message = json.dumps({
-                **alert_data,
-                "timestamp": datetime.utcnow().isoformat()
-            })
-            await self.redis.publish(channel, message)
-        except Exception as e:
-            logger.error(
-                "Failed to publish alert",
-                extra={
-                    "channel": f"alerts:{tenant_id}:{device_id}",
-                    "error": str(e)
-                }
+            entry_id = await self.redis.xadd(
+                STREAM_KEY,
+                {
+                    "tenant_id": tenant_id,
+                    "device_id": device_id,
+                    "payload":   json.dumps(payload),
+                    "timestamp": timestamp.isoformat(),
+                },
+                maxlen=100_000,  # cap stream at ~100k pending entries
+                approximate=True,
             )
+            return entry_id
+        except Exception as e:
+            logger.error(f"Failed to XADD to stream: {e}")
+            return None
+
+    async def ensure_consumer_group(self):
+        """Create the consumer group idempotently (start from stream beginning)."""
+        try:
+            await self.redis.xgroup_create(STREAM_KEY, STREAM_GROUP, id="0", mkstream=True)
+            logger.info(f"Created consumer group '{STREAM_GROUP}' on stream '{STREAM_KEY}'")
+        except Exception as e:
+            if "BUSYGROUP" in str(e):
+                logger.debug(f"Consumer group '{STREAM_GROUP}' already exists")
+            else:
+                logger.error(f"Failed to create consumer group: {e}")
+                raise
 
 
+# ---------------------------------------------------------------------------
+# Alert evaluator
+# ---------------------------------------------------------------------------
 class AlertEvaluator:
-    """Evaluates telemetry against alert rules."""
-
     OPERATORS = {
-        'gt': lambda v, t: v > t,
+        'gt':  lambda v, t: v > t,
         'gte': lambda v, t: v >= t,
-        'lt': lambda v, t: v < t,
+        'lt':  lambda v, t: v < t,
         'lte': lambda v, t: v <= t,
-        'eq': lambda v, t: v == t,
+        'eq':  lambda v, t: v == t,
         'neq': lambda v, t: v != t,
     }
 
     @staticmethod
-    def should_fire_alert(
-        rule: dict,
-        metric_value: float,
-        current_time: datetime
-    ) -> bool:
-        """
-        Determine if alert should fire based on rule and metric value.
-        Respects cooldown period.
-        """
-        operator = rule.get('operator')
-        threshold = rule.get('threshold')
+    def should_fire_alert(rule: dict, metric_value: float, current_time: datetime) -> bool:
+        operator      = rule.get('operator')
+        threshold     = rule.get('threshold')
         last_fired_at = rule.get('last_fired_at')
-        cooldown_minutes = rule.get('cooldown_minutes', 0)
+        cooldown_min  = rule.get('cooldown_minutes', 0)
 
-        # Check if operator exists
         if operator not in AlertEvaluator.OPERATORS:
             return False
-
-        # Check threshold condition
-        comparison_fn = AlertEvaluator.OPERATORS[operator]
-        if not comparison_fn(metric_value, threshold):
+        if not AlertEvaluator.OPERATORS[operator](metric_value, threshold):
             return False
-
-        # Check cooldown period
-        if last_fired_at:
-            from datetime import timedelta
-            cooldown_delta = timedelta(minutes=cooldown_minutes)
-            if current_time < last_fired_at + cooldown_delta:
-                return False
-
+        if last_fired_at and current_time < last_fired_at + timedelta(minutes=cooldown_min):
+            return False
         return True
 
 
-class MQTTProcessor:
-    """Main processor that orchestrates MQTT, database, and Redis."""
+# ---------------------------------------------------------------------------
+# Stream consumer — reads batches from KeyDB Stream, batch-inserts to DB
+# ---------------------------------------------------------------------------
+class StreamConsumer:
+    """
+    Runs as an asyncio task alongside the MQTT listener.
 
-    def __init__(self):
-        self.db_service = DatabaseService(DATABASE_URL)
-        self.redis_service = RedisService(REDIS_URL)
-        self.validator = TelemetryValidator()
-        self.running = False
+    Read loop:
+      XREADGROUP GROUP telemetry-processors worker-1 COUNT 500 BLOCK 100 ms
+      → decode rows
+      → resolve units (cached)
+      → DatabaseService.batch_insert_telemetry()
+      → XACK all processed IDs
+
+    Crash-recovery loop (every 30 s):
+      XAUTOCLAIM old pending entries (stale > 30 s) and reprocess them.
+    """
+
+    def __init__(self, db_service: DatabaseService, redis_service: RedisService):
+        self.db    = db_service
+        self.redis = redis_service
+        self._running = False
 
     async def start(self):
-        """Start the processor."""
-        try:
-            logger.info("Starting MQTT Processor...")
-            await self.db_service.connect()
-            await self.redis_service.connect()
-            self.running = True
-            logger.info("MQTT Processor started successfully")
-        except Exception as e:
-            logger.error(f"Failed to start processor: {e}")
-            raise
+        await self.redis.ensure_consumer_group()
+        self._running = True
+        logger.info("Stream consumer started")
 
     async def stop(self):
-        """Stop the processor gracefully."""
+        self._running = False
+
+    def _decode_stream_entry(self, data: dict) -> tuple | None:
+        """Decode a raw stream entry dict into (tenant_id, device_id, payload, timestamp)."""
+        try:
+            return (
+                data["tenant_id"],
+                data["device_id"],
+                json.loads(data["payload"]),
+                datetime.fromisoformat(data["timestamp"]),
+            )
+        except (KeyError, ValueError, json.JSONDecodeError) as e:
+            logger.warning(f"Malformed stream entry: {e}")
+            return None
+
+    async def _process_entries(self, entries: list[tuple[str, dict]]) -> list[str]:
+        """
+        Convert raw stream entries to DB rows, batch-insert, return ACK IDs.
+        Returns list of msg_ids that were successfully processed.
+        """
+        rows: list[tuple] = []
+        msg_ids: list[str] = []
+
+        for msg_id, data in entries:
+            decoded = self._decode_stream_entry(data)
+            if not decoded:
+                # ACK malformed entries so they don't block the stream
+                msg_ids.append(msg_id)
+                continue
+
+            tenant_id, device_id, payload, timestamp = decoded
+            unit_map = await self.db.get_unit_map(device_id)
+
+            for metric_key, metric_value in payload.items():
+                if metric_value is None:
+                    continue
+
+                value_float = value_str = value_json = None
+                if isinstance(metric_value, (int, float)) and not isinstance(metric_value, bool):
+                    value_float = float(metric_value)
+                elif isinstance(metric_value, str):
+                    value_str = metric_value
+                elif isinstance(metric_value, (dict, list)):
+                    value_json = json.dumps(metric_value)
+                else:
+                    value_str = str(metric_value)
+
+                rows.append((
+                    tenant_id, device_id, metric_key,
+                    value_float, value_str, value_json,
+                    unit_map.get(metric_key),
+                    timestamp,
+                ))
+
+            msg_ids.append(msg_id)
+
+        if rows:
+            await self.db.batch_insert_telemetry(rows)
+
+        return msg_ids
+
+    async def run(self):
+        """Main read loop — runs until self._running is False."""
+        last_reclaim = time.monotonic()
+
+        while self._running:
+            try:
+                # ── Read new messages ────────────────────────────────────
+                results = await self.redis.redis.xreadgroup(
+                    STREAM_GROUP,
+                    STREAM_CONSUMER,
+                    {STREAM_KEY: ">"},
+                    count=STREAM_BATCH,
+                    block=STREAM_BLOCK_MS,
+                )
+
+                if results:
+                    _stream, entries = results[0]
+                    if entries:
+                        ack_ids = await self._process_entries(entries)
+                        if ack_ids:
+                            await self.redis.redis.xack(STREAM_KEY, STREAM_GROUP, *ack_ids)
+                        logger.debug(
+                            f"Stream consumer: processed {len(entries)} messages, "
+                            f"inserted {sum(1 for _ in entries)} entries"
+                        )
+
+                # ── Periodic pending reclaim (crash recovery) ────────────
+                now = time.monotonic()
+                if now - last_reclaim > 30:
+                    last_reclaim = now
+                    await self._reclaim_pending()
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Stream consumer error: {e}", exc_info=True)
+                await asyncio.sleep(1)
+
+    async def _reclaim_pending(self):
+        """Re-process messages that have been pending too long (e.g. after a crash)."""
+        try:
+            result = await self.redis.redis.xautoclaim(
+                STREAM_KEY,
+                STREAM_GROUP,
+                STREAM_CONSUMER,
+                PENDING_CLAIM_MS,
+                "0-0",
+                count=STREAM_BATCH,
+            )
+            # xautoclaim returns (next_start_id, entries, deleted_ids)
+            entries = result[1] if result and len(result) > 1 else []
+            if entries:
+                logger.info(f"Reclaimed {len(entries)} pending stream entries")
+                ack_ids = await self._process_entries(entries)
+                if ack_ids:
+                    await self.redis.redis.xack(STREAM_KEY, STREAM_GROUP, *ack_ids)
+        except Exception as e:
+            logger.debug(f"Pending reclaim skipped: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Main processor
+# ---------------------------------------------------------------------------
+class MQTTProcessor:
+    """
+    Orchestrates MQTT ingestion, KeyDB Stream buffering, and alert evaluation.
+
+    On each MQTT message:
+      1. Validate / deduplicate / rate-limit
+      2. XADD to KeyDB Stream  (fast, non-blocking DB write)
+      3. Publish to Redis pub/sub (WebSocket real-time)
+      4. Evaluate alert rules inline (reads payload from memory)
+
+    StreamConsumer task runs concurrently and drains the stream in batches.
+    """
+
+    def __init__(self):
+        self.db_service     = DatabaseService(DATABASE_URL)
+        self.redis_service  = RedisService(REDIS_URL)
+        self.validator      = TelemetryValidator()
+        self.stream_consumer: StreamConsumer | None = None
+        self.running        = False
+
+    async def start(self):
+        logger.info("Starting MQTT Processor...")
+        await self.db_service.connect()
+        await self.redis_service.connect()
+        self.stream_consumer = StreamConsumer(self.db_service, self.redis_service)
+        await self.stream_consumer.start()
+        self.running = True
+        logger.info("MQTT Processor started")
+
+    async def stop(self):
         logger.info("Stopping MQTT Processor...")
         self.running = False
+        if self.stream_consumer:
+            await self.stream_consumer.stop()
         await self.redis_service.disconnect()
         await self.db_service.disconnect()
         logger.info("MQTT Processor stopped")
 
-    async def process_telemetry(
-        self,
-        topic: str,
-        payload_bytes: bytes
-    ):
+    async def process_telemetry(self, topic: str, payload_bytes: bytes):
         """
-        Process incoming MQTT message.
-        Expected topic format: {tenant_id}/devices/{device_id}/telemetry
+        Process one MQTT message.
+        Topic format: {tenant_id}/devices/{device_id}/telemetry
         """
         try:
-            # Parse topic (convert to string if Topic object)
             topic_str = str(topic)
             parts = topic_str.split('/')
             if len(parts) != 4 or parts[1] != 'devices' or parts[3] != 'telemetry':
@@ -737,89 +716,71 @@ class MQTTProcessor:
             tenant_id = parts[0]
             device_id = parts[2]
 
-            # Validate UUIDs
             if not self.validator.is_valid_uuid(tenant_id):
                 logger.warning(f"Invalid tenant_id: {tenant_id}")
                 return
-
             if not self.validator.is_valid_uuid(device_id):
                 logger.warning(f"Invalid device_id: {device_id}")
                 return
 
-            # Deduplication: skip exact-duplicate messages within 5 seconds.
-            # Devices or bridges may publish the same payload twice in quick succession.
+            # Deduplication: skip exact-same payload within 5 seconds
             payload_hash = hashlib.sha256(payload_bytes).hexdigest()[:16]
             dedup_key = f"dedup:{device_id}:{payload_hash}"
             if await self.redis_service.redis.set(dedup_key, 1, nx=True, ex=5) is None:
                 logger.debug("Duplicate message skipped for device %s", device_id)
                 return
 
+            # Per-device rate limiting (sliding 60-second window)
+            rate_key  = f"rate:{device_id}:{int(time.time()) // 60}"
+            msg_count = await self.redis_service.redis.incr(rate_key)
+            if msg_count == 1:
+                await self.redis_service.redis.expire(rate_key, 120)
+            if msg_count > RATE_LIMIT_PER_MINUTE:
+                logger.warning(
+                    "Rate limit exceeded for device %s (%d msgs/min, limit %d)",
+                    device_id, msg_count, RATE_LIMIT_PER_MINUTE,
+                )
+                return
+
             # Parse payload
             try:
                 payload = json.loads(payload_bytes.decode('utf-8'))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.warning(
-                    "Failed to parse payload",
-                    extra={
-                        "tenant_id": tenant_id,
-                        "device_id": device_id,
-                        "error": str(e)
-                    }
-                )
+                logger.warning(f"Failed to parse payload for {device_id}: {e}")
                 return
 
-            # Strip metadata keys devices commonly include (timestamp, ts, device_id, etc.)
             if isinstance(payload, dict):
                 payload = {k: v for k, v in payload.items() if k not in SYSTEM_KEYS}
-                # Flatten nested dicts so Tasmota/Shelly/LoRaWAN payloads become
-                # queryable metrics: {"SI7021": {"Temperature": 24.5}} → {"SI7021__Temperature": 24.5}
                 payload = TelemetryValidator.flatten_payload(payload)
 
             if not self.validator.validate_payload(payload):
-                logger.warning(
-                    "Invalid payload structure",
-                    extra={
-                        "tenant_id": tenant_id,
-                        "device_id": device_id
-                    }
-                )
+                logger.warning(f"Invalid payload structure for {device_id}")
                 return
 
             timestamp = datetime.utcnow()
 
-            # Insert telemetry to database
-            success = await self.db_service.insert_telemetry(
-                tenant_id,
-                device_id,
-                payload,
-                timestamp
+            # ── Write to KeyDB Stream (async buffer) ─────────────────────
+            entry_id = await self.redis_service.stream_add(
+                tenant_id, device_id, payload, timestamp
             )
-
-            if not success:
+            if not entry_id:
+                logger.error(f"Failed to buffer telemetry for {device_id}")
                 return
 
-            # Publish to Redis for WebSocket subscribers
-            await self.redis_service.publish_telemetry(
-                tenant_id,
-                device_id,
-                payload
-            )
+            # ── Publish to pub/sub for WebSocket delivery ─────────────────
+            await self.redis_service.publish_telemetry(tenant_id, device_id, payload)
 
-            # Evaluate alert rules
-            await self.evaluate_alerts(
-                tenant_id,
-                device_id,
-                payload,
-                timestamp
-            )
+            # ── Evaluate alert rules (inline, payload in memory) ──────────
+            await self.evaluate_alerts(tenant_id, device_id, payload, timestamp)
 
             logger.info(
-                "Telemetry processed",
+                "Telemetry buffered",
                 extra={
                     "tenant_id": tenant_id,
                     "device_id": device_id,
-                    "metrics": len(payload)
-                }
+                    "metrics":   len(payload),
+                    "stream_id": entry_id,
+                },
             )
 
         except Exception as e:
@@ -830,21 +791,16 @@ class MQTTProcessor:
         tenant_id: str,
         device_id: str,
         payload: dict,
-        timestamp: datetime
+        timestamp: datetime,
     ):
-        """Evaluate alert rules for the telemetry."""
         try:
             rules = await self.db_service.get_active_alert_rules(tenant_id, device_id)
-            # Get device and tenant info for email context
             context = await self.db_service.get_device_and_tenant_info(tenant_id, device_id)
-            device_name = context.get("device_name", device_id)
-            tenant_name = context.get("tenant_name", tenant_id)
 
             for rule in rules:
-                metric_name = rule.get('metric')
+                metric_name  = rule.get('metric')
                 if metric_name not in payload:
                     continue
-
                 metric_value = payload[metric_name]
                 if metric_value is None:
                     continue
@@ -854,98 +810,56 @@ class MQTTProcessor:
                         f"{metric_name} {rule.get('operator')} {rule.get('threshold')} "
                         f"(current: {metric_value})"
                     )
-
                     alert_event_id = await self.db_service.fire_alert(
-                        tenant_id,
-                        rule.get('id'),
-                        device_id,
-                        metric_name,
-                        metric_value,
-                        message
+                        tenant_id, rule.get('id'), device_id,
+                        metric_name, metric_value, message,
                     )
-
                     await self.redis_service.publish_alert(
-                        tenant_id,
-                        device_id,
+                        tenant_id, device_id,
                         {
                             "alert_rule_id": rule.get('id'),
-                            "device_id": device_id,
-                            "metric": metric_name,
-                            "value": metric_value,
-                            "message": message
-                        }
+                            "device_id":     device_id,
+                            "metric":        metric_name,
+                            "value":         metric_value,
+                            "message":       message,
+                        },
                     )
-
-                    # Dispatch notifications via NotificationDispatcher
-                    # This allows multi-channel notifications (email, Slack, webhooks, etc.)
                     if alert_event_id:
-                        await self._dispatch_notifications(tenant_id, alert_event_id)
+                        await self._queue_notification(tenant_id, alert_event_id)
 
                     logger.info(
                         "Alert fired",
                         extra={
-                            "tenant_id": tenant_id,
-                            "device_id": device_id,
-                            "alert_rule_id": rule.get('id'),
-                            "metric": metric_name,
-                            "value": metric_value
-                        }
+                            "tenant_id":    tenant_id,
+                            "device_id":    device_id,
+                            "alert_rule":   rule.get('id'),
+                            "metric":       metric_name,
+                            "value":        metric_value,
+                        },
                     )
-
         except Exception as e:
-            logger.error(
-                "Error evaluating alerts",
-                extra={
-                    "tenant_id": tenant_id,
-                    "device_id": device_id,
-                    "error": str(e)
-                }
-            )
+            logger.error(f"Error evaluating alerts for {device_id}: {e}")
 
-    async def _dispatch_notifications(self, tenant_id: str, alert_event_id: str) -> None:
-        """Dispatch notifications via NotificationDispatcher.
-        
-        This method communicates with the FastAPI app's NotificationDispatcher
-        to send multi-channel notifications (email, Slack, webhooks, etc.).
-        Falls back to email-only if dispatcher unavailable.
-        """
+    async def _queue_notification(self, tenant_id: str, alert_event_id: str) -> None:
         try:
-            # Try to use NotificationDispatcher from API service
-            # This requires a separate async call to the API or shared database session
-            # For now, we'll use a database-backed queue approach
-            
-            # Queue the notification for processing by API background task
             async with self.db_service.conn_pool.connection() as conn:
                 await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)",
-                    (tenant_id,)
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
                 )
-                
-                # Insert into notification queue for API background processor
                 await conn.execute(
                     """
                     INSERT INTO notification_queue (tenant_id, alert_event_id, status, created_at)
                     VALUES (%s, %s, 'pending', now())
                     ON CONFLICT (alert_event_id) DO NOTHING
                     """,
-                    (tenant_id, alert_event_id)
+                    (tenant_id, alert_event_id),
                 )
                 await conn.commit()
-                
-                logger.info(
-                    "Notification queued for dispatch",
-                    extra={"alert_event_id": alert_event_id, "tenant_id": tenant_id}
-                )
         except Exception as e:
-            logger.error(
-                "Failed to queue notification",
-                extra={"alert_event_id": alert_event_id, "error": str(e)}
-            )
-            # Fallback: send email directly if queue unavailable
-            logger.info("Attempting fallback email notification")
+            logger.error(f"Failed to queue notification for alert {alert_event_id}: {e}")
 
     async def run(self):
-        """Main run loop - subscribe to MQTT and process messages."""
+        """Main entry point — starts MQTT listener and stream consumer concurrently."""
         await self.start()
 
         try:
@@ -953,19 +867,26 @@ class MQTTProcessor:
                 MQTT_BROKER,
                 port=MQTT_PORT,
                 username=MQTT_USERNAME,
-                password=MQTT_PASSWORD
+                password=MQTT_PASSWORD,
             ) as client:
                 logger.info(f"Connected to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
-
-                # Subscribe to all device telemetry topics
                 await client.subscribe("+/devices/+/telemetry")
-                logger.info("Subscribed to device telemetry topics")
+                logger.info("Subscribed to +/devices/+/telemetry")
 
-                async for message in client.messages:
-                    if not self.running:
-                        break
+                # Run stream consumer concurrently with MQTT listener
+                consumer_task = asyncio.create_task(self.stream_consumer.run())
 
-                    await self.process_telemetry(message.topic, message.payload)
+                try:
+                    async for message in client.messages:
+                        if not self.running:
+                            break
+                        await self.process_telemetry(message.topic, message.payload)
+                finally:
+                    consumer_task.cancel()
+                    try:
+                        await consumer_task
+                    except asyncio.CancelledError:
+                        pass
 
         except Exception as e:
             logger.error(f"MQTT connection error: {e}", exc_info=True)
@@ -973,10 +894,11 @@ class MQTTProcessor:
             await self.stop()
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 async def main():
-    """Entry point."""
     processor = MQTTProcessor()
-    
     try:
         await processor.run()
     except KeyboardInterrupt:

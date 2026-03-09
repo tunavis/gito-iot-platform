@@ -8,6 +8,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.base import User
 from app.schemas.user import (
     UserCreate,
@@ -90,8 +91,8 @@ async def list_users(
     Returns:
         Paginated list of users
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -146,8 +147,8 @@ async def get_user(
     Returns:
         User details
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -182,8 +183,8 @@ async def create_user(
         403: If current user doesn't have permission to create users
         409: If user with email already exists
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission (only TENANT_ADMIN and SUPER_ADMIN can create users)
     if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
@@ -246,8 +247,8 @@ async def invite_user(
         403: If current user doesn't have permission
         409: If user with email already exists
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
     if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
@@ -329,8 +330,8 @@ async def update_user(
         403: If current user doesn't have permission
         404: If user not found
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
     if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
@@ -413,8 +414,8 @@ async def update_password(
         403: If not updating own password or insufficient permissions
         401: If current password is incorrect
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Users can only change their own password
     if str(current_user["user_id"]) != str(user_id):
@@ -470,8 +471,8 @@ async def delete_user(
         403: If current user doesn't have permission or trying to delete self
         404: If user not found
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
     if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:

@@ -21,11 +21,16 @@ class Tenant(BaseModel):
     name = Column(String(255), nullable=False)
     slug = Column(String(100), unique=True, nullable=False)
     status = Column(String(50), default="active", nullable=False)
+    tenant_metadata = Column("metadata", JSONB, nullable=False, default={})  # Added by migration 007 ('metadata' reserved in SA)
+    # Added by migration 009 (tenant hierarchy)
+    parent_tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=True, index=True)
+    tenant_type = Column(String(20), nullable=False, default="client")  # management | client | sub_client
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
         CheckConstraint("status IN ('active', 'inactive', 'suspended')", name="valid_tenant_status"),
+        CheckConstraint("tenant_type IN ('management', 'client', 'sub_client')", name="valid_tenant_type"),
     )
 
 
@@ -234,11 +239,17 @@ class Telemetry(BaseModel):
     - One row per metric per timestamp
     - Supports any metric name dynamically
     - Efficient queries for specific metrics
-    - Works with TimescaleDB hypertables
+    - TimescaleDB hypertable: partitioned by ts (7-day chunks)
+
+    Primary key is (id, ts) because TimescaleDB requires the partition column
+    (ts) to be part of any unique constraint on the hypertable.
     """
     __tablename__ = "telemetry"
 
+    # Composite PK required by TimescaleDB: any unique index must include ts
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ts = Column(DateTime(timezone=True), nullable=False, primary_key=True)  # also PK for hypertable
+
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
 
@@ -251,8 +262,6 @@ class Telemetry(BaseModel):
     # Unit hint from device type schema (optional, for display)
     unit = Column(String(20), nullable=True)  # "°C", "%", "m³/hr", etc.
 
-    # Timestamps
-    ts = Column(DateTime(timezone=True), nullable=False)  # Measurement timestamp
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
@@ -260,8 +269,97 @@ class Telemetry(BaseModel):
         Index("idx_telemetry_device_metric_ts", "device_id", "metric_key", "ts"),
         # Tenant isolation queries
         Index("idx_telemetry_tenant_device", "tenant_id", "device_id"),
-        # Time-based queries (for TimescaleDB retention policies)
-        Index("idx_telemetry_ts", "ts"),
         # Latest value queries (DISTINCT ON device_id, metric_key ORDER BY ts DESC)
         Index("idx_telemetry_latest", "device_id", "metric_key", "ts", postgresql_ops={"ts": "DESC"}),
+    )
+
+
+# ---------------------------------------------------------------------------
+# OTA Firmware Management
+# ---------------------------------------------------------------------------
+
+class FirmwareVersion(BaseModel):
+    """Firmware binary metadata - one row per firmware release."""
+    __tablename__ = "firmware_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    version = Column(String(50), nullable=False)          # semver: 1.2.3
+    url = Column(String(2048), nullable=False)             # S3 / CDN URL
+    size_bytes = Column(Integer, nullable=False)
+    hash = Column(String(64), nullable=False)              # SHA-256
+    release_type = Column(String(20), default="beta", nullable=False)  # beta|production|hotfix
+    changelog = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_firmware_tenant", "tenant_id"),
+        CheckConstraint("release_type IN ('beta', 'production', 'hotfix')", name="valid_release_type"),
+    )
+
+
+class OTACampaign(BaseModel):
+    """Firmware update campaign - targets multiple devices."""
+    __tablename__ = "ota_campaigns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    firmware_version_id = Column(UUID(as_uuid=True), ForeignKey("firmware_versions.id", ondelete="RESTRICT"), nullable=False)
+    rollout_strategy = Column(String(20), default="immediate", nullable=False)  # immediate|staggered|scheduled
+    devices_per_hour = Column(Integer, default=100, nullable=False)
+    auto_rollback_threshold = Column(Float, default=0.1, nullable=False)  # fraction 0-1
+    status = Column(String(20), default="draft", nullable=False)  # draft|scheduled|in_progress|completed|failed|rolled_back
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_ota_campaigns_tenant", "tenant_id"),
+        CheckConstraint("rollout_strategy IN ('immediate', 'staggered', 'scheduled')", name="valid_rollout_strategy"),
+        CheckConstraint("status IN ('draft', 'scheduled', 'in_progress', 'completed', 'failed', 'rolled_back')", name="valid_campaign_status"),
+    )
+
+
+class OTACampaignDevice(BaseModel):
+    """Per-device status within an OTA campaign."""
+    __tablename__ = "ota_campaign_devices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("ota_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="pending", nullable=False)  # pending|in_progress|completed|failed|skipped
+    progress_percent = Column(Integer, default=0, nullable=False)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_ota_campaign_devices_device", "device_id"),
+        CheckConstraint("status IN ('pending', 'in_progress', 'completed', 'failed', 'skipped')", name="valid_device_ota_status"),
+    )
+
+
+class DeviceFirmwareHistory(BaseModel):
+    """History of all firmware changes on a device."""
+    __tablename__ = "device_firmware_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    firmware_version_id = Column(UUID(as_uuid=True), ForeignKey("firmware_versions.id", ondelete="SET NULL"), nullable=True)
+    previous_version_id = Column(UUID(as_uuid=True), ForeignKey("firmware_versions.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(20), default="pending", nullable=False)  # pending|in_progress|completed|failed|rolled_back
+    progress_percent = Column(Integer, default=0, nullable=False)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'in_progress', 'completed', 'failed', 'rolled_back')", name="valid_fw_history_status"),
     )

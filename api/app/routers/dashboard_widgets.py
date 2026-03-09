@@ -7,6 +7,7 @@ from uuid import UUID
 import logging
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.schemas.dashboard import (
     WidgetCreate,
@@ -85,11 +86,8 @@ async def create_widget(
     """Add a new widget to the dashboard."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -131,11 +129,8 @@ async def update_widget(
     """Update widget configuration."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -181,11 +176,8 @@ async def delete_widget(
     """Remove widget from dashboard."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -233,11 +225,8 @@ async def bind_device_to_widget(
     """
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 

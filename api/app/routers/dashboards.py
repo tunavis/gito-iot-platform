@@ -8,6 +8,7 @@ from uuid import UUID
 import logging
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.schemas.dashboard import (
     DashboardCreate,
@@ -62,11 +63,8 @@ async def list_dashboards(
     """
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -114,11 +112,8 @@ async def create_dashboard(
     """
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -162,11 +157,8 @@ async def get_dashboard(
     """Get dashboard with all its widgets."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -225,11 +217,8 @@ async def update_dashboard(
     """Update dashboard details."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -284,11 +273,8 @@ async def delete_dashboard(
     """Delete dashboard and all its widgets."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 
@@ -330,11 +316,8 @@ async def update_dashboard_layout(
     """Batch update widget positions and sizes."""
     current_tenant_id, current_user_id = current_user
 
-    if str(tenant_id) != str(current_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
+    if not await validate_tenant_access(session, current_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id, current_user_id)
 

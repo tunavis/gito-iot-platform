@@ -16,6 +16,7 @@ import logging
 import json as _json
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.base import Device, Telemetry
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.security import decode_token
@@ -626,8 +627,8 @@ async def ingest_telemetry(
     Example body:
         {"temperature": 25.5, "humidity": 65.2, "status": "online"}
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     if not payload:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty payload")

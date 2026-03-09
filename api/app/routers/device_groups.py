@@ -8,6 +8,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.device_group import DeviceGroup
 from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
@@ -90,8 +91,8 @@ async def list_device_groups(
     group_type: Optional[str] = Query(None),
 ):
     """List all device groups for a tenant with optional filtering."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -138,8 +139,8 @@ async def create_device_group(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Create a new device group."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -170,8 +171,8 @@ async def get_device_group(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Get a specific device group."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -198,8 +199,8 @@ async def update_device_group(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update a device group."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -235,8 +236,8 @@ async def delete_device_group(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete a device group."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     
@@ -265,8 +266,8 @@ async def list_group_devices(
     per_page: int = Query(50, ge=1, le=100),
 ):
     """List all devices in a device group."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
     

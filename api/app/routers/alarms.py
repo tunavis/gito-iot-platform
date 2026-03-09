@@ -10,6 +10,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models import Alarm
 from app.schemas.alarm import (
     Alarm as AlarmSchema,
@@ -57,8 +58,8 @@ async def get_alarm_summary(
     device_id: Optional[UUID] = Query(None, description="Filter by device"),
 ):
     """Get alarm summary statistics"""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
 
@@ -124,8 +125,8 @@ async def list_alarms(
     alarm_type: Optional[str] = Query(None, description="Filter by alarm type"),
 ):
     """List alarms with filtering and pagination"""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
 
@@ -173,8 +174,8 @@ async def get_alarm(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Get a specific alarm"""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
 
@@ -196,8 +197,8 @@ async def create_alarm(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Create a new alarm (manual alarm creation)"""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
 
@@ -234,8 +235,8 @@ async def acknowledge_alarm(
     Acknowledge an alarm (transition ACTIVE → ACKNOWLEDGED)
     Indicates operator is aware and investigating
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     # Get user ID from token
     token = authorization.split(" ")[1]
@@ -285,8 +286,8 @@ async def clear_alarm(
     Clear an alarm (transition ACKNOWLEDGED → CLEARED)
     Indicates issue is resolved
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
 
@@ -327,8 +328,8 @@ async def delete_alarm(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete an alarm (only CLEARED alarms can be deleted)"""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     
     await session.set_tenant_context(tenant_id)
 

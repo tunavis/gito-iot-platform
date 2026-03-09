@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ToastProvider } from '@/components/ToastProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { TenantProvider } from '@/components/TenantContext';
 
 export const metadata: Metadata = {
   title: 'Gito IoT Platform',
@@ -26,9 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body suppressHydrationWarning>
         <ThemeProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
+          <TenantProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </TenantProvider>
         </ThemeProvider>
       </body>
     </html>

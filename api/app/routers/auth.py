@@ -65,6 +65,7 @@ async def login(
         email=user.email or "",
         name=user.full_name or "",
         tenant_name=tenant.name if tenant else "",
+        tenant_type=tenant.tenant_type if tenant else "client",
     )
 
     # Determine cookie security based on environment and proxy headers
@@ -153,6 +154,7 @@ async def refresh_token(
         email=user.email or "",
         name=user.full_name or "",
         tenant_name=tenant.name if tenant else "",
+        tenant_type=tenant.tenant_type if tenant else "client",
     )
 
     # Update cookie

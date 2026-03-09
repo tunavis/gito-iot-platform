@@ -14,6 +14,7 @@ OFFLINE_THRESHOLD_SECONDS = 900
 logger = logging.getLogger(__name__)
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.base import Device, AuditLog
 from app.models.alarm import Alarm
 from app.schemas.common import SuccessResponse
@@ -56,8 +57,8 @@ async def get_fleet_overview(
     Returns:
         Device counts, status distribution, connectivity stats
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -133,8 +134,8 @@ async def get_alert_trends(
     Returns:
         Alert counts by severity, status, and time period
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -234,8 +235,8 @@ async def get_device_uptime(
     Returns:
         Uptime percentages and availability metrics
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -308,8 +309,8 @@ async def get_telemetry_summary(
     Returns:
         Aggregated metrics across all devices
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 

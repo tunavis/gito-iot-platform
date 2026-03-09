@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy import select, text
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.base import DeviceCredential, Device
 from app.schemas.common import SuccessResponse
 from app.schemas.device_credential import DeviceTokenCreate, DeviceTokenOut, DeviceTokenCreated
@@ -55,8 +56,8 @@ async def list_tokens(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
 ):
     """List all active device tokens for a device."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -103,8 +104,8 @@ async def generate_token(
     The plain token is returned ONCE in this response and never stored.
     Store it immediately — it cannot be retrieved again.
     """
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -157,8 +158,8 @@ async def revoke_token(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
 ):
     """Revoke a device token. The token immediately stops working."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 

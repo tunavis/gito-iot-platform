@@ -1,7 +1,7 @@
 services:
-  # PostgreSQL (Primary database)
+  # TimescaleDB (PostgreSQL 16 + time-series extensions)
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: gito-postgres
     environment:
       POSTGRES_DB: gito
@@ -151,49 +151,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-    networks:
-      - gito-network
-    restart: unless-stopped
-
-  # Cadence Workflow Engine (OTA orchestration)
-  cadence:
-    image: ubercadence/server:master-auto-setup
-    container_name: gito-cadence
-    environment:
-      DB: postgres
-      DB_PORT: 5432
-      DB_USER: gito
-      DB_PASSWORD: ${DB_PASSWORD:-dev-password}
-      DB_NAME: cadence
-    ports:
-      - "7933:7933"   # Cadence frontend
-      - "7934:7934"   # Cadence history
-      - "7935:7935"   # Cadence matching
-      - "7939:7939"   # Cadence worker
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - gito-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7933/api/v1/domain"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # Cadence Web UI (Optional - for workflow monitoring)
-  cadence-web:
-    image: ubercadence/web:latest
-    container_name: gito-cadence-web
-    environment:
-      CADENCE_TCHANNEL_PEERS: cadence:7933
-    ports:
-      - "8088:8088"
-    depends_on:
-      cadence:
-        condition: service_healthy
     networks:
       - gito-network
     restart: unless-stopped

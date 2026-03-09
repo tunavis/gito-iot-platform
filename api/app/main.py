@@ -22,19 +22,7 @@ async def lifespan(app: FastAPI):
         print("✅ Database initialized")
     except Exception as e:
         print(f"⚠️ Database initialization warning: {e}")
-    
-    # Initialize Cadence workflow client for OTA
-    try:
-        from app.services.ota_workflow import get_ota_workflow_client
-        workflow_client = get_ota_workflow_client()
-        connected = await workflow_client.connect()
-        if connected:
-            print(f"✅ Cadence connected ({settings.CADENCE_FRONTEND_HOST}:{settings.CADENCE_FRONTEND_PORT})")
-        else:
-            print(f"⚠️ Cadence connection failed - OTA workflows unavailable")
-    except Exception as e:
-        print(f"⚠️ Cadence initialization warning: {e}")
-    
+
     # Initialize background task scheduler for notification retry and queue processing
     try:
         from app.services.background_tasks import notification_background_tasks
@@ -46,13 +34,6 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     await close_db()
-    # Close Cadence connection
-    try:
-        from app.services.ota_workflow import get_ota_workflow_client
-        workflow_client = get_ota_workflow_client()
-        await workflow_client.close()
-    except Exception as e:
-        print(f"⚠️ Cadence shutdown warning: {e}")
     # Stop background task scheduler
     try:
         from app.services.background_tasks import notification_background_tasks
@@ -120,6 +101,11 @@ def create_app() -> FastAPI:
     from app.routers import alert_rules_unified  # Unified alert rules (THRESHOLD + COMPOSITE)
     from app.routers import dashboards, dashboard_widgets  # Dashboard builder system
     from app.routers import device_credentials, device_ingest  # Device token provisioning
+    from app.routers import hierarchy  # Asset hierarchy tree
+    from app.routers import settings as settings_router  # Tenant settings & profile
+    from app.routers import events as events_router  # IoT event stream
+    from app.routers import firmware as firmware_router  # OTA firmware management
+    from app.routers import admin_tenants as admin_tenants_router  # Tenant management (management tenants only)
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
@@ -134,6 +120,11 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router, prefix="/api/v1")  # Notification channels & history
     app.include_router(notification_rules.router, prefix="/api/v1")  # Notification routing rules
     app.include_router(analytics.router, prefix="/api/v1")  # Analytics & dashboard metrics
+    app.include_router(hierarchy.router, prefix="/api/v1")  # Asset hierarchy tree
+    app.include_router(settings_router.router, prefix="/api/v1")  # Tenant settings & profile
+    app.include_router(events_router.router, prefix="/api/v1")    # IoT event stream
+    app.include_router(firmware_router.router, prefix="/api/v1")  # OTA firmware management
+    app.include_router(admin_tenants_router.router, prefix="/api/v1")  # Tenant management (management tenants only)
     app.include_router(dashboards.router, prefix="/api/v1")  # Dashboard builder
     app.include_router(dashboard_widgets.router, prefix="/api/v1")  # Dashboard widgets
     app.include_router(telemetry.router, prefix="/api/v1")
@@ -147,7 +138,6 @@ def create_app() -> FastAPI:
     # - alert_rules_composite: Replaced by alert_rules_unified
     # - composite_alerts: Replaced by alert_rules_unified
     # - grafana: External integration (future)
-    # - firmware: OTA functionality (future)
     # - bulk_operations: Batch operations (future)
     # - lorawan: LoRaWAN-specific operations (future)
     

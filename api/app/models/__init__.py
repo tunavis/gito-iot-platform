@@ -8,7 +8,12 @@ from app.models.base import (
     DeviceCredential,
     AlertRule,
     AlertRuleCondition,
+    AlertEvent,
     AuditLog,
+    FirmwareVersion,
+    OTACampaign,
+    OTACampaignDevice,
+    DeviceFirmwareHistory,
 )
 from app.models.organization import Organization
 from app.models.site import Site
@@ -34,6 +39,7 @@ __all__ = [
     "DeviceCredential",
     "AlertRule",
     "AlertRuleCondition",
+    "AlertEvent",
     "AuditLog",
     "Organization",
     "Site",
@@ -51,4 +57,8 @@ __all__ = [
     "Dashboard",
     "DashboardWidget",
     "DeviceType",
+    "FirmwareVersion",
+    "OTACampaign",
+    "OTACampaignDevice",
+    "DeviceFirmwareHistory",
 ]

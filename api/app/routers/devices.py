@@ -9,6 +9,7 @@ from datetime import datetime
 import logging
 
 from app.database import get_session, RLSSession
+from app.services.tenant_access import validate_tenant_access
 from app.models.base import Device
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse
 from app.schemas.common import SuccessResponse, PaginationMeta
@@ -397,8 +398,8 @@ async def bulk_delete_devices(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Bulk delete multiple devices."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 
@@ -431,8 +432,8 @@ async def bulk_assign_device_group(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Bulk assign devices to a device group."""
-    if str(tenant_id) != str(current_tenant):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     await session.set_tenant_context(tenant_id)
 

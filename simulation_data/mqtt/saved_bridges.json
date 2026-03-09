@@ -1,0 +1,29 @@
+{
+  "temperaturez/gabriel/sensors": {
+    "topic": "temperaturez/gabriel/sensors",
+    "device_id": "1e8ae419-ec3e-4982-a749-6161e91a2ce9",
+    "device_name": "Living Room Temperature",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "broker_host": "test.mosquitto.org",
+    "broker_port": 1883,
+    "created_at": "2026-02-25T21:48:49.420875"
+  },
+  "jac/home/temperature": {
+    "topic": "jac/home/temperature",
+    "device_id": "c60fd17b-2943-410e-a706-cb143c3b223a",
+    "device_name": "Test_Simulator",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "broker_host": "test.mosquitto.org",
+    "broker_port": 1883,
+    "created_at": "2026-03-03T17:39:26.544752"
+  },
+  "SDE11/JAX/UTILITIES/BOILER/G1/WATER_FLOW_BOILER": {
+    "topic": "SDE11/JAX/UTILITIES/BOILER/G1/WATER_FLOW_BOILER",
+    "device_id": "850fef78-4957-48fe-8665-52dba6e0cd91",
+    "device_name": "Water Meter Vaaldam",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "broker_host": "test.mosquitto.org",
+    "broker_port": 1883,
+    "created_at": "2026-03-07T19:43:36.205372"
+  }
+}
