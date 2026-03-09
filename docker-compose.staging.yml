@@ -6,6 +6,11 @@ services:
     image: timescale/timescaledb:latest-pg15
     container_name: gito-postgres-staging
     restart: unless-stopped
+    # Force-preload timescaledb regardless of what's in the data volume's postgresql.conf.
+    # Without this, existing volumes (initialized from plain postgres image) won't have
+    # shared_preload_libraries set, causing CREATE EXTENSION to trigger a backend reset
+    # which kills any open connections (including Alembic's).
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     env_file:
       - .env.staging
     environment:
