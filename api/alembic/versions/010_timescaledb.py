@@ -25,6 +25,7 @@ Create Date: 2026-03-09
 """
 from typing import Sequence, Union
 from alembic import op
+import sqlalchemy as sa
 
 revision: str = "010_timescaledb"
 down_revision: Union[str, None] = "009_tenant_hierarchy"
@@ -35,8 +36,17 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # -------------------------------------------------------------------------
     # 1. Enable TimescaleDB extension
+    #    Must run in AUTOCOMMIT — CREATE EXTENSION timescaledb resets the
+    #    backend connection when loaded, which kills any open transaction.
     # -------------------------------------------------------------------------
-    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+    conn = op.get_bind()
+    conn.execute(sa.text("COMMIT"))  # close Alembic's open transaction
+    orig_level = conn.get_isolation_level()
+    conn.execution_options(isolation_level="AUTOCOMMIT").execute(
+        sa.text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+    )
+    # Restore isolation level for remaining DDL
+    conn.execution_options(isolation_level=orig_level)
 
     # -------------------------------------------------------------------------
     # 2. Fix primary key: drop old (id-only) PK, add composite (id, ts)
