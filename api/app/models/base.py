@@ -24,13 +24,12 @@ class Tenant(BaseModel):
     tenant_metadata = Column("metadata", JSONB, nullable=False, default={})  # Added by migration 007 ('metadata' reserved in SA)
     # Added by migration 009 (tenant hierarchy)
     parent_tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=True, index=True)
-    tenant_type = Column(String(20), nullable=False, default="client")  # management | client | sub_client
+    tenant_type = Column(String(50), nullable=False, default="client")  # management | client | sub_client
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
         CheckConstraint("status IN ('active', 'inactive', 'suspended')", name="valid_tenant_status"),
-        CheckConstraint("tenant_type IN ('management', 'client', 'sub_client')", name="valid_tenant_type"),
     )
 
 

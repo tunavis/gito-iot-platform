@@ -2,230 +2,104 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
-import ProtocolSelector, { ProtocolType } from '@/components/ProtocolSelector';
-import ProtocolConfigForm, { ProtocolConfig } from '@/components/ProtocolConfigForm';
-import {
-  ArrowLeft,
-  Save,
-  Plus,
-  Trash2,
-  Cpu,
-  Thermometer,
-  Radio,
-  ToggleRight,
-  MapPin,
-  Zap,
-  Camera,
-  Settings,
-  GripVertical,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  CheckCircle2,
-  AlertTriangle,
-  RefreshCw,
-} from "lucide-react";
+import PageShell from '@/components/ui/PageShell';
+import { useToast } from '@/components/ToastProvider';
+import { ArrowLeft, Edit, Save, Cpu, X } from 'lucide-react';
+import { btn } from '@/components/ui/buttonStyles';
+import { categoryIcons, DEFAULT_FORM } from '../_constants';
+import type { DeviceType, DeviceTypeForm, DiscoveredMetric, DataModelField } from '../_types';
+import DeviceTypeView from './_components/DeviceTypeView';
+import DeviceTypeEdit from './_components/DeviceTypeEdit';
 
-interface DiscoveredMetric {
-  key: string;
-  device_count: number;
-  last_seen: string | null;
-  in_schema: boolean;
-}
-
-// Types
-interface DataModelField {
-  name: string;
-  type: string;
-  unit: string;
-  description: string;
-  min_value?: number;
-  max_value?: number;
-  required: boolean;
-}
-
-interface DefaultSettings {
-  heartbeat_interval: number;
-  telemetry_interval: number;
-  offline_threshold: number;
-}
-
-interface DeviceTypeForm {
-  name: string;
-  description: string;
-  manufacturer: string;
-  model: string;
-  category: string;
-  icon: string;
-  color: string;
-  data_model: DataModelField[];
-  capabilities: string[];
-  default_settings: DefaultSettings;
-  connectivity: ProtocolConfig;
-  is_active: boolean;
-}
-
-// Constants
-const CATEGORIES = [
-  { value: "sensor", label: "Sensor", icon: Thermometer },
-  { value: "gateway", label: "Gateway", icon: Radio },
-  { value: "actuator", label: "Actuator", icon: ToggleRight },
-  { value: "tracker", label: "Tracker", icon: MapPin },
-  { value: "meter", label: "Meter", icon: Zap },
-  { value: "camera", label: "Camera", icon: Camera },
-  { value: "controller", label: "Controller", icon: Settings },
-  { value: "other", label: "Other", icon: Cpu },
-];
-
-const CAPABILITIES = [
-  { value: "telemetry", label: "Telemetry", description: "Sends sensor/metric data" },
-  { value: "commands", label: "Commands", description: "Accepts remote commands" },
-  { value: "firmware_ota", label: "Firmware OTA", description: "Over-the-air updates" },
-  { value: "remote_config", label: "Remote Config", description: "Remote configuration" },
-  { value: "location", label: "Location", description: "GPS/location tracking" },
-  { value: "alerts", label: "Alerts", description: "Device-side alerts" },
-  { value: "file_transfer", label: "File Transfer", description: "Upload/download files" },
-  { value: "edge_compute", label: "Edge Compute", description: "Edge processing" },
-];
-
-const FIELD_TYPES = [
-  { value: "float", label: "Float" },
-  { value: "integer", label: "Integer" },
-  { value: "boolean", label: "Boolean" },
-  { value: "string", label: "String" },
-  { value: "timestamp", label: "Timestamp" },
-  { value: "json", label: "JSON Object" },
-  { value: "array", label: "Array" },
-];
-
-const COLORS = [
-  "#10b981", // Green
-  "#3b82f6", // Blue
-  "#8b5cf6", // Purple
-  "#f59e0b", // Amber
-  "#ef4444", // Red
-  "#ec4899", // Pink
-  "#14b8a6", // Teal
-  "#6366f1", // Indigo
-];
-
-const DEFAULT_FORM: DeviceTypeForm = {
-  name: "",
-  description: "",
-  manufacturer: "",
-  model: "",
-  category: "sensor",
-  icon: "thermometer",
-  color: "#10b981",
-  data_model: [],
-  capabilities: ["telemetry"],
-  default_settings: {
-    heartbeat_interval: 60,
-    telemetry_interval: 300,
-    offline_threshold: 900,
-  },
-  connectivity: {
-    protocol: "mqtt" as ProtocolType,
-    mqtt: {
-      topic_pattern: "{{tenant_id}}/devices/{{device_id}}/telemetry",
-      qos: 1,
-      retain: false,
-    },
-  },
-  is_active: true,
-};
-
-export default function DeviceTypeFormPage() {
+export default function DeviceTypeDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const isEditMode = params.id && params.id !== "new";
+  const toast = useToast();
+  const isNew = params.id === 'new';
 
+  const [mode, setMode] = useState<'view' | 'edit'>(isNew ? 'edit' : 'view');
+  const [deviceType, setDeviceType] = useState<DeviceType | null>(null);
   const [form, setForm] = useState<DeviceTypeForm>(DEFAULT_FORM);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedSections, setExpandedSections] = useState({
-    basic: true,
-    dataModel: true,
-    capabilities: true,
-    settings: false,
-    connectivity: false,
-  });
+
+  // Discovered metrics state
   const [discoveredMetrics, setDiscoveredMetrics] = useState<DiscoveredMetric[]>([]);
   const [discoveredTotal, setDiscoveredTotal] = useState(0);
   const [discoveredLoading, setDiscoveredLoading] = useState(false);
 
-  // Load existing device type if editing
+  const getAuthInfo = useCallback(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      router.push('/auth/login');
+      return null;
+    }
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return { token, tenant: payload.tenant_id };
+  }, [router]);
+
+  // Load device type
   const loadDeviceType = useCallback(async () => {
+    const auth = getAuthInfo();
+    if (!auth) return;
+
     try {
       setLoading(true);
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const tenant = payload.tenant_id;
-
       const response = await fetch(
-        `/api/v1/tenants/${tenant}/device-types/${params.id}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        `/api/v1/tenants/${auth.tenant}/device-types/${params.id}`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
       );
-
-      if (!response.ok) throw new Error("Failed to load device type");
+      if (!response.ok) throw new Error('Failed to load device type');
 
       const result = await response.json();
-      const dt = result.data;
+      const dt = result.data ?? result;
 
-      setForm({
-        name: dt.name || "",
-        description: dt.description || "",
-        manufacturer: dt.manufacturer || "",
-        model: dt.model || "",
-        category: dt.category || "sensor",
-        icon: dt.icon || "thermometer",
-        color: dt.color || "#10b981",
-        data_model: (dt.data_model || []).map((f: any) => ({
-          name: f.name || "",
-          type: f.type || "float",
-          unit: f.unit || "",
-          description: f.description || "",
-          min_value: f.min,
-          max_value: f.max,
-          required: f.required || false,
-        })),
-        capabilities: dt.capabilities || [],
-        default_settings: dt.default_settings || DEFAULT_FORM.default_settings,
-        connectivity: dt.connectivity || DEFAULT_FORM.connectivity,
-        is_active: dt.is_active ?? true,
-      });
+      setDeviceType(dt);
+      populateForm(dt);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [isEditMode, params.id, router]);
+  }, [params.id, getAuthInfo]);
 
-  useEffect(() => {
-    if (isEditMode) {
-      loadDeviceType();
-    }
-  }, [isEditMode, loadDeviceType]);
+  const populateForm = (dt: DeviceType) => {
+    setForm({
+      name: dt.name || '',
+      description: dt.description || '',
+      manufacturer: dt.manufacturer || '',
+      model: dt.model || '',
+      category: dt.category || 'sensor',
+      icon: dt.icon || 'thermometer',
+      color: dt.color || '#10b981',
+      data_model: (dt.data_model || []).map((f: DataModelField) => ({
+        name: f.name || '',
+        type: f.type || 'float',
+        unit: f.unit || '',
+        description: f.description || '',
+        min_value: (f as any).min ?? f.min_value,
+        max_value: (f as any).max ?? f.max_value,
+        required: f.required || false,
+      })),
+      capabilities: dt.capabilities || [],
+      default_settings: dt.default_settings || DEFAULT_FORM.default_settings,
+      connectivity: dt.connectivity || DEFAULT_FORM.connectivity,
+      is_active: dt.is_active ?? true,
+    });
+  };
 
-  // Fetch discovered metrics (edit mode only)
+  // Load discovered metrics
   const loadDiscoveredMetrics = useCallback(async () => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) return;
-    const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+    if (isNew) return;
+    const auth = getAuthInfo();
+    if (!auth) return;
 
     setDiscoveredLoading(true);
     try {
       const res = await fetch(
-        `/api/v1/tenants/${tenant}/device-types/${params.id}/discovered-metrics?days=7`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `/api/v1/tenants/${auth.tenant}/device-types/${params.id}/discovered-metrics?days=7`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
       );
       if (res.ok) {
         const json = await res.json();
@@ -234,732 +108,169 @@ export default function DeviceTypeFormPage() {
         setDiscoveredTotal(data.total_devices || 0);
       }
     } catch {
-      // Non-critical — panel just stays empty
+      // Non-critical
     } finally {
       setDiscoveredLoading(false);
     }
-  }, [params.id]);
+  }, [params.id, isNew, getAuthInfo]);
 
   useEffect(() => {
-    loadDiscoveredMetrics();
-  }, [loadDiscoveredMetrics]);
+    if (!isNew) {
+      loadDeviceType();
+      loadDiscoveredMetrics();
+    }
+  }, [isNew, loadDeviceType, loadDiscoveredMetrics]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  // Save handler
+  const handleSave = async () => {
     if (!form.name.trim()) {
-      setError("Name is required");
+      setError('Name is required');
       return;
     }
+
+    const auth = getAuthInfo();
+    if (!auth) return;
 
     try {
       setSaving(true);
       setError(null);
-      
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const tenant = payload.tenant_id;
 
-      const url = isEditMode
-        ? `/api/v1/tenants/${tenant}/device-types/${params.id}`
-        : `/api/v1/tenants/${tenant}/device-types`;
+      const url = isNew
+        ? `/api/v1/tenants/${auth.tenant}/device-types`
+        : `/api/v1/tenants/${auth.tenant}/device-types/${params.id}`;
 
       const response = await fetch(url, {
-        method: isEditMode ? "PUT" : "POST",
+        method: isNew ? 'POST' : 'PUT',
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.token}`,
         },
         body: JSON.stringify(form),
       });
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Failed to save device type");
+        throw new Error(err.detail || 'Failed to save device type');
       }
 
-      router.push("/dashboard/device-types");
+      if (isNew) {
+        toast.success('Created', 'Device type created successfully');
+        router.push('/dashboard/device-types');
+      } else {
+        toast.success('Saved', 'Device type updated successfully');
+        await loadDeviceType();
+        setMode('view');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
   };
 
-  // Data Model Field Handlers
-  const addDataModelField = () => {
-    setForm({
-      ...form,
-      data_model: [
-        ...form.data_model,
-        { name: "", type: "float", unit: "", description: "", required: false },
-      ],
-    });
+  const handleEdit = () => {
+    if (deviceType) populateForm(deviceType);
+    setError(null);
+    setMode('edit');
   };
 
-  const updateDataModelField = (index: number, updates: Partial<DataModelField>) => {
-    const newFields = [...form.data_model];
-    newFields[index] = { ...newFields[index], ...updates };
-    setForm({ ...form, data_model: newFields });
+  const handleCancelEdit = () => {
+    setError(null);
+    if (isNew) {
+      router.back();
+    } else {
+      setMode('view');
+    }
   };
 
-  const removeDataModelField = (index: number) => {
-    setForm({
-      ...form,
-      data_model: form.data_model.filter((_, i) => i !== index),
-    });
-  };
-
-  // Toggle capability
-  const toggleCapability = (cap: string) => {
-    setForm({
-      ...form,
-      capabilities: form.capabilities.includes(cap)
-        ? form.capabilities.filter((c) => c !== cap)
-        : [...form.capabilities, cap],
-    });
-  };
-
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections({ ...expandedSections, [section]: !expandedSections[section] });
-  };
-
+  // Loading state
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-page">
-        <Sidebar />
-        <main className="flex-1 ml-64 p-8">
-          <div className="flex items-center justify-center py-12">
-            <div className="text-th-secondary">Loading device type...</div>
-          </div>
-        </main>
-      </div>
+      <PageShell title="Loading..." subtitle="Loading device type details">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-th-secondary text-sm">Loading device type...</div>
+        </div>
+      </PageShell>
     );
   }
 
-  return (
-    <div className="flex min-h-screen bg-page">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.back()}
-                className="p-2 hover:bg-panel rounded-lg transition-colors text-th-secondary"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <h1 className="text-3xl font-bold text-th-primary">
-                  {isEditMode ? 'Edit Device Type' : 'Create Device Type'}
-                </h1>
-                <p className="text-th-secondary mt-1">
-                  Define a template for devices with data model and capabilities
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-primary-400 transition-colors font-medium flex items-center gap-2 shadow-sm"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Device Type'}
-            </button>
-          </div>
-        </div>
+  // Page title and actions based on mode
+  const pageTitle = mode === 'view' && deviceType
+    ? deviceType.name
+    : isNew
+      ? 'Create Device Type'
+      : 'Edit Device Type';
 
-        {/* Form Container */}
-        <div className="max-w-4xl">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            {error}
-          </div>
-        )}
+  const pageSubtitle = mode === 'view' && deviceType
+    ? [deviceType.manufacturer, deviceType.model].filter(Boolean).join(' · ') || 'Device type details'
+    : 'Define a template for devices with data model and capabilities';
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Information */}
-          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => toggleSection('basic')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
-            >
-              <h2 className="text-lg font-semibold text-th-primary">Basic Information</h2>
-              {expandedSections.basic ? (
-                <ChevronUp className="w-5 h-5 text-th-muted" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-th-muted" />
-              )}
-            </button>
+  const pageIcon = mode === 'view' && deviceType
+    ? (
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center"
+        style={{ backgroundColor: `${deviceType.color}20`, color: deviceType.color }}
+      >
+        {categoryIcons[deviceType.category] || <Cpu className="w-4 h-4" />}
+      </div>
+    )
+    : undefined;
 
-            {expandedSections.basic && (
-              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g., Environmental Sensor"
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Category
-                    </label>
-                    <select
-                      value={form.category}
-                      onChange={(e) => setForm({ ...form, category: e.target.value })}
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-surface"
-                    >
-                      {CATEGORIES.map((cat) => (
-                        <option key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-th-primary mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    placeholder="Describe what this device type is used for..."
-                    rows={3}
-                    className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Manufacturer
-                    </label>
-                    <input
-                      type="text"
-                      value={form.manufacturer}
-                      onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
-                      placeholder="e.g., Acme Devices"
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Model
-                    </label>
-                    <input
-                      type="text"
-                      value={form.model}
-                      onChange={(e) => setForm({ ...form, model: e.target.value })}
-                      placeholder="e.g., ES-100"
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Color Picker */}
-                <div>
-                  <label className="block text-sm font-medium text-th-primary mb-2">
-                    Color
-                  </label>
-                  <div className="flex gap-2">
-                    {COLORS.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setForm({ ...form, color })}
-                        className={`w-8 h-8 rounded-full border-2 transition-all ${
-                          form.color === color
-                            ? 'border-gray-900 scale-110 ring-2 ring-offset-2 ring-gray-400'
-                            : 'border-transparent hover:scale-105'
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Active Toggle */}
-                <div className="flex items-center gap-3">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.is_active}
-                      onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-panel peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface after:border-[var(--color-input-border)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                  </label>
-                  <span className="text-sm text-th-primary">Active</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Data Model */}
-          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => toggleSection('dataModel')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
-            >
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-th-primary">Data Model</h2>
-                <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary">
-                  {form.data_model.length} fields
-                </span>
-              </div>
-              {expandedSections.dataModel ? (
-                <ChevronUp className="w-5 h-5 text-th-muted" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-th-muted" />
-              )}
-            </button>
-
-            {expandedSections.dataModel && (
-              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
-                <p className="text-sm text-th-secondary">
-                  Define the telemetry fields this device type sends. This creates a schema for
-                  validating and displaying device data.
-                </p>
-
-                {form.data_model.map((field, index) => (
-                  <div
-                    key={index}
-                    className="p-4 bg-page border border-th-default rounded-lg space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-th-secondary">
-                        <GripVertical className="w-4 h-4" />
-                        <span className="text-sm font-medium">Field #{index + 1}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeDataModelField(index)}
-                        className="p-1.5 hover:bg-red-100 rounded text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-xs text-th-secondary mb-1">Name *</label>
-                        <input
-                          type="text"
-                          value={field.name}
-                          onChange={(e) =>
-                            updateDataModelField(index, { name: e.target.value })
-                          }
-                          placeholder="temperature"
-                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-th-secondary mb-1">Type</label>
-                        <select
-                          value={field.type}
-                          onChange={(e) =>
-                            updateDataModelField(index, { type: e.target.value })
-                          }
-                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        >
-                          {FIELD_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>
-                              {t.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-th-secondary mb-1">Unit</label>
-                        <input
-                          type="text"
-                          value={field.unit}
-                          onChange={(e) =>
-                            updateDataModelField(index, { unit: e.target.value })
-                          }
-                          placeholder="°C"
-                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={field.required}
-                            onChange={(e) =>
-                              updateDataModelField(index, { required: e.target.checked })
-                            }
-                            className="w-4 h-4 rounded border-[var(--color-input-border)] text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="text-xs text-th-secondary">Required</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="col-span-1">
-                        <label className="block text-xs text-th-secondary mb-1">Min Value</label>
-                        <input
-                          type="number"
-                          value={field.min_value ?? ''}
-                          onChange={(e) =>
-                            updateDataModelField(index, {
-                              min_value: e.target.value ? Number(e.target.value) : undefined,
-                            })
-                          }
-                          placeholder="-40"
-                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <label className="block text-xs text-th-secondary mb-1">Max Value</label>
-                        <input
-                          type="number"
-                          value={field.max_value ?? ''}
-                          onChange={(e) =>
-                            updateDataModelField(index, {
-                              max_value: e.target.value ? Number(e.target.value) : undefined,
-                            })
-                          }
-                          placeholder="85"
-                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <label className="block text-xs text-th-secondary mb-1">Description</label>
-                        <input
-                          type="text"
-                          value={field.description}
-                          onChange={(e) =>
-                            updateDataModelField(index, { description: e.target.value })
-                          }
-                          placeholder="Ambient temperature"
-                          className="w-full px-2 py-1.5 border border-[var(--color-input-border)] rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={addDataModelField}
-                  className="w-full py-2 border-2 border-dashed border-[var(--color-input-border)] rounded-lg text-th-secondary hover:text-primary-600 hover:border-primary-400 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Field
-                </button>
-
-                {/* Discovered Metrics — edit mode only */}
-                {isEditMode && (
-                  <div className="mt-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-th-primary">
-                        Discovered Metrics
-                        {discoveredTotal > 0 && (
-                          <span className="ml-2 text-xs font-normal text-th-secondary">
-                            from {discoveredTotal} device{discoveredTotal !== 1 ? 's' : ''}, last 7 days
-                          </span>
-                        )}
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={loadDiscoveredMetrics}
-                        disabled={discoveredLoading}
-                        className="p-1 hover:bg-blue-100 rounded text-th-secondary"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${discoveredLoading ? 'animate-spin' : ''}`} />
-                      </button>
-                    </div>
-
-                    {discoveredLoading && discoveredMetrics.length === 0 ? (
-                      <p className="text-xs text-th-secondary">Loading...</p>
-                    ) : discoveredMetrics.length === 0 ? (
-                      <p className="text-xs text-th-secondary">
-                        No telemetry received from devices of this type yet.
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {discoveredMetrics.map((m) => {
-                          // Re-check in_schema against current form state (user may have added/removed fields)
-                          const inSchema = form.data_model.some((f) => f.name === m.key);
-                          return (
-                            <div
-                              key={m.key}
-                              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-blue-100/50"
-                            >
-                              <div className="flex items-center gap-2">
-                                {inSchema ? (
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                                ) : (
-                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                                )}
-                                <span className={`text-sm font-mono ${inSchema ? 'text-th-primary' : 'text-amber-700 font-medium'}`}>
-                                  {m.key}
-                                </span>
-                                <span className="text-xs text-th-muted">
-                                  {m.device_count}/{discoveredTotal} device{discoveredTotal !== 1 ? 's' : ''}
-                                </span>
-                              </div>
-                              {!inSchema && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setForm({
-                                      ...form,
-                                      data_model: [
-                                        ...form.data_model,
-                                        { name: m.key, type: 'float', unit: '', description: '', required: false },
-                                      ],
-                                    });
-                                  }}
-                                  className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-0.5 hover:bg-primary-50 rounded"
-                                >
-                                  + Add
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Capabilities */}
-          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => toggleSection('capabilities')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
-            >
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-th-primary">Capabilities</h2>
-                <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary">
-                  {form.capabilities.length} selected
-                </span>
-              </div>
-              {expandedSections.capabilities ? (
-                <ChevronUp className="w-5 h-5 text-th-muted" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-th-muted" />
-              )}
-            </button>
-
-            {expandedSections.capabilities && (
-              <div className="px-6 pb-6 border-t border-th-default pt-4">
-                <p className="text-sm text-th-secondary mb-4">
-                  Select the capabilities this device type supports. This determines which
-                  features are available for devices of this type.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {CAPABILITIES.map((cap) => (
-                    <label
-                      key={cap.value}
-                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        form.capabilities.includes(cap.value)
-                          ? 'bg-primary-50 border-primary-300'
-                          : 'bg-surface border-th-default hover:border-[var(--color-input-border)]'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.capabilities.includes(cap.value)}
-                        onChange={() => toggleCapability(cap.value)}
-                        className="mt-0.5 w-4 h-4 rounded border-[var(--color-input-border)] text-primary-600 focus:ring-primary-500"
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-th-primary">{cap.label}</div>
-                        <div className="text-xs text-th-secondary">{cap.description}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Default Settings */}
-          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => toggleSection('settings')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
-            >
-              <h2 className="text-lg font-semibold text-th-primary">Default Settings</h2>
-              {expandedSections.settings ? (
-                <ChevronUp className="w-5 h-5 text-th-muted" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-th-muted" />
-              )}
-            </button>
-
-            {expandedSections.settings && (
-              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
-                <p className="text-sm text-th-secondary">
-                  Default operational settings for devices of this type. These can be overridden
-                  per device.
-                </p>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Heartbeat Interval (sec)
-                    </label>
-                    <input
-                      type="number"
-                      value={form.default_settings.heartbeat_interval}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          default_settings: {
-                            ...form.default_settings,
-                            heartbeat_interval: Number(e.target.value),
-                          },
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Telemetry Interval (sec)
-                    </label>
-                    <input
-                      type="number"
-                      value={form.default_settings.telemetry_interval}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          default_settings: {
-                            ...form.default_settings,
-                            telemetry_interval: Number(e.target.value),
-                          },
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-th-primary mb-1">
-                      Offline Threshold (sec)
-                    </label>
-                    <input
-                      type="number"
-                      value={form.default_settings.offline_threshold}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          default_settings: {
-                            ...form.default_settings,
-                            offline_threshold: Number(e.target.value),
-                          },
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Connectivity */}
-          <div className="bg-surface border border-th-default rounded-lg shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => toggleSection('connectivity')}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-page"
-            >
-              <h2 className="text-lg font-semibold text-th-primary">Connectivity</h2>
-              {expandedSections.connectivity ? (
-                <ChevronUp className="w-5 h-5 text-th-muted" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-th-muted" />
-              )}
-            </button>
-
-            {expandedSections.connectivity && (
-              <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-6">
-                <p className="text-sm text-th-secondary">
-                  Configure the communication protocol and connection settings for devices of this type.
-                </p>
-
-                <ProtocolSelector
-                  value={form.connectivity.protocol}
-                  onChange={(protocol) => {
-                    setForm({
-                      ...form,
-                      connectivity: {
-                        ...form.connectivity,
-                        protocol,
-                      },
-                    });
-                  }}
-                />
-
-                <ProtocolConfigForm
-                  protocol={form.connectivity.protocol}
-                  config={form.connectivity}
-                  onChange={(connectivity) => {
-                    setForm({
-                      ...form,
-                      connectivity,
-                    });
-                  }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Submit Button (mobile/bottom) */}
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-5 py-2.5 border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-page transition-colors font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-primary-400 transition-colors font-medium flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Device Type'}
-            </button>
-          </div>
-        </form>
-        </div>
-      </main>
+  const pageAction = mode === 'view' ? (
+    <div className="flex items-center gap-2">
+      <button onClick={() => router.push('/dashboard/device-types')} className={`${btn.ghost} flex items-center gap-2`}>
+        <ArrowLeft className="w-4 h-4" />
+        Back
+      </button>
+      <button onClick={handleEdit} className={`${btn.primary} flex items-center gap-2`}>
+        <Edit className="w-4 h-4" />
+        Edit
+      </button>
     </div>
+  ) : (
+    <div className="flex items-center gap-2">
+      <button onClick={handleCancelEdit} className={`${btn.secondary} flex items-center gap-2`}>
+        <X className="w-4 h-4" />
+        Cancel
+      </button>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className={`${btn.primary} flex items-center gap-2`}
+      >
+        <Save className="w-4 h-4" />
+        {saving ? 'Saving...' : 'Save'}
+      </button>
+    </div>
+  );
+
+  return (
+    <PageShell
+      title={pageTitle}
+      subtitle={pageSubtitle}
+      icon={pageIcon}
+      action={pageAction}
+    >
+      {mode === 'view' && deviceType ? (
+        <DeviceTypeView
+          deviceType={deviceType}
+          discoveredMetrics={discoveredMetrics}
+          discoveredTotal={discoveredTotal}
+          discoveredLoading={discoveredLoading}
+          onRefreshDiscovered={loadDiscoveredMetrics}
+        />
+      ) : (
+        <DeviceTypeEdit
+          form={form}
+          setForm={setForm}
+          error={error}
+          isEditMode={!isNew}
+          discoveredMetrics={discoveredMetrics}
+          discoveredTotal={discoveredTotal}
+          discoveredLoading={discoveredLoading}
+          onRefreshDiscovered={loadDiscoveredMetrics}
+        />
+      )}
+    </PageShell>
   );
 }

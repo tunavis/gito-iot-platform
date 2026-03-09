@@ -11,13 +11,6 @@ import {
   Trash2,
   Copy,
   Cpu,
-  Thermometer,
-  Radio,
-  ToggleRight,
-  MapPin,
-  Zap,
-  Camera,
-  Settings,
   MoreVertical,
   Package,
   CheckCircle2,
@@ -28,85 +21,15 @@ import {
 import { Badge, CategoryBadge } from '@/components/ui/Badge';
 import StatCard from '@/components/ui/StatCard';
 import { btn, input } from '@/components/ui/buttonStyles';
-
-// Types
-interface DataModelField {
-  name: string;
-  type: string;
-  unit?: string;
-  description?: string;
-  min?: number;
-  max?: number;
-  required?: boolean;
-}
-
-interface DeviceType {
-  id: string;
-  name: string;
-  description?: string;
-  manufacturer?: string;
-  model?: string;
-  category: string;
-  icon: string;
-  color: string;
-  data_model: DataModelField[];
-  capabilities: string[];
-  default_settings?: {
-    heartbeat_interval?: number;
-    telemetry_interval?: number;
-    offline_threshold?: number;
-  };
-  connectivity?: {
-    protocol?: string;
-    lorawan_class?: string;
-    mqtt_topic_template?: string;
-  };
-  is_active: boolean;
-  device_count: number;
-  created_at: string;
-  updated_at: string;
-}
+import {
+  categoryIcons,
+  categoryLabels,
+  capabilityColors,
+  capabilityLabels,
+} from './_constants';
+import type { DeviceType } from './_types';
 
 type ViewMode = 'grid' | 'list';
-
-// Icon mapping
-const categoryIcons: Record<string, React.ReactNode> = {
-  sensor: <Thermometer className="w-5 h-5" />,
-  gateway: <Radio className="w-5 h-5" />,
-  actuator: <ToggleRight className="w-5 h-5" />,
-  tracker: <MapPin className="w-5 h-5" />,
-  meter: <Zap className="w-5 h-5" />,
-  camera: <Camera className="w-5 h-5" />,
-  controller: <Settings className="w-5 h-5" />,
-  other: <Cpu className="w-5 h-5" />,
-};
-
-const categoryLabels: Record<string, string> = {
-  sensor: 'Sensor',
-  gateway: 'Gateway',
-  actuator: 'Actuator',
-  tracker: 'Tracker',
-  meter: 'Meter',
-  camera: 'Camera',
-  controller: 'Controller',
-  other: 'Other',
-};
-
-const capabilityColors: Record<string, { bg: string; color: string; border: string }> = {
-  telemetry:     { bg: 'rgba(37,99,235,0.1)',   color: '#3b82f6', border: 'rgba(37,99,235,0.2)' },
-  commands:      { bg: 'rgba(139,92,246,0.1)',  color: '#8b5cf6', border: 'rgba(139,92,246,0.2)' },
-  firmware_ota:  { bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b', border: 'rgba(245,158,11,0.2)' },
-  remote_config: { bg: 'rgba(20,184,166,0.1)',  color: '#14b8a6', border: 'rgba(20,184,166,0.2)' },
-  location:      { bg: 'rgba(34,197,94,0.1)',   color: '#22c55e', border: 'rgba(34,197,94,0.2)' },
-  alerts:        { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444', border: 'rgba(239,68,68,0.2)' },
-  file_transfer: { bg: 'rgba(99,102,241,0.1)',  color: '#6366f1', border: 'rgba(99,102,241,0.2)' },
-  edge_compute:  { bg: 'rgba(236,72,153,0.1)',  color: '#ec4899', border: 'rgba(236,72,153,0.2)' },
-};
-const capabilityLabels: Record<string, string> = {
-  telemetry: 'Telemetry', commands: 'Commands', firmware_ota: 'OTA',
-  remote_config: 'Remote Config', location: 'Location', alerts: 'Alerts',
-  file_transfer: 'Files', edge_compute: 'Edge',
-};
 
 export default function DeviceTypesPage() {
   const router = useRouter();

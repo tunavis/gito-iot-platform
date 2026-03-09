@@ -94,13 +94,19 @@ class DeviceResponse(BaseModel):
 
     @model_validator(mode="after")
     def compute_effective_status(self) -> "DeviceResponse":
-        """Override ONLINE → OFFLINE when last_seen exceeds the offline threshold.
+        """Override ONLINE → OFFLINE when last_seen is missing or stale.
 
+        A device marked 'online' that has never reported (last_seen IS NULL)
+        or whose last_seen exceeds the offline threshold is shown as offline.
         Uses the device type's default_settings.offline_threshold when available,
         otherwise falls back to 900 s (15 minutes). Other statuses (IDLE, ERROR,
         PROVISIONING) are intentional operator states and are never overridden.
         """
-        if self.last_seen is None or self.status != DeviceStatus.ONLINE:
+        if self.status != DeviceStatus.ONLINE:
+            return self
+        # Never reported → offline
+        if self.last_seen is None:
+            self.status = DeviceStatus.OFFLINE
             return self
         threshold = self.offline_threshold or DEFAULT_OFFLINE_THRESHOLD
         now = datetime.now(timezone.utc)

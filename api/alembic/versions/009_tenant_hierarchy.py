@@ -25,25 +25,11 @@ def upgrade() -> None:
         REFERENCES tenants(id) ON DELETE RESTRICT
     """)
 
-    # ── 2. Add tenant_type with CHECK constraint ────────────────────────────
+    # ── 2. Ensure tenant_type column exists (may already exist as 'standard' default)
     op.execute("""
         ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS tenant_type VARCHAR(20)
+        ADD COLUMN IF NOT EXISTS tenant_type VARCHAR(50)
         NOT NULL DEFAULT 'client'
-    """)
-    op.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'valid_tenant_type'
-                  AND conrelid = 'tenants'::regclass
-            ) THEN
-                ALTER TABLE tenants
-                ADD CONSTRAINT valid_tenant_type
-                CHECK (tenant_type IN ('management', 'client', 'sub_client'));
-            END IF;
-        END $$
     """)
 
     # ── 3. Index on parent_tenant_id ────────────────────────────────────────
@@ -80,13 +66,13 @@ def upgrade() -> None:
     """)
 
     # ── 5. Seed: mark the first/only tenant as management type ─────────────
-    # On fresh installs or single-tenant setups this marks the root tenant.
-    # Idempotent: only updates if tenant_type is still the default 'client'.
+    # Idempotent: marks the oldest tenant as management regardless of its
+    # current tenant_type value (handles 'standard', 'client', or any default).
     op.execute("""
         UPDATE tenants
         SET tenant_type = 'management'
-        WHERE tenant_type = 'client'
-          AND id = (SELECT id FROM tenants ORDER BY created_at LIMIT 1)
+        WHERE id = (SELECT id FROM tenants ORDER BY created_at LIMIT 1)
+          AND tenant_type != 'management'
     """)
 
 
