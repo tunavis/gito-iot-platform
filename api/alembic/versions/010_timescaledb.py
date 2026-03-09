@@ -38,15 +38,18 @@ def upgrade() -> None:
     # 1. Enable TimescaleDB extension
     #    Must run in AUTOCOMMIT — CREATE EXTENSION timescaledb resets the
     #    backend connection when loaded, which kills any open transaction.
+    #    We bypass SQLAlchemy's transaction management by setting autocommit
+    #    directly on the raw psycopg2 DBAPI connection.
     # -------------------------------------------------------------------------
-    conn = op.get_bind()
-    conn.execute(sa.text("COMMIT"))  # close Alembic's open transaction
-    orig_level = conn.get_isolation_level()
-    conn.execution_options(isolation_level="AUTOCOMMIT").execute(
-        sa.text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
-    )
-    # Restore isolation level for remaining DDL
-    conn.execution_options(isolation_level=orig_level)
+    bind = op.get_bind()
+    raw_conn = bind.connection.dbapi_connection
+    old_autocommit = raw_conn.autocommit
+    raw_conn.autocommit = True
+    try:
+        with raw_conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+    finally:
+        raw_conn.autocommit = old_autocommit
 
     # -------------------------------------------------------------------------
     # 2. Fix primary key: drop old (id-only) PK, add composite (id, ts)
