@@ -105,3 +105,12 @@ processor/.mypy_cache/
 !.env.example
 !.github/
 nul
+
+# Flutter mobile app (separate repo)
+mobile/
+
+# Claude AI local config
+.claude/
+
+# Next.js build info (generated file)
+web/tsconfig.tsbuildinfo
