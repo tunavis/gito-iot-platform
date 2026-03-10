@@ -210,6 +210,9 @@ class DatabaseService:
         self.db_url   = db_url
         self.conn_pool: AsyncConnectionPool | None = None
         self._unit_cache: dict[str, tuple[float, dict[str, str]]] = {}
+        # Device existence cache: {device_id: (monotonic_time, exists)}
+        self._device_cache: dict[str, tuple[float, bool]] = {}
+        self._device_cache_ttl: int = 60  # seconds
 
     async def connect(self):
         self.conn_pool = AsyncConnectionPool(
@@ -254,21 +257,55 @@ class DatabaseService:
         self._unit_cache[device_id] = (now, unit_map)
         return unit_map
 
-    async def batch_insert_telemetry(self, rows: list[tuple]) -> bool:
+    async def device_exists(self, tenant_id: str, device_id: str) -> bool:
+        """
+        Check whether device_id belongs to tenant_id.
+        Result cached for _device_cache_ttl seconds (default 60 s) to avoid
+        a DB round-trip on every message from a known device.
+        Returns False and logs a warning for unknown devices.
+        """
+        now = time.monotonic()
+        cached = self._device_cache.get(device_id)
+        if cached and (now - cached[0]) < self._device_cache_ttl:
+            return cached[1]
+
+        exists = False
+        try:
+            async with self.conn_pool.connection() as conn:
+                result = await conn.execute(
+                    "SELECT 1 FROM devices WHERE id = %s AND tenant_id = %s",
+                    (device_id, tenant_id),
+                )
+                exists = (await result.fetchone()) is not None
+        except Exception as e:
+            logger.debug("Device existence check failed for %s: %s", device_id, e)
+            return False  # conservative: don't cache on error, let next message retry
+
+        self._device_cache[device_id] = (now, exists)
+        if not exists:
+            logger.warning(
+                "Unknown device %s for tenant %s — message rejected before stream buffer",
+                device_id, tenant_id,
+            )
+        return exists
+
+    async def batch_insert_telemetry(self, rows: list[tuple]) -> set[str]:
         """
         Bulk-insert telemetry rows grouped by tenant (one executemany per tenant).
         Each row tuple: (tenant_id, device_id, metric_key, value_float,
                          value_str, value_json, unit, ts)
 
         Also batch-updates devices.last_seen per tenant using UNNEST.
-        Returns True on full success, False if any tenant group failed.
+        Returns: set of tenant_ids whose insert FAILED (empty set = full success).
+        Callers MUST NOT ACK stream entries for failed tenants — the crash-recovery
+        loop (XAUTOCLAIM) will redeliver them after PENDING_CLAIM_MS.
         """
         # Group rows by tenant for RLS context setting
         tenant_groups: dict[str, list[tuple]] = defaultdict(list)
         for row in rows:
             tenant_groups[row[0]].append(row)
 
-        success = True
+        failed_tenants: set[str] = set()
         for tenant_id, tenant_rows in tenant_groups.items():
             try:
                 async with self.conn_pool.connection() as conn:
@@ -325,9 +362,9 @@ class DatabaseService:
                     f"Batch insert failed for tenant {tenant_id}: {e}",
                     exc_info=True,
                 )
-                success = False
+                failed_tenants.add(tenant_id)
 
-        return success
+        return failed_tenants
 
     async def get_active_alert_rules(self, tenant_id: str, device_id: str) -> list:
         try:
@@ -557,20 +594,28 @@ class StreamConsumer:
     async def _process_entries(self, entries: list[tuple[str, dict]]) -> list[str]:
         """
         Convert raw stream entries to DB rows, batch-insert, return ACK IDs.
-        Returns list of msg_ids that were successfully processed.
+
+        At-least-once semantics: a msg_id is returned (and thus ACKed) ONLY when
+        its tenant's batch insert succeeded. Failed tenants' messages remain in the
+        pending list so _reclaim_pending retries them after PENDING_CLAIM_MS.
+
+        Malformed entries (bad JSON / missing fields) are always ACKed — they
+        cannot be fixed by retrying, so keeping them pending would block the stream.
         """
         rows: list[tuple] = []
-        msg_ids: list[str] = []
+        msg_tenant: dict[str, str] = {}        # msg_id → tenant_id
+        unconditional_ack: list[str] = []      # malformed entries — always ACK
 
         for msg_id, data in entries:
             decoded = self._decode_stream_entry(data)
             if not decoded:
-                # ACK malformed entries so they don't block the stream
-                msg_ids.append(msg_id)
+                # Malformed — ACK immediately, retrying would never succeed
+                unconditional_ack.append(msg_id)
                 continue
 
             tenant_id, device_id, payload, timestamp = decoded
             unit_map = await self.db.get_unit_map(device_id)
+            msg_tenant[msg_id] = tenant_id
 
             for metric_key, metric_value in payload.items():
                 if metric_value is None:
@@ -593,12 +638,22 @@ class StreamConsumer:
                     timestamp,
                 ))
 
-            msg_ids.append(msg_id)
-
+        failed_tenants: set[str] = set()
         if rows:
-            await self.db.batch_insert_telemetry(rows)
+            failed_tenants = await self.db.batch_insert_telemetry(rows)
 
-        return msg_ids
+        if failed_tenants:
+            logger.warning(
+                "Batch insert failed for %d tenant(s) — NOT ACKing; will retry in %d ms: %s",
+                len(failed_tenants), PENDING_CLAIM_MS, failed_tenants,
+            )
+
+        # ACK: unconditional (malformed) + all msgs whose tenant insert succeeded
+        ack_ids = unconditional_ack + [
+            msg_id for msg_id, tenant_id in msg_tenant.items()
+            if tenant_id not in failed_tenants
+        ]
+        return ack_ids
 
     async def run(self):
         """Main read loop — runs until self._running is False."""
@@ -721,6 +776,10 @@ class MQTTProcessor:
                 return
             if not self.validator.is_valid_uuid(device_id):
                 logger.warning(f"Invalid device_id: {device_id}")
+                return
+
+            # Device existence check — rejects unknown devices before hitting Redis/DB
+            if not await self.db_service.device_exists(tenant_id, device_id):
                 return
 
             # Deduplication: skip exact-same payload within 5 seconds

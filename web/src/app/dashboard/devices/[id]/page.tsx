@@ -140,6 +140,7 @@ export default function DeviceDetailPage() {
   const [alarms, setAlarms] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
+  const [showOtherMetrics, setShowOtherMetrics] = useState(false);
 
   // Single real-time data source — shared by header strip AND Live Device tab.
   // This means both always show the same value with no stale-data divergence.
@@ -172,6 +173,31 @@ export default function DeviceDetailPage() {
       return sample && typeof sample[metric] === 'number';
     });
   }, [discoveredMetrics, telemetryData]);
+
+  // Split metrics into declared (from device type schema) vs undeclared
+  const { declaredMetrics, undeclaredMetrics } = useMemo(() => {
+    const schemaKeys = deviceType?.telemetry_schema
+      ? Object.keys(deviceType.telemetry_schema)
+      : [];
+
+    // If no schema defined, treat all as declared (no filtering)
+    if (schemaKeys.length === 0) {
+      return { declaredMetrics: numericMetrics, undeclaredMetrics: [] as string[] };
+    }
+
+    const declared: string[] = [];
+    const undeclared: string[] = [];
+
+    numericMetrics.forEach(metric => {
+      if (schemaKeys.includes(metric)) {
+        declared.push(metric);
+      } else {
+        undeclared.push(metric);
+      }
+    });
+
+    return { declaredMetrics: declared, undeclaredMetrics: undeclared };
+  }, [numericMetrics, deviceType]);
 
   const getTimeRangeHours = (range: TimeRange): number => {
     const map = { '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720 };
@@ -732,24 +758,68 @@ export default function DeviceDetailPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6">
-                {/* Dynamically generate charts for all numeric metrics */}
-                {numericMetrics.map(metricKey => {
-                  const metadata = getMetricMetadata(metricKey);
-                  const color = METRIC_COLORS[metricKey] || '#6366f1';
+              <div className="space-y-6">
+                {/* Declared telemetry metrics (from device type schema) */}
+                <div className="grid grid-cols-1 gap-6">
+                  {declaredMetrics.map(metricKey => {
+                    const metadata = getMetricMetadata(metricKey);
+                    const color = METRIC_COLORS[metricKey] || '#6366f1';
 
-                  return (
-                    <TelemetryChartCard
-                      key={metricKey}
-                      title={formatMetricLabel(metricKey, deviceType?.telemetry_schema)}
-                      data={telemetryData}
-                      metricKey={metricKey}
-                      unit={metadata.unit || ''}
-                      color={color}
-                      timeRangeHours={getTimeRangeHours(timeRange)}
-                    />
-                  );
-                })}
+                    return (
+                      <TelemetryChartCard
+                        key={metricKey}
+                        title={formatMetricLabel(metricKey, deviceType?.telemetry_schema)}
+                        description={metadata.description}
+                        data={telemetryData}
+                        metricKey={metricKey}
+                        unit={metadata.unit || ''}
+                        color={color}
+                        timeRangeHours={getTimeRangeHours(timeRange)}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Undeclared / system metrics — collapsible */}
+                {undeclaredMetrics.length > 0 && (
+                  <div>
+                    <button
+                      onClick={() => setShowOtherMetrics(!showOtherMetrics)}
+                      className="flex items-center gap-2 text-sm text-th-secondary hover:text-th-primary transition-colors mb-4"
+                    >
+                      {showOtherMetrics ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                      <span className="font-medium">Other Metrics</span>
+                      <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-muted">
+                        {undeclaredMetrics.length}
+                      </span>
+                    </button>
+
+                    {showOtherMetrics && (
+                      <div className="grid grid-cols-1 gap-6">
+                        {undeclaredMetrics.map(metricKey => {
+                          const metadata = getMetricMetadata(metricKey);
+                          const color = METRIC_COLORS[metricKey] || '#94a3b8';
+
+                          return (
+                            <TelemetryChartCard
+                              key={metricKey}
+                              title={formatMetricLabel(metricKey, deviceType?.telemetry_schema)}
+                              data={telemetryData}
+                              metricKey={metricKey}
+                              unit={metadata.unit || ''}
+                              color={color}
+                              timeRangeHours={getTimeRangeHours(timeRange)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -770,6 +840,7 @@ export default function DeviceDetailPage() {
 // Dynamic Telemetry Chart Card
 function TelemetryChartCard({
   title,
+  description,
   data,
   metricKey,
   unit,
@@ -777,6 +848,7 @@ function TelemetryChartCard({
   timeRangeHours,
 }: {
   title: string;
+  description?: string;
   data: TelemetryPoint[];
   metricKey: string;
   unit: string;
@@ -823,7 +895,10 @@ function TelemetryChartCard({
   return (
     <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-th-primary">{title}</h3>
+        <div>
+          <h3 className="text-base font-semibold text-th-primary">{title}</h3>
+          {description && <p className="text-xs text-th-muted mt-0.5">{description}</p>}
+        </div>
         <span className="text-2xl font-bold" style={{ color }}>
           {typeof latestValue === 'number' ? latestValue.toFixed(1) : '—'} <span className="text-sm font-normal text-th-secondary">{unit}</span>
         </span>
