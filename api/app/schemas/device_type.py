@@ -104,6 +104,7 @@ class DeviceTypeCreate(BaseModel):
     capabilities: Optional[List[DeviceCapability]] = Field(default=[DeviceCapability.TELEMETRY], description="Device capabilities")
     default_settings: Optional[DefaultSettings] = Field(default=None, description="Default device settings")
     connectivity: Optional[ConnectivityConfig] = Field(default=None, description="Connectivity configuration")
+    command_schema: Optional[dict] = Field(default={}, description="Available commands with parameter schemas")
     metadata: Optional[dict] = Field(default={}, description="Custom metadata")
 
     @model_validator(mode="after")
@@ -134,6 +135,7 @@ class DeviceTypeUpdate(BaseModel):
     capabilities: Optional[List[DeviceCapability]] = None
     default_settings: Optional[DefaultSettings] = None
     connectivity: Optional[ConnectivityConfig] = None
+    command_schema: Optional[dict] = None
     metadata: Optional[dict] = None
     is_active: Optional[bool] = None
 
@@ -167,6 +169,7 @@ class DeviceTypeResponse(BaseModel):
     capabilities: List[str]
     default_settings: Optional[dict]
     connectivity: Optional[dict]
+    command_schema: Optional[dict] = Field(default={})
     metadata: Optional[dict] = Field(None, validation_alias="extra_metadata")
 
     is_active: bool

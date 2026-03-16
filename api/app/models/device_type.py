@@ -61,6 +61,10 @@ class DeviceType(BaseModel):
     # Protocol/Connectivity Configuration
     # {protocol: "mqtt"|"lorawan"|"http", ...}
     connectivity = Column(JSONB, nullable=True, default=dict)
+
+    # Command Schema - defines available RPC commands for this device type
+    # {"reboot": {"description": "...", "parameters": [...]}, ...}
+    command_schema = Column(JSONB, nullable=True, default=dict)
     
     # Extra Metadata - custom fields (renamed from 'metadata' to avoid SQLAlchemy conflict)
     extra_metadata = Column("metadata", JSONB, nullable=True, default=dict)

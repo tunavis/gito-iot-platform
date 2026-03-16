@@ -33,7 +33,16 @@ import {
   HardDrive,
   Package,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Terminal,
+  Play,
+  Send,
+  RotateCcw,
+  Radio,
+  Info,
+  ToggleLeft,
+  ToggleRight,
+  Hash
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DeviceVisualization } from '@/components/visualization';
@@ -92,10 +101,28 @@ interface Device {
   hardware_version?: string | null;
 }
 
+interface CommandParameter {
+  name: string;
+  type: 'float' | 'integer' | 'string' | 'boolean';
+  unit?: string;
+  min?: number;
+  max?: number;
+  enum?: string[];
+  required?: boolean;
+  description?: string;
+}
+
+interface CommandSchema {
+  description: string;
+  parameters: CommandParameter[];
+}
+
 interface DeviceType {
   id: string;
   name: string;
   category: string;
+  capabilities?: string[];
+  command_schema?: Record<string, CommandSchema>;
   telemetry_schema: Record<string, {
     type: string;
     unit?: string;
@@ -132,7 +159,7 @@ export default function DeviceDetailPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>([]);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const VALID_TABS = ['live', 'overview', 'telemetry', 'alarms', 'settings'] as const;
+  const VALID_TABS = ['live', 'overview', 'telemetry', 'alarms', 'commands', 'settings'] as const;
   type TabId = typeof VALID_TABS[number];
   const _tabParam = searchParams?.get('tab') ?? 'live';
   const [activeTab, setActiveTab] = useState<TabId>(VALID_TABS.includes(_tabParam as TabId) ? (_tabParam as TabId) : 'live');
@@ -241,8 +268,8 @@ export default function DeviceDetailPage() {
           const json = await alarmsRes.json();
           setAlarms(json.data || []);
         }
-      } catch (err) {
-        console.error('Failed to load device:', err);
+      } catch {
+        // Device loading failed — error state handled by empty device check
       } finally {
         setLoading(false);
       }
@@ -276,8 +303,8 @@ export default function DeviceDetailPage() {
           const data = (json.data || []).slice().reverse();
           setTelemetryData(data);
         }
-      } catch (err) {
-        console.error('Failed to load telemetry:', err);
+      } catch {
+        // Telemetry loading failed — empty chart will be shown
       } finally {
         setTelemetryLoading(false);
       }
@@ -575,6 +602,7 @@ export default function DeviceDetailPage() {
               { key: 'overview', label: 'Overview' },
               { key: 'telemetry', label: 'History' },
               { key: 'alarms', label: 'Alarms' },
+              { key: 'commands', label: 'Commands' },
               { key: 'settings', label: 'Configure' },
             ] as const).map(tab => (
               <button
@@ -828,6 +856,9 @@ export default function DeviceDetailPage() {
         {/* Alarms Tab */}
         {activeTab === 'alarms' && <DeviceAlarms deviceId={deviceId} />}
 
+        {/* Commands Tab */}
+        {activeTab === 'commands' && <DeviceCommands deviceId={deviceId} deviceStatus={device?.status} deviceType={deviceType} />}
+
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} discoveredMetrics={discoveredMetrics} />
@@ -964,6 +995,747 @@ function TelemetryChartCard({
           <p className="text-xs text-th-muted mb-0.5">Max</p>
           <p className="text-sm font-semibold text-th-primary">{maxValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Device Commands Component (RPC Option B — Schema-Driven UI)
+function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: string; deviceStatus?: string; deviceType: DeviceType | null }) {
+  interface Command {
+    id: string;
+    device_id: string;
+    command_name: string;
+    parameters: Record<string, any>;
+    status: string;
+    response: Record<string, any> | null;
+    error_message: string | null;
+    created_at: string;
+    expires_at: string;
+    sent_at: string | null;
+    completed_at: string | null;
+  }
+
+  const [commands, setCommands] = useState<Command[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Schema-driven form state
+  const [selectedCommand, setSelectedCommand] = useState<string>('');
+  const [paramValues, setParamValues] = useState<Record<string, any>>({});
+  const [customCommandName, setCustomCommandName] = useState('');
+  const [customParamsText, setCustomParamsText] = useState('{}');
+  const [ttl, setTtl] = useState(60);
+  const [formError, setFormError] = useState('');
+  const [sendSuccess, setSendSuccess] = useState('');
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
+
+  const commandSchema = deviceType?.command_schema || {};
+  const capabilities = deviceType?.capabilities || [];
+  const hasCommandsCapability = capabilities.includes('commands');
+  const schemaEntries = Object.entries(commandSchema);
+
+  // Quick actions: commands with no required parameters
+  const quickActions = schemaEntries.filter(([, schema]) =>
+    !schema.parameters || schema.parameters.length === 0 || schema.parameters.every(p => !p.required)
+  );
+
+  // Full commands: commands with parameters
+  const paramCommands = schemaEntries.filter(([, schema]) =>
+    schema.parameters && schema.parameters.some(p => p.required)
+  );
+
+  const QUICK_ACTION_ICONS: Record<string, any> = {
+    reboot: RotateCcw,
+    ping: Radio,
+    restart_service: RefreshCw,
+    reset_energy_counter: Hash,
+    reset_volume_counter: Hash,
+    calibrate: Activity,
+  };
+
+  const getAuth = () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return null;
+    try {
+      const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
+      return { token, tenant };
+    } catch {
+      return null;
+    }
+  };
+
+  const loadCommands = async () => {
+    const auth = getAuth();
+    if (!auth) return;
+    try {
+      const params = new URLSearchParams({ page: '1', per_page: '50' });
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+      const res = await fetch(
+        `/api/v1/tenants/${auth.tenant}/devices/${deviceId}/commands?${params}`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setCommands(json.data || []);
+      }
+    } catch {
+      // Silent — empty state will be shown
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCommands();
+  }, [deviceId, statusFilter]);
+
+  // Auto-refresh while there are pending/sent commands
+  useEffect(() => {
+    const hasPending = commands.some(c => ['pending', 'sent', 'delivered'].includes(c.status));
+    if (!hasPending) return;
+    const interval = setInterval(loadCommands, 3000);
+    return () => clearInterval(interval);
+  }, [commands, deviceId, statusFilter]);
+
+  const sendCommand = async (cmdName: string, params: Record<string, any>, ttlSec: number) => {
+    setFormError('');
+    setSendSuccess('');
+
+    const auth = getAuth();
+    if (!auth) return;
+
+    setSending(true);
+    try {
+      const res = await fetch(
+        `/api/v1/tenants/${auth.tenant}/devices/${deviceId}/commands`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${auth.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            command_name: cmdName,
+            parameters: params,
+            ttl_seconds: ttlSec,
+          }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        setFormError(json.detail || json.error?.message || 'Failed to send command');
+        return;
+      }
+      const desc = commandSchema[cmdName]?.description;
+      setSendSuccess(`"${cmdName}" sent successfully${desc ? ` — ${desc}` : ''}`);
+      setSelectedCommand('');
+      setParamValues({});
+      setCustomCommandName('');
+      setCustomParamsText('{}');
+      setTimeout(() => setSendSuccess(''), 4000);
+      loadCommands();
+    } catch {
+      setFormError('Network error — failed to send command');
+    } finally {
+      setSending(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const handleQuickAction = (cmdName: string) => {
+    const destructive = ['reboot', 'restart_service', 'reset_energy_counter', 'reset_volume_counter'].includes(cmdName);
+    if (destructive) {
+      setConfirmAction(cmdName);
+    } else {
+      sendCommand(cmdName, {}, ttl);
+    }
+  };
+
+  const handleFormSend = () => {
+    if (selectedCommand === '__custom__') {
+      if (!customCommandName.trim()) {
+        setFormError('Command name is required');
+        return;
+      }
+      let parsedParams: Record<string, any>;
+      try {
+        parsedParams = JSON.parse(customParamsText);
+      } catch {
+        setFormError('Parameters must be valid JSON');
+        return;
+      }
+      sendCommand(customCommandName.trim(), parsedParams, ttl);
+    } else if (selectedCommand) {
+      const schema = commandSchema[selectedCommand];
+      if (schema?.parameters) {
+        for (const param of schema.parameters) {
+          if (param.required && (paramValues[param.name] === undefined || paramValues[param.name] === '')) {
+            setFormError(`"${param.name}" is required`);
+            return;
+          }
+          if ((param.type === 'float' || param.type === 'integer') && paramValues[param.name] !== undefined) {
+            const val = Number(paramValues[param.name]);
+            if (isNaN(val)) {
+              setFormError(`"${param.name}" must be a number`);
+              return;
+            }
+            if (param.min !== undefined && val < param.min) {
+              setFormError(`"${param.name}" must be at least ${param.min}`);
+              return;
+            }
+            if (param.max !== undefined && val > param.max) {
+              setFormError(`"${param.name}" must be at most ${param.max}`);
+              return;
+            }
+          }
+        }
+      }
+      // Convert values to correct types
+      const typedParams: Record<string, any> = {};
+      for (const [key, val] of Object.entries(paramValues)) {
+        const paramSchema = schema?.parameters?.find(p => p.name === key);
+        if (paramSchema?.type === 'float') typedParams[key] = parseFloat(val);
+        else if (paramSchema?.type === 'integer') typedParams[key] = parseInt(val, 10);
+        else if (paramSchema?.type === 'boolean') typedParams[key] = val === true || val === 'true';
+        else typedParams[key] = val;
+      }
+      sendCommand(selectedCommand, typedParams, ttl);
+    }
+  };
+
+  const updateParam = (name: string, value: any) => {
+    setParamValues(prev => ({ ...prev, [name]: value }));
+  };
+
+  const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+    pending:   { bg: 'bg-yellow-50 border-yellow-200', text: 'text-yellow-700', label: 'Pending' },
+    sent:      { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-700', label: 'Sent' },
+    delivered: { bg: 'bg-indigo-50 border-indigo-200', text: 'text-indigo-700', label: 'Delivered' },
+    executed:  { bg: 'bg-green-50 border-green-200', text: 'text-green-700', label: 'Executed' },
+    failed:    { bg: 'bg-red-50 border-red-200', text: 'text-red-600', label: 'Failed' },
+    timed_out: { bg: 'bg-gray-100 border-gray-300', text: 'text-gray-600', label: 'Timed Out' },
+  };
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return '\u2014';
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  };
+
+  // Render a typed parameter input based on schema
+  const renderParamInput = (param: CommandParameter) => {
+    const value = paramValues[param.name] ?? '';
+
+    if (param.type === 'boolean') {
+      const isOn = value === true || value === 'true';
+      return (
+        <div key={param.name} className="flex items-center justify-between py-2">
+          <div>
+            <label className="text-sm font-medium text-th-primary">
+              {param.name.replace(/_/g, ' ')}{param.required && <span className="text-red-500 ml-0.5">*</span>}
+            </label>
+            {param.description && <p className="text-xs text-th-muted">{param.description}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => updateParam(param.name, !isOn)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${isOn ? 'bg-primary-600' : 'bg-gray-300'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isOn ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+      );
+    }
+
+    if (param.type === 'string' && param.enum) {
+      return (
+        <div key={param.name}>
+          <label className="block text-sm font-medium text-th-primary mb-1">
+            {param.name.replace(/_/g, ' ')}{param.required && <span className="text-red-500 ml-0.5">*</span>}
+          </label>
+          {param.description && <p className="text-xs text-th-muted mb-1">{param.description}</p>}
+          <select
+            value={value}
+            onChange={e => updateParam(param.name, e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">Select {param.name.replace(/_/g, ' ')}...</option>
+            {param.enum.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (param.type === 'float' || param.type === 'integer') {
+      const rangeLabel = param.min !== undefined && param.max !== undefined
+        ? `${param.min}${param.unit ? param.unit : ''} \u2013 ${param.max}${param.unit ? param.unit : ''}`
+        : param.unit || '';
+      return (
+        <div key={param.name}>
+          <label className="block text-sm font-medium text-th-primary mb-1">
+            {param.name.replace(/_/g, ' ')}{param.required && <span className="text-red-500 ml-0.5">*</span>}
+            {rangeLabel && <span className="ml-2 text-xs font-normal text-th-muted">({rangeLabel})</span>}
+          </label>
+          {param.description && <p className="text-xs text-th-muted mb-1">{param.description}</p>}
+          <input
+            type="number"
+            value={value}
+            onChange={e => updateParam(param.name, e.target.value)}
+            min={param.min}
+            max={param.max}
+            step={param.type === 'float' ? 0.1 : 1}
+            placeholder={param.min !== undefined ? `${param.min}` : ''}
+            className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+      );
+    }
+
+    // Default: string input
+    return (
+      <div key={param.name}>
+        <label className="block text-sm font-medium text-th-primary mb-1">
+          {param.name.replace(/_/g, ' ')}{param.required && <span className="text-red-500 ml-0.5">*</span>}
+        </label>
+        {param.description && <p className="text-xs text-th-muted mb-1">{param.description}</p>}
+        <input
+          type="text"
+          value={value}
+          onChange={e => updateParam(param.name, e.target.value)}
+          placeholder={param.description || `Enter ${param.name.replace(/_/g, ' ')}`}
+          className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+    );
+  };
+
+  const selectedSchema = selectedCommand && selectedCommand !== '__custom__' ? commandSchema[selectedCommand] : null;
+
+  return (
+    <div className="space-y-6">
+      {/* Feedback banners */}
+      {sendSuccess && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+          <p className="text-sm text-green-800">{sendSuccess}</p>
+        </div>
+      )}
+      {formError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+          <p className="text-sm text-red-800">{formError}</p>
+        </div>
+      )}
+
+      {/* Offline warning */}
+      {deviceStatus === 'offline' && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+          <p className="text-sm text-yellow-800">Device is offline. Commands will be queued and may time out.</p>
+        </div>
+      )}
+
+      {/* Capability guard */}
+      {deviceType && !hasCommandsCapability && (
+        <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-semibold text-th-primary">Commands not supported</h3>
+              <p className="text-sm text-th-secondary mt-1">
+                This device type ({deviceType.name}) doesn&apos;t have the &quot;commands&quot; capability enabled.
+                To enable remote commands, add &quot;commands&quot; to the device type capabilities in Settings.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      {hasCommandsCapability && quickActions.length > 0 && (
+        <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-th-primary flex items-center gap-2">
+              <Zap className="w-5 h-5 text-primary-600" />
+              Quick Actions
+            </h3>
+            <p className="text-sm text-th-secondary mt-0.5">One-click commands — no parameters needed</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {quickActions.map(([cmdName, schema]) => {
+              const IconComp = QUICK_ACTION_ICONS[cmdName] || Play;
+              const isConfirming = confirmAction === cmdName;
+              return (
+                <div key={cmdName} className="relative">
+                  {isConfirming ? (
+                    <div className="border-2 border-red-300 bg-red-50 rounded-xl p-4 text-center">
+                      <p className="text-xs font-semibold text-red-700 mb-2">Confirm {cmdName}?</p>
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={() => sendCommand(cmdName, {}, ttl)}
+                          disabled={sending}
+                          className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {sending ? 'Sending...' : 'Yes, send'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction(null)}
+                          className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-100"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleQuickAction(cmdName)}
+                      disabled={sending}
+                      className="w-full border border-th-default rounded-xl p-4 hover:border-primary-300 hover:bg-primary-50/50 transition-all text-center group disabled:opacity-50"
+                    >
+                      <IconComp className="w-6 h-6 mx-auto mb-2 text-th-muted group-hover:text-primary-600 transition-colors" />
+                      <p className="text-sm font-semibold text-th-primary">{cmdName.replace(/_/g, ' ')}</p>
+                      <p className="text-xs text-th-muted mt-0.5 line-clamp-2">{schema.description}</p>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Command Form (schema-driven or custom) */}
+      {(hasCommandsCapability || !deviceType) && (
+        <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-th-primary flex items-center gap-2">
+              <Send className="w-5 h-5 text-primary-600" />
+              Send Command
+            </h3>
+            <p className="text-sm text-th-secondary mt-0.5">
+              {schemaEntries.length > 0
+                ? 'Select a command from the list or use a custom command'
+                : 'Send an RPC command to this device'}
+            </p>
+          </div>
+
+          {/* Command selector */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-th-primary mb-1">Command</label>
+            {schemaEntries.length > 0 ? (
+              <select
+                value={selectedCommand}
+                onChange={e => {
+                  setSelectedCommand(e.target.value);
+                  setParamValues({});
+                  setFormError('');
+                }}
+                className="w-full px-3 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Select a command...</option>
+                {paramCommands.length > 0 && (
+                  <optgroup label="Commands with parameters">
+                    {paramCommands.map(([cmdName, schema]) => (
+                      <option key={cmdName} value={cmdName}>
+                        {cmdName.replace(/_/g, ' ')} — {schema.description}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {quickActions.length > 0 && (
+                  <optgroup label="Quick commands (no parameters)">
+                    {quickActions.map(([cmdName, schema]) => (
+                      <option key={cmdName} value={cmdName}>
+                        {cmdName.replace(/_/g, ' ')} — {schema.description}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Advanced">
+                  <option value="__custom__">Custom command</option>
+                </optgroup>
+              </select>
+            ) : (
+              // No schema — always show custom command inputs
+              <input
+                type="text"
+                value={customCommandName}
+                onChange={e => setCustomCommandName(e.target.value)}
+                placeholder="e.g. reboot, set_interval"
+                className="w-full px-3 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            )}
+          </div>
+
+          {/* Schema command description */}
+          {selectedSchema && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+              <p className="text-sm text-blue-800">{selectedSchema.description}</p>
+            </div>
+          )}
+
+          {/* Dynamic parameter inputs */}
+          {selectedSchema?.parameters && selectedSchema.parameters.length > 0 && (
+            <div className="mb-4 space-y-4">
+              <p className="text-xs font-semibold text-th-muted uppercase tracking-wider">Parameters</p>
+              {selectedSchema.parameters.map(param => renderParamInput(param))}
+            </div>
+          )}
+
+          {/* Custom command inputs */}
+          {(selectedCommand === '__custom__' || (schemaEntries.length === 0)) && (
+            <div className="mb-4 space-y-4">
+              {schemaEntries.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-th-muted uppercase tracking-wider flex items-center gap-1">
+                    <Terminal className="w-3 h-3" /> Custom Command
+                  </p>
+                  <div>
+                    <label className="block text-sm font-medium text-th-primary mb-1">Command Name</label>
+                    <input
+                      type="text"
+                      value={customCommandName}
+                      onChange={e => setCustomCommandName(e.target.value)}
+                      placeholder="e.g. reboot, set_interval"
+                      className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-th-primary mb-1">Parameters (JSON)</label>
+                <textarea
+                  value={customParamsText}
+                  onChange={e => setCustomParamsText(e.target.value)}
+                  placeholder='{"interval": 30}'
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-[var(--color-input-border)] rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Timeout */}
+          {(selectedCommand || schemaEntries.length === 0) && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-th-primary mb-1">Timeout</label>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  {[30, 60, 300, 900].map(sec => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => setTtl(sec)}
+                      className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
+                        ttl === sec
+                          ? 'bg-primary-600 text-white border-primary-600'
+                          : 'border-[var(--color-input-border)] text-th-secondary hover:bg-panel'
+                      }`}
+                    >
+                      {sec < 60 ? `${sec}s` : `${sec / 60}m`}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  value={ttl}
+                  onChange={e => setTtl(Math.max(5, Math.min(3600, parseInt(e.target.value) || 60)))}
+                  min={5}
+                  max={3600}
+                  className="w-20 px-2 py-1.5 text-xs border border-[var(--color-input-border)] rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <span className="text-xs text-th-muted">seconds</span>
+              </div>
+            </div>
+          )}
+
+          {/* Send button */}
+          {(selectedCommand || (schemaEntries.length === 0 && customCommandName.trim())) && (
+            <button
+              onClick={handleFormSend}
+              disabled={sending}
+              className="px-5 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-[var(--color-text-muted)] disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {sending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Send Command
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation Modal Overlay */}
+      {confirmAction && (
+        <div className="fixed inset-0 bg-black/20 z-50" onClick={() => setConfirmAction(null)} />
+      )}
+
+      {/* Command History */}
+      <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-th-primary">Command History</h3>
+            <p className="text-sm text-th-secondary mt-0.5">{commands.length} command(s)</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-[var(--color-input-border)] rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="sent">Sent</option>
+              <option value="executed">Executed</option>
+              <option value="failed">Failed</option>
+              <option value="timed_out">Timed Out</option>
+            </select>
+            <button
+              onClick={loadCommands}
+              className="p-1.5 text-th-secondary hover:text-th-primary rounded-lg hover:bg-panel transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-6 h-6 animate-spin text-th-muted" />
+          </div>
+        ) : commands.length === 0 ? (
+          <div className="text-center py-12">
+            <Terminal className="w-10 h-10 text-th-muted mx-auto mb-3" />
+            <p className="text-sm text-th-secondary">No commands sent yet</p>
+            <p className="text-xs text-th-muted mt-1">
+              {hasCommandsCapability
+                ? 'Use a quick action or the form above to send your first command'
+                : 'Send a command to see its history here'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {commands.map(cmd => {
+              const style = STATUS_STYLES[cmd.status] || STATUS_STYLES.pending;
+              const isExpanded = expandedId === cmd.id;
+              const cmdDescription = commandSchema[cmd.command_name]?.description;
+              return (
+                <div
+                  key={cmd.id}
+                  className="border border-th-default rounded-lg hover:bg-panel transition-colors"
+                >
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : cmd.id)}
+                    className="w-full flex items-center justify-between p-3 text-left"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${style.bg} ${style.text}`}>
+                        {style.label}
+                      </span>
+                      <span className="text-sm font-medium text-th-primary truncate">
+                        {cmd.command_name}
+                      </span>
+                      {cmdDescription && (
+                        <span className="text-xs text-th-muted hidden md:inline truncate">
+                          {cmdDescription}
+                        </span>
+                      )}
+                      <span className="text-xs text-th-muted hidden sm:inline flex-shrink-0">
+                        {formatTime(cmd.created_at)}
+                      </span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-th-muted transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-3 pb-3 border-t border-th-subtle">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs">
+                        <div>
+                          <p className="text-th-muted mb-0.5">Command ID</p>
+                          <p className="text-th-primary font-mono">{cmd.id.slice(0, 16)}...</p>
+                        </div>
+                        <div>
+                          <p className="text-th-muted mb-0.5">Created</p>
+                          <p className="text-th-primary">{formatTime(cmd.created_at)}</p>
+                        </div>
+                        <div>
+                          <p className="text-th-muted mb-0.5">Sent</p>
+                          <p className="text-th-primary">{formatTime(cmd.sent_at)}</p>
+                        </div>
+                        <div>
+                          <p className="text-th-muted mb-0.5">Completed</p>
+                          <p className="text-th-primary">{formatTime(cmd.completed_at)}</p>
+                        </div>
+                      </div>
+
+                      {Object.keys(cmd.parameters).length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs text-th-muted mb-1">Parameters</p>
+                          <div className="bg-panel rounded-lg overflow-hidden border border-th-subtle">
+                            <table className="w-full text-xs">
+                              <tbody>
+                                {Object.entries(cmd.parameters).map(([key, val]) => {
+                                  const paramSchema = commandSchema[cmd.command_name]?.parameters?.find(p => p.name === key);
+                                  return (
+                                    <tr key={key} className="border-b border-th-subtle last:border-0">
+                                      <td className="px-3 py-1.5 font-medium text-th-primary">{key}</td>
+                                      <td className="px-3 py-1.5 font-mono text-th-secondary">{String(val)}</td>
+                                      {paramSchema?.unit && (
+                                        <td className="px-3 py-1.5 text-th-muted">{paramSchema.unit}</td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {cmd.response && (
+                        <div className="mt-3">
+                          <p className="text-xs text-th-muted mb-1">Response</p>
+                          <pre className="text-xs bg-green-50 border border-green-200 rounded-lg p-2 overflow-x-auto font-mono text-green-800">
+                            {JSON.stringify(cmd.response, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {cmd.error_message && (
+                        <div className="mt-3">
+                          <p className="text-xs text-th-muted mb-1">Error</p>
+                          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+                            {cmd.error_message}
+                          </p>
+                        </div>
+                      )}
+
+                      {cmd.status === 'timed_out' && (
+                        <p className="mt-2 text-xs text-th-muted">
+                          Expired at {formatTime(cmd.expires_at)} — device did not respond in time.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

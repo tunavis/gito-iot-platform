@@ -1,56 +1,86 @@
 import React from 'react';
 
-const B = { stroke: 'var(--color-border)', fill: 'none' } as const;
-const P = { fill: 'var(--color-panel)',    stroke: 'var(--color-border)' } as const;
+const BD  = 'var(--color-border)';
+const PNL = 'var(--color-panel)';
+const W  = '#3b82f6';
+const WL = '#93c5fd';
+const WD = '#1d4ed8';
+// Needle accent — readable blue
+const NEEDLE = '#3b82f6';
 
 export function WaterMeterTemplate({ width, height }: { width: number; height: number }) {
   return (
     <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
 
-      {/* ── Main pipe (full width) ─────────────────────────────── */}
-      <line x1="30"  y1="200" x2="172" y2="200" strokeWidth="10" strokeLinecap="round" {...B} />
-      <line x1="328" y1="200" x2="470" y2="200" strokeWidth="10" strokeLinecap="round" {...B} />
+      {/* ── Inlet pipe (left section, y=200) ──────────────────────────── */}
+      <line x1="30"  y1="200" x2="172" y2="200" strokeWidth="12" strokeLinecap="round" stroke={WD} strokeOpacity="0.35" />
+      <line x1="30"  y1="200" x2="172" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W}  strokeOpacity="0.85" />
+      <line x1="30"  y1="197" x2="172" y2="197" strokeWidth="2.5" strokeLinecap="round" stroke={WL} strokeOpacity="0.55" />
+      {/* Flow arrow */}
+      <polyline points="95,192 112,200 95,208" strokeWidth="2" strokeLinejoin="round" stroke={WL} fill="none" />
 
-      {/* Flow direction arrows */}
-      <polyline points="100,188 118,200 100,212" strokeWidth="2" strokeLinejoin="round" {...B} />
-      <polyline points="382,188 398,200 382,212" strokeWidth="2" strokeLinejoin="round" {...B} />
+      {/* ── Outlet pipe (right section, y=200) ────────────────────────── */}
+      <line x1="328" y1="200" x2="470" y2="200" strokeWidth="12" strokeLinecap="round" stroke={WD} strokeOpacity="0.35" />
+      <line x1="328" y1="200" x2="470" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W}  strokeOpacity="0.85" />
+      <line x1="328" y1="197" x2="470" y2="197" strokeWidth="2.5" strokeLinecap="round" stroke={WL} strokeOpacity="0.55" />
+      {/* Flow arrow */}
+      <polyline points="378,192 395,200 378,208" strokeWidth="2" strokeLinejoin="round" stroke={WL} fill="none" />
 
-      {/* ── Flanges (connection collars) ──────────────────────── */}
-      <rect x="162" y="184" width="14" height="32" rx="2" strokeWidth="2" {...P} />
-      <rect x="324" y="184" width="14" height="32" rx="2" strokeWidth="2" {...P} />
+      {/* ── Pipe stubs through meter housing ──────────────────────────── */}
+      <line x1="172" y1="200" x2="198" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W} strokeOpacity="0.7" />
+      <line x1="302" y1="200" x2="328" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W} strokeOpacity="0.7" />
 
-      {/* ── Meter housing ─────────────────────────────────────── */}
-      <rect x="176" y="120" width="148" height="160" rx="10" strokeWidth="3" {...P} />
+      {/* ── Flanges (connection collars) ──────────────────────────────── */}
+      <rect x="161" y="184" width="14" height="32" rx="2" strokeWidth="2" fill={PNL} stroke={BD} />
+      <rect x="325" y="184" width="14" height="32" rx="2" strokeWidth="2" fill={PNL} stroke={BD} />
 
-      {/* Meter display face */}
+      {/* ── Meter housing ─────────────────────────────────────────────── */}
+      <rect x="176" y="120" width="148" height="160" rx="10" strokeWidth="3" fill={PNL} stroke={BD} />
+      {/* Housing left sheen */}
+      <rect x="181" y="126" width="4" height="148" rx="2" fill="white" fillOpacity="0.06" />
+
+      {/* ── Display face ──────────────────────────────────────────────── */}
       <rect x="198" y="142" width="104" height="80" rx="6" strokeWidth="2"
-        style={{ fill: 'var(--color-page)', stroke: 'var(--color-border)' }} />
-
-      {/* Register tick marks */}
+        style={{ fill: 'var(--color-page)', stroke: BD }} />
+      {/* Tick arc background */}
       {[-30, -18, -6, 6, 18, 30].map((dx) => (
-        <line key={dx} x1={250 + dx} y1="150" x2={250 + dx} y2="158" strokeWidth="1.5" {...B} />
+        <line key={dx}
+          x1={250 + dx} y1="150" x2={250 + dx} y2="160"
+          strokeWidth="1.5" stroke={BD} />
       ))}
-      {/* Register needle */}
-      <line x1="250" y1="182" x2="265" y2="162" strokeWidth="2" strokeLinecap="round"
-        style={{ stroke: '#2563eb' }} />
-      <circle cx="250" cy="182" r="3" style={{ fill: '#2563eb' }} />
+      {/* Major ticks */}
+      {[-30, 0, 30].map((dx) => (
+        <line key={`maj-${dx}`}
+          x1={250 + dx} y1="149" x2={250 + dx} y2="162"
+          strokeWidth="2.5" stroke={BD} strokeOpacity="0.8" />
+      ))}
+      {/* Needle */}
+      <line x1="250" y1="182" x2="268" y2="161" strokeWidth="2.5" strokeLinecap="round"
+        stroke={NEEDLE} />
+      <circle cx="250" cy="182" r="4" fill={NEEDLE} />
+      <circle cx="250" cy="182" r="1.5" fill="white" />
 
-      {/* ── Pipe stub connections ─────────────────────────────── */}
-      <line x1="176" y1="200" x2="198" y2="200" strokeWidth="8" strokeLinecap="round" {...B} />
-      <line x1="302" y1="200" x2="324" y2="200" strokeWidth="8" strokeLinecap="round" {...B} />
-
-      {/* Serial / model plate */}
-      <rect x="198" y="238" width="104" height="28" rx="4" strokeWidth="1"
-        style={{ fill: 'var(--color-panel)', stroke: 'var(--color-border)', opacity: 0.6 }} />
-      {[0,1,2,3,4,5].map((i) => (
+      {/* ── Serial register display ───────────────────────────────────── */}
+      <rect x="198" y="238" width="104" height="28" rx="4" strokeWidth="1.5"
+        style={{ fill: 'var(--color-page)', stroke: BD }} />
+      {[0, 1, 2, 3, 4, 5].map((i) => (
         <rect key={i} x={203 + i * 16} y="243" width="10" height="18" rx="2"
-          style={{ fill: 'var(--color-page)', stroke: 'var(--color-border)' }} strokeWidth="1" />
+          style={{ fill: 'var(--color-page)', stroke: BD }} strokeWidth="1" />
       ))}
 
-      {/* ── Labels ────────────────────────────────────────────── */}
-      <text x="30" y="190" style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif' }}>IN</text>
-      <text x="452" y="190" textAnchor="end" style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif' }}>OUT</text>
-      <text x="250" y="115" textAnchor="middle" style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif' }}>FLOW METER</text>
+      {/* ── Labels ────────────────────────────────────────────────────── */}
+      <text x="30" y="190"
+        style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
+        IN
+      </text>
+      <text x="456" y="190" textAnchor="end"
+        style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
+        OUT
+      </text>
+      <text x="250" y="113" textAnchor="middle"
+        style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.08em' }}>
+        FLOW METER
+      </text>
     </svg>
   );
 }

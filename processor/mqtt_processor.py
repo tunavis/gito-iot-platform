@@ -69,6 +69,9 @@ MIN_TELEMETRY_VALUE = -1e10
 
 SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id", "time", "datetime"}
 
+# Command response keys — when present in telemetry, correlate with device_commands table
+COMMAND_RESPONSE_KEYS = {"command_id", "command_status", "command_result", "command_error"}
+
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
 
 # KeyDB Streams config
@@ -832,6 +835,10 @@ class MQTTProcessor:
             # ── Evaluate alert rules (inline, payload in memory) ──────────
             await self.evaluate_alerts(tenant_id, device_id, payload, timestamp)
 
+            # ── Correlate command responses (RPC Option B) ────────────────
+            if "command_id" in payload:
+                await self._handle_command_response(tenant_id, device_id, payload)
+
             logger.info(
                 "Telemetry buffered",
                 extra={
@@ -916,6 +923,60 @@ class MQTTProcessor:
                 await conn.commit()
         except Exception as e:
             logger.error(f"Failed to queue notification for alert {alert_event_id}: {e}")
+
+    async def _handle_command_response(
+        self, tenant_id: str, device_id: str, payload: dict
+    ) -> None:
+        """Correlate a device's telemetry response with a pending command (RPC Option B).
+
+        When telemetry contains a 'command_id' key, look up the matching
+        device_commands row and update its status/response.
+        """
+        command_id = payload.get("command_id")
+        if not command_id:
+            return
+
+        status_val = payload.get("command_status", "executed")
+        error = payload.get("command_error")
+        # Build response from non-command keys
+        result = {
+            k: v for k, v in payload.items()
+            if k not in COMMAND_RESPONSE_KEYS
+        }
+
+        try:
+            async with self.db_service.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
+                    (tenant_id,),
+                )
+                cur = await conn.execute(
+                    """UPDATE device_commands
+                       SET status = %s,
+                           response = %s::jsonb,
+                           error_message = %s,
+                           completed_at = now()
+                       WHERE id = %s::uuid
+                         AND tenant_id = %s::uuid
+                         AND device_id = %s::uuid
+                         AND status IN ('pending', 'sent', 'delivered')""",
+                    (status_val, json.dumps(result), error,
+                     command_id, tenant_id, device_id),
+                )
+                await conn.commit()
+                if cur.rowcount:
+                    logger.info(
+                        "Command response correlated",
+                        extra={
+                            "command_id": command_id,
+                            "device_id": device_id,
+                            "status": status_val,
+                        },
+                    )
+        except Exception as e:
+            logger.error(
+                "Failed to correlate command response %s: %s", command_id, e
+            )
 
     async def run(self):
         """Main entry point — starts MQTT listener and stream consumer concurrently."""

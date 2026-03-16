@@ -95,17 +95,13 @@ export default function DeviceMapPage() {
             hasMore = allDevices.length < total;
             page++;
           } else {
-            console.error('Failed to load devices:', res.status, res.statusText);
             hasMore = false;
           }
         }
 
-        console.log('[DeviceMap] Loaded devices:', allDevices.length, 'devices');
-        console.log('[DeviceMap] First device sample:', allDevices[0]);
-        console.log('[DeviceMap] Devices with coords:', allDevices.filter((d: Device) => d.attributes?.latitude && d.attributes?.longitude).length);
         setDevices(allDevices);
-      } catch (err) {
-        console.error('Failed to load devices:', err);
+      } catch {
+        // Device loading failed — empty state will be shown
       } finally {
         setLoading(false);
       }
@@ -119,7 +115,6 @@ export default function DeviceMapPage() {
     const filtered = devices.filter(device => {
       // Must have coordinates
       if (!device.attributes?.latitude || !device.attributes?.longitude) {
-        console.log('[DeviceMap] Device missing coords:', device.name, device.attributes);
         return false;
       }
 
@@ -138,7 +133,6 @@ export default function DeviceMapPage() {
 
       return true;
     });
-    console.log('[DeviceMap] Filtered devices:', filtered.length, 'devices pass filter');
     return filtered;
   }, [devices, statusFilter, searchTerm]);
 

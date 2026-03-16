@@ -27,6 +27,22 @@ DEVICE_TYPES = [
         "category": "sensor",
         "capabilities": ["temperature", "humidity", "pressure", "air_quality"],
         "telemetry_interval": 300,  # 5 minutes
+        "command_schema": {
+            "ping": {
+                "description": "Check device connectivity",
+                "parameters": []
+            },
+            "set_interval": {
+                "description": "Change telemetry reporting interval",
+                "parameters": [
+                    {"name": "interval", "type": "integer", "unit": "seconds", "min": 10, "max": 3600, "required": True}
+                ]
+            },
+            "reboot": {
+                "description": "Restart the device",
+                "parameters": []
+            }
+        },
     },
     {
         "name": "Smart Energy Meter",
@@ -37,6 +53,26 @@ DEVICE_TYPES = [
         "category": "meter",
         "capabilities": ["voltage", "current", "power", "energy"],
         "telemetry_interval": 900,  # 15 minutes
+        "command_schema": {
+            "ping": {
+                "description": "Check device connectivity",
+                "parameters": []
+            },
+            "reset_energy_counter": {
+                "description": "Reset cumulative energy counter to zero",
+                "parameters": []
+            },
+            "set_interval": {
+                "description": "Change telemetry reporting interval",
+                "parameters": [
+                    {"name": "interval", "type": "integer", "unit": "seconds", "min": 60, "max": 3600, "required": True}
+                ]
+            },
+            "reboot": {
+                "description": "Restart the meter",
+                "parameters": []
+            }
+        },
     },
     {
         "name": "GPS Asset Tracker",
@@ -47,6 +83,30 @@ DEVICE_TYPES = [
         "category": "tracker",
         "capabilities": ["latitude", "longitude", "speed", "battery"],
         "telemetry_interval": 60,  # 1 minute
+        "command_schema": {
+            "ping": {
+                "description": "Check device connectivity",
+                "parameters": []
+            },
+            "set_interval": {
+                "description": "Change GPS reporting interval",
+                "parameters": [
+                    {"name": "interval", "type": "integer", "unit": "seconds", "min": 5, "max": 3600, "required": True}
+                ]
+            },
+            "set_geofence": {
+                "description": "Set geofence alert boundary",
+                "parameters": [
+                    {"name": "latitude", "type": "float", "unit": "degrees", "min": -90, "max": 90, "required": True},
+                    {"name": "longitude", "type": "float", "unit": "degrees", "min": -180, "max": 180, "required": True},
+                    {"name": "radius", "type": "integer", "unit": "meters", "min": 50, "max": 50000, "required": True}
+                ]
+            },
+            "reboot": {
+                "description": "Restart the tracker",
+                "parameters": []
+            }
+        },
     },
     {
         "name": "Industrial Gateway",
@@ -57,6 +117,34 @@ DEVICE_TYPES = [
         "category": "gateway",
         "capabilities": ["cpu_usage", "memory_usage", "uptime", "connection_count"],
         "telemetry_interval": 120,  # 2 minutes
+        "command_schema": {
+            "ping": {
+                "description": "Check gateway connectivity",
+                "parameters": []
+            },
+            "reboot": {
+                "description": "Restart the gateway",
+                "parameters": []
+            },
+            "restart_service": {
+                "description": "Restart a specific gateway service",
+                "parameters": [
+                    {"name": "service", "type": "string", "enum": ["mqtt_bridge", "modbus_poller", "opcua_client", "data_logger"], "required": True}
+                ]
+            },
+            "set_interval": {
+                "description": "Change telemetry reporting interval",
+                "parameters": [
+                    {"name": "interval", "type": "integer", "unit": "seconds", "min": 10, "max": 3600, "required": True}
+                ]
+            },
+            "set_log_level": {
+                "description": "Change gateway log verbosity",
+                "parameters": [
+                    {"name": "level", "type": "string", "enum": ["debug", "info", "warning", "error"], "required": True}
+                ]
+            }
+        },
     },
     {
         "name": "Water Flow Sensor",
@@ -67,6 +155,32 @@ DEVICE_TYPES = [
         "category": "sensor",
         "capabilities": ["flow_rate", "total_volume", "temperature", "pressure"],
         "telemetry_interval": 300,  # 5 minutes
+        "command_schema": {
+            "ping": {
+                "description": "Check device connectivity",
+                "parameters": []
+            },
+            "reset_volume_counter": {
+                "description": "Reset cumulative volume counter to zero",
+                "parameters": []
+            },
+            "set_interval": {
+                "description": "Change telemetry reporting interval",
+                "parameters": [
+                    {"name": "interval", "type": "integer", "unit": "seconds", "min": 10, "max": 3600, "required": True}
+                ]
+            },
+            "calibrate": {
+                "description": "Run sensor calibration routine",
+                "parameters": [
+                    {"name": "pipe_diameter", "type": "float", "unit": "mm", "min": 10, "max": 2000, "required": True}
+                ]
+            },
+            "reboot": {
+                "description": "Restart the sensor",
+                "parameters": []
+            }
+        },
     },
     {
         "name": "Smart Thermostat",
@@ -77,6 +191,36 @@ DEVICE_TYPES = [
         "category": "actuator",
         "capabilities": ["temperature", "humidity", "target_temperature", "hvac_state"],
         "telemetry_interval": 600,  # 10 minutes
+        "command_schema": {
+            "ping": {
+                "description": "Check device connectivity",
+                "parameters": []
+            },
+            "set_temperature": {
+                "description": "Set target temperature",
+                "parameters": [
+                    {"name": "temperature", "type": "float", "unit": "°C", "min": 15, "max": 30, "required": True}
+                ]
+            },
+            "set_mode": {
+                "description": "Set HVAC operating mode",
+                "parameters": [
+                    {"name": "mode", "type": "string", "enum": ["heat", "cool", "auto", "off"], "required": True}
+                ]
+            },
+            "set_schedule": {
+                "description": "Set temperature schedule",
+                "parameters": [
+                    {"name": "start_time", "type": "string", "description": "Start time (HH:MM)", "required": True},
+                    {"name": "end_time", "type": "string", "description": "End time (HH:MM)", "required": True},
+                    {"name": "temperature", "type": "float", "unit": "°C", "min": 15, "max": 30, "required": True}
+                ]
+            },
+            "reboot": {
+                "description": "Restart the thermostat",
+                "parameters": []
+            }
+        },
     },
 ]
 
@@ -177,15 +321,18 @@ async def create_device_types(conn):
         # Capabilities array
         capabilities = dt["capabilities"]
 
+        command_schema = dt.get("command_schema", {})
+
         await conn.execute("""
             INSERT INTO device_types
             (id, tenant_id, name, description, manufacturer, model, category, icon, color,
-             data_model, capabilities, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+             data_model, capabilities, command_schema, metadata, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
         """, device_type_id, TENANT_ID, dt["name"], dt["description"],
             dt["manufacturer"], dt["model"], dt["category"],
             icon_map.get(dt["category"], "cpu"), color_map.get(dt["category"], "#6366f1"),
-            json.dumps(data_model), json.dumps(capabilities), json.dumps(metadata))
+            json.dumps(data_model), json.dumps(capabilities), json.dumps(command_schema),
+            json.dumps(metadata))
 
         device_type_ids[dt["identifier"]] = device_type_id
         print(f"  [+] {dt['name']} ({dt['manufacturer']} {dt['model']})")

@@ -101,6 +101,7 @@ def create_app() -> FastAPI:
     from app.routers import alert_rules_unified  # Unified alert rules (THRESHOLD + COMPOSITE)
     from app.routers import dashboards, dashboard_widgets  # Dashboard builder system
     from app.routers import device_credentials, device_ingest  # Device token provisioning
+    from app.routers import commands  # Device RPC commands
     from app.routers import hierarchy  # Asset hierarchy tree
     from app.routers import settings as settings_router  # Tenant settings & profile
     from app.routers import events as events_router  # IoT event stream
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(telemetry_aggregate.router, prefix="/api/v1")
     app.include_router(device_credentials.router, prefix="/api/v1")  # Token CRUD
     app.include_router(device_ingest.router, prefix="/api/v1")        # Token-based ingest
+    app.include_router(commands.router, prefix="/api/v1")              # Device RPC commands
     app.include_router(websocket.router, prefix="/api/v1")
     
     # Disabled routers (superseded by unified systems):

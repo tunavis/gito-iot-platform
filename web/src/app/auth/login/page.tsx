@@ -22,7 +22,6 @@ export default function LoginPage() {
     
     // Prevent multiple submissions
     if (isLoading || isRedirecting) {
-      console.log('Already processing, ignoring submission');
       return;
     }
     
@@ -30,7 +29,6 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      console.log('Attempting login...');
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,9 +36,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      console.log('Response status:', response.status);
       const data = await response.json();
-      console.log('Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.error?.message || 'Login failed');
@@ -48,25 +44,18 @@ export default function LoginPage() {
 
       // Store token
       if (data.data?.access_token) {
-        console.log('Token received, storing...');
         const token = data.data.access_token;
 
         // Store in localStorage as backup for client-side API calls
         localStorage.setItem('auth_token', token);
 
         // Cookie is set by backend as httpOnly (more secure, accessible to middleware)
-        console.log('Token stored in localStorage, httpOnly cookie set by backend');
         setIsRedirecting(true);
-
-        // Navigate to dashboard
-        console.log('Navigating to dashboard...');
         window.location.href = '/dashboard';
       } else {
-        console.error('No access token in response');
         setError('No access token received');
       }
     } catch (err) {
-      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);

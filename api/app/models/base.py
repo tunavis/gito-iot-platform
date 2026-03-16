@@ -84,6 +84,7 @@ class Device(BaseModel):
     ttn_app_id = Column(String(100), nullable=True)  # TTN Server app ID (provider-agnostic)
     device_profile_id = Column(String(100), nullable=True)  # Device profile UUID
     ttn_synced = Column(Boolean, default=False, nullable=False)  # Whether device is synced to TTN server
+    gateway_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
@@ -121,6 +122,34 @@ class DeviceCredential(BaseModel):
         CheckConstraint(
             "credential_type IN ('mqtt_password', 'device_token', 'api_key')",
             name="valid_cred_type"
+        ),
+    )
+
+
+class DeviceCommand(BaseModel):
+    """RPC command sent to a device — tracks full lifecycle (Option B: request-response correlation)."""
+    __tablename__ = "device_commands"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    command_name = Column(String(100), nullable=False)
+    parameters = Column(JSONB, default={})
+    status = Column(String(20), default="pending", nullable=False)
+    response = Column(JSONB, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_device_commands_tenant", "tenant_id"),
+        Index("idx_device_commands_device", "device_id"),
+        Index("idx_device_commands_status", "status"),
+        CheckConstraint(
+            "status IN ('pending', 'sent', 'delivered', 'executed', 'failed', 'timed_out')",
+            name="valid_command_status"
         ),
     )
 

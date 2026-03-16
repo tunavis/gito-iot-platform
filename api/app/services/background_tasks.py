@@ -87,6 +87,16 @@ class NotificationBackgroundTasks:
                 max_instances=1,
             )
 
+            # Expire timed-out device commands (runs every 30 seconds)
+            self.scheduler.add_job(
+                self.expire_timed_out_commands,
+                IntervalTrigger(seconds=30),
+                id="expire_timed_out_commands",
+                name="Expire timed-out device commands",
+                coalesce=True,
+                max_instances=1,
+            )
+
             self.scheduler.start()
             logger.info("✅ Background task scheduler started")
         except Exception as e:
@@ -443,6 +453,35 @@ class NotificationBackgroundTasks:
                 await session_gen.aclose()
         except Exception as e:
             logger.error(f"Error in offline device detection: {e}")
+
+    async def expire_timed_out_commands(self) -> None:
+        """Mark expired pending/sent/delivered commands as timed_out.
+
+        Commands have an expires_at timestamp set at creation. If the device
+        hasn't responded by then, the command is moved to 'timed_out' status.
+        """
+        try:
+            session_gen = get_session()
+            session = await session_gen.__anext__()
+
+            try:
+                result = await session.execute(
+                    text("""
+                        UPDATE device_commands
+                        SET status = 'timed_out', completed_at = now()
+                        WHERE status IN ('pending', 'sent', 'delivered')
+                          AND expires_at < now()
+                        RETURNING id
+                    """)
+                )
+                expired = result.fetchall()
+                if expired:
+                    logger.info(f"Expired {len(expired)} timed-out command(s)")
+                await session.commit()
+            finally:
+                await session_gen.aclose()
+        except Exception as e:
+            logger.error(f"Error expiring timed-out commands: {e}")
 
     @staticmethod
     def _calculate_backoff(attempt: int) -> int:
