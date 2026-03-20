@@ -13,7 +13,7 @@ const REF = '#22d3ee';
 // Coil fins — blue
 const COIL = '#3b82f6';
 
-export function HvacTemplate({ width, height }: { width: number; height: number }) {
+export function HvacTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
   return (
     <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
 

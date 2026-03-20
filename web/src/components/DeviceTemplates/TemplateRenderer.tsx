@@ -24,7 +24,14 @@ import { GeneratorTemplate  } from './templates/GeneratorTemplate';
 import { SolarTemplate      } from './templates/SolarTemplate';
 import { HvacTemplate       } from './templates/HvacTemplate';
 
-const TEMPLATE_MAP: Record<TemplateConfig['template'], React.FC<{ width: number; height: number }>> = {
+/** Template props — telemetry is optional, used by templates that render data-driven fills */
+export interface TemplateProps {
+  width: number;
+  height: number;
+  telemetry?: Record<string, number | string | null>;
+}
+
+const TEMPLATE_MAP: Record<TemplateConfig['template'], React.FC<TemplateProps>> = {
   water_tank:   WaterTankTemplate,
   water_meter:  WaterMeterTemplate,
   pump:         PumpTemplate,
@@ -77,14 +84,14 @@ export default function TemplateRenderer({ config, telemetry }: TemplateRenderer
       className="relative w-full"
       style={{ aspectRatio: `500 / ${crop.h}`, overflow: 'hidden' }}
     >
-      {/* Layer 1: Static SVG illustration — cropped viewBox removes empty vertical space */}
+      {/* Layer 1: SVG illustration — cropped viewBox removes empty vertical space */}
       <svg
         className="absolute inset-0 w-full h-full"
         viewBox={`0 ${crop.y} 500 ${crop.h}`}
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <Template width={500} height={400} />
+        <Template width={500} height={400} telemetry={telemetry} />
       </svg>
 
       {/* Layer 2: Live telemetry overlays */}

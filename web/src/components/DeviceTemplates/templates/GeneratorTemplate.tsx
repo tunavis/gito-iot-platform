@@ -9,7 +9,7 @@ const FUEL = '#f97316';
 // Exhaust — dark slate
 const EXH = '#64748b';
 
-export function GeneratorTemplate({ width, height }: { width: number; height: number }) {
+export function GeneratorTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
   return (
     <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
 

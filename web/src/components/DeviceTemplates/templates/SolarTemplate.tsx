@@ -11,7 +11,7 @@ const DC = '#f59e0b';
 // AC cable — yellow/gold
 const AC = '#eab308';
 
-export function SolarTemplate({ width, height }: { width: number; height: number }) {
+export function SolarTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
   const PANEL_COLS = 3;
   const PANEL_ROWS = 4;
   const CELL_W     = 40;

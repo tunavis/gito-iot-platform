@@ -52,6 +52,22 @@ function normToDuration(normalized: number): number {
   return MAX_DURATION - (MAX_DURATION - MIN_DURATION) * normalized;
 }
 
+// Darker shade for pipe shadow (pre-calculated per effect)
+const SHADOW_COLORS: Record<FlowEffect, string> = {
+  water:  '#1d4ed8',
+  gas:    '#65a30d',
+  energy: '#d97706',
+  air:    '#94a3b8',
+};
+
+// Lighter shade for pipe highlight
+const HIGHLIGHT_COLORS: Record<FlowEffect, string> = {
+  water:  '#93c5fd',
+  gas:    '#d9f99d',
+  energy: '#fcd34d',
+  air:    '#e2e8f0',
+};
+
 export default function FlowLine({
   value,
   maxValue = 100,
@@ -79,10 +95,11 @@ export default function FlowLine({
 
   // SVG dimensions — always render as horizontal, rotate for vertical
   const svgWidth  = length;
-  const svgHeight = thickness + 8;
-  const cx        = svgHeight / 2;            // center Y of the line
+  const svgHeight = thickness + 12;      // extra space for shadow + highlight
+  const cy        = svgHeight / 2;       // center Y of the pipe
   const x1        = thickness / 2;
   const x2        = svgWidth - thickness / 2;
+  const highlightY = cy - (thickness / 3);  // highlight runs above center
 
   const animationName = animating
     ? forward ? 'viz-flow-fwd' : 'viz-flow-rev'
@@ -113,20 +130,30 @@ export default function FlowLine({
         </defs>
       )}
 
-      {/* Track — subtle background line */}
+      {/* Shadow — slightly wider, darker, gives pipe depth */}
       <line
-        x1={x1} y1={cx}
-        x2={x2} y2={cx}
+        x1={x1} y1={cy}
+        x2={x2} y2={cy}
+        stroke={SHADOW_COLORS[effect]}
+        strokeWidth={thickness + 2}
+        strokeOpacity={0.3}
+        strokeLinecap="round"
+      />
+
+      {/* Track — main pipe body */}
+      <line
+        x1={x1} y1={cy}
+        x2={x2} y2={cy}
         stroke={style.stroke}
         strokeWidth={thickness}
         strokeOpacity={trackOpacity}
         strokeLinecap="round"
       />
 
-      {/* Animated flow line */}
+      {/* Animated flow dashes */}
       <line
-        x1={x1} y1={cx}
-        x2={x2} y2={cx}
+        x1={x1} y1={cy}
+        x2={x2} y2={cy}
         stroke={style.stroke}
         strokeWidth={thickness - 2}
         strokeLinecap="round"
@@ -140,6 +167,16 @@ export default function FlowLine({
           animationIterationCount: 'infinite',
           animationFillMode: 'none',
         }}
+      />
+
+      {/* Highlight — narrow bright line above center for 3D pipe effect */}
+      <line
+        x1={x1 + 2} y1={highlightY}
+        x2={x2 - 2} y2={highlightY}
+        stroke={HIGHLIGHT_COLORS[effect]}
+        strokeWidth={Math.max(thickness * 0.25, 1.5)}
+        strokeOpacity={0.4}
+        strokeLinecap="round"
       />
     </svg>
   );

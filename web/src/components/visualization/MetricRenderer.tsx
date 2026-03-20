@@ -101,12 +101,24 @@ function LevelRenderer({ value, definition }: { value: number; definition: Metri
 
   return (
     <div className="flex items-end gap-3">
-      {/* Vertical bar */}
-      <div className="relative w-5 h-20 rounded-sm overflow-hidden" style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)' }}>
+      {/* Vertical bar — wider + taller for readability */}
+      <div className="relative overflow-hidden" style={{ width: 24, height: 96, background: 'var(--color-panel)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
+        {/* Fill */}
         <div
-          className="absolute bottom-0 left-0 right-0 rounded-sm transition-all duration-700"
-          style={{ height: `${pct}%`, backgroundColor: color }}
+          className="absolute bottom-0 left-0 right-0 transition-all duration-700"
+          style={{ height: `${pct}%`, backgroundColor: color, opacity: 0.85, borderRadius: '0 0 3px 3px' }}
         />
+        {/* Fill highlight sheen */}
+        {pct > 5 && (
+          <div
+            className="absolute bottom-0 transition-all duration-700"
+            style={{ left: 2, width: 4, height: `${pct}%`, background: 'white', opacity: 0.12, borderRadius: '0 0 2px 2px' }}
+          />
+        )}
+        {/* Tick marks at 25, 50, 75% */}
+        {[25, 50, 75].map((t) => (
+          <div key={t} className="absolute right-0" style={{ bottom: `${t}%`, width: 5, height: 1, background: 'var(--color-border)', opacity: 0.5 }} />
+        ))}
       </div>
       <div className="flex flex-col">
         <div className="flex items-baseline gap-1">
