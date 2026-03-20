@@ -1,5 +1,5 @@
 'use client';
-import React, { useId } from 'react';
+import React from 'react';
 
 interface DashFlowProps {
   x1: number;
@@ -23,7 +23,6 @@ export function DashFlow({
   shadowColor,
   highlightColor,
 }: DashFlowProps) {
-  const id = useId();
   const active = intensity > 0.05 && !paused;
   const duration = active ? 0.4 + (1 - intensity) * 2.6 : 0;
   const dashLen = 8;
@@ -31,7 +30,7 @@ export function DashFlow({
   const totalDash = dashLen + gapLen;
 
   return (
-    <g className={paused ? 'device-primitive--paused' : ''}>
+    <g>
       {shadowColor && (
         <line x1={x1} y1={y1} x2={x2} y2={y2}
           stroke={shadowColor} strokeWidth={strokeWidth + 4}
@@ -46,21 +45,21 @@ export function DashFlow({
         strokeLinecap="round"
         strokeDasharray={`${dashLen} ${gapLen}`}
         strokeOpacity={0.3 + intensity * 0.6}
-        style={active ? {
-          animation: `dashflow-${id.replace(/:/g, '')} ${duration}s linear infinite`,
-        } : undefined}
-      />
+      >
+        {active && (
+          <animate
+            attributeName="stroke-dashoffset"
+            from="0"
+            to={`${-totalDash}`}
+            dur={`${duration}s`}
+            repeatCount="indefinite"
+          />
+        )}
+      </line>
       {highlightColor && (
         <line x1={x1} y1={y1 - 1} x2={x2} y2={y2 - 1}
           stroke={highlightColor} strokeWidth={1.5}
           strokeLinecap="round" strokeOpacity={0.3} />
-      )}
-      {active && (
-        <style>{`
-          @keyframes dashflow-${id.replace(/:/g, '')} {
-            to { stroke-dashoffset: -${totalDash}px; }
-          }
-        `}</style>
       )}
     </g>
   );

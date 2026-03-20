@@ -1,5 +1,5 @@
 'use client';
-import React, { useId } from 'react';
+import React from 'react';
 
 interface SpinnerProps {
   cx: number;
@@ -10,28 +10,21 @@ interface SpinnerProps {
 }
 
 export function Spinner({ cx, cy, children, intensity, paused }: SpinnerProps) {
-  const id = useId();
-  const animId = `spin-${id.replace(/:/g, '')}`;
   const active = intensity > 0.05 && !paused;
   const duration = active ? 0.5 + (1 - intensity) * 3.5 : 0;
 
   return (
-    <g
-      style={active ? {
-        transformOrigin: `${cx}px ${cy}px`,
-        animation: `${animId} ${duration}s linear infinite`,
-        willChange: 'transform',
-      } : {
-        transformOrigin: `${cx}px ${cy}px`,
-      }}
-    >
+    <g>
       {children}
       {active && (
-        <style>{`
-          @keyframes ${animId} {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from={`0 ${cx} ${cy}`}
+          to={`360 ${cx} ${cy}`}
+          dur={`${duration}s`}
+          repeatCount="indefinite"
+        />
       )}
     </g>
   );
