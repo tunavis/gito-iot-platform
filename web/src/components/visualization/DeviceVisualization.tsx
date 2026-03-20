@@ -180,7 +180,7 @@ export default function DeviceVisualization({
             className="rounded-xl overflow-hidden border flex-shrink-0"
             style={{ borderColor: 'var(--color-border)', background: 'var(--color-page)', width: '100%', maxWidth: 360 }}
           >
-            <TemplateRenderer config={templateConfig} telemetry={latestValues} />
+            <TemplateRenderer config={templateConfig} telemetry={latestValues} deviceStatus={deviceStatus as 'online' | 'offline' | 'unknown'} />
           </div>
           {/* Metric grid — only metrics not already shown as overlays on the illustration */}
           {gridMetrics.length > 0 && (

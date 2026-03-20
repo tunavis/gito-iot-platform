@@ -288,6 +288,27 @@ input:disabled, textarea:disabled, select:disabled {
   to   { stroke-dashoffset: 200; }
 }
 
+/* ─── Device Template Offline State ──────────────────────────────────────── */
+/* Targets .device-template-content (a <g> wrapping the template SVG),
+   NOT the whole <svg>, so the OfflineBadge renders in full color on top of greyed content. */
+.device-template--offline .device-template-content {
+  filter: grayscale(1) brightness(0.7);
+  transition: filter 0.6s ease;
+}
+.device-template--online .device-template-content {
+  filter: none;
+  transition: filter 0.6s ease;
+}
+
+/* Global reduced-motion: disable all device-template animations */
+@media (prefers-reduced-motion: reduce) {
+  .device-template--online svg *,
+  .device-template--offline svg * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* ─── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

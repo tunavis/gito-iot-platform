@@ -17,6 +17,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { TemplateConfig } from './types';
 import OverlayWidget from './overlays/OverlayWidget';
+import { OfflineBadge } from './OfflineBadge';
 import { WaterTankTemplate  } from './templates/WaterTankTemplate';
 import { WaterMeterTemplate } from './templates/WaterMeterTemplate';
 import { PumpTemplate       } from './templates/PumpTemplate';
@@ -29,6 +30,7 @@ export interface TemplateProps {
   width: number;
   height: number;
   telemetry?: Record<string, number | string | null>;
+  deviceStatus?: 'online' | 'offline' | 'unknown';
 }
 
 const TEMPLATE_MAP: Record<TemplateConfig['template'], React.FC<TemplateProps>> = {
@@ -56,9 +58,10 @@ interface TemplateRendererProps {
   config: TemplateConfig;
   /** Live telemetry values keyed by metric name */
   telemetry: Record<string, number | string | null>;
+  deviceStatus?: 'online' | 'offline' | 'unknown';
 }
 
-export default function TemplateRenderer({ config, telemetry }: TemplateRendererProps) {
+export default function TemplateRenderer({ config, telemetry, deviceStatus }: TemplateRendererProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const [svgScale, setSvgScale] = useState(1);
 
@@ -77,11 +80,13 @@ export default function TemplateRenderer({ config, telemetry }: TemplateRenderer
   if (!Template) return null;
 
   const crop = TEMPLATE_CROPS[config.template] ?? { y: 0, h: 400 };
+  const isOffline = deviceStatus === 'offline';
+  const statusClass = isOffline ? 'device-template--offline' : 'device-template--online';
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full"
+      className={`relative w-full ${statusClass}`}
       style={{ aspectRatio: `500 / ${crop.h}`, overflow: 'hidden' }}
     >
       {/* Layer 1: SVG illustration — cropped viewBox removes empty vertical space */}
@@ -91,7 +96,12 @@ export default function TemplateRenderer({ config, telemetry }: TemplateRenderer
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <Template width={500} height={400} telemetry={telemetry} />
+        <g className="device-template-content">
+          <Template width={500} height={400} telemetry={telemetry} deviceStatus={deviceStatus} />
+        </g>
+        {isOffline && (
+          <OfflineBadge crop={{ x: 0, y: crop.y, w: 500, h: crop.h }} />
+        )}
       </svg>
 
       {/* Layer 2: Live telemetry overlays */}
