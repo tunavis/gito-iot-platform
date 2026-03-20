@@ -11,7 +11,7 @@
 Two issues prevent the live WebSocket telemetry from working in local development:
 
 1. **localhost conflict** — Something on Windows is listening on port 80 before Docker's nginx, so the app is only reachable via LAN IP (`192.168.0.9`), not `localhost`.
-2. **WebSocket never delivers data** — The WebSocket connection appears to succeed but never forwards telemetry. Two root causes: nginx silently kills idle connections after 60s, and the WebSocket main loop is blocked on a call that never returns.
+2. **WebSocket never delivers data** — The WebSocket connection appears to succeed but never forwards telemetry. Two root causes: nginx silently kills idle connections after 60s, and the WebSocket main loop is a tight busy-spin that starves the asyncio event loop.
 
 ---
 
@@ -48,64 +48,89 @@ App would then be at `localhost:8080`.
 
 ### Problem
 
-The `/api/` nginx location has no `proxy_read_timeout`. nginx default is 60 seconds — any WebSocket connection with no data for 60s is silently terminated. Device visualization pages connecting to a device with infrequent telemetry will see the connection die immediately.
+The `/api/` nginx location has no `proxy_read_timeout`. nginx default is 60 seconds — any WebSocket connection with no data for 60s is silently terminated. Device visualization pages connecting to a device with infrequent telemetry will see the connection die after 60 seconds.
 
 ### Change
 
 **File:** `nginx/nginx.conf`
-**Location:** `/api/` location block
 
-Add:
+Add a dedicated, more-specific location block for WebSocket paths **before** the general `/api/` block. This avoids applying a 3600s timeout to REST API calls (where a 60s default is appropriate):
+
 ```nginx
-proxy_read_timeout 3600s;
-proxy_send_timeout 3600s;
+# WebSocket connections — long-lived, need extended timeouts
+location /api/v1/ws/ {
+    proxy_pass http://api_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
 ```
 
-This keeps WebSocket connections alive for up to 1 hour of inactivity. The frontend reconnect logic (exponential backoff, max 10 attempts) handles the case where a connection does drop.
+This keeps WebSocket connections alive for up to 1 hour of inactivity without affecting REST endpoint timeouts. The frontend reconnect logic (exponential backoff, max 10 attempts) handles any connection drop.
 
 ---
 
-## Fix 3: WebSocket Main Loop Concurrency Bug
+## Fix 3: WebSocket Main Loop Busy-Spin Bug
 
 ### Problem
 
-In `api/app/routers/websocket.py`, the main loop (lines 147–182) has a blocking structure:
+In `api/app/routers/websocket.py`, the main loop (lines 147–182) is a tight busy-spin:
 
 ```python
 while True:
-    # 1. Check Redis — non-blocking, returns immediately
-    message = await telemetry_pubsub.get_message(...)
-    # 2. Check Redis — non-blocking, returns immediately
-    message = await alerts_pubsub.get_message(...)
-    # 3. ← BLOCKS HERE FOREVER waiting for client to send something
-    client_msg = await websocket.receive_json(mode="text")
+    # get_message() is non-blocking — returns None immediately if no message
+    message = await telemetry_pubsub.get_message(...)   # returns None instantly
+    message = await alerts_pubsub.get_message(...)      # returns None instantly
+    try:
+        client_msg = await websocket.receive_json(mode="text")  # raises immediately, no client msg
+        await _handle_websocket_message(websocket, client_msg)
+    except Exception:
+        pass  # exception silently swallowed, loop repeats immediately
 ```
 
-Since the browser never sends messages unprompted (it just watches), step 3 blocks indefinitely and Redis messages are never processed or forwarded.
+`get_message()` returns `None` immediately when there is nothing queued. `receive_json()` raises an exception when no client message has arrived, which is silently caught. The result is a loop that runs as fast as the CPU allows — near 100% CPU usage — and never yields control to the asyncio event loop long enough to actually forward incoming Redis messages to the WebSocket client.
 
 ### Fix: Two concurrent asyncio tasks
 
-Replace the single blocking loop with two tasks running concurrently via `asyncio.gather()`:
+Replace the single busy-spin loop with two tasks running concurrently via `asyncio.gather()`:
 
-**Task A — Redis → WebSocket:** Polls both pub/sub channels in a loop, forwards any messages to the client, uses a short `asyncio.sleep(0.01)` when idle to avoid busy-spinning.
+**Task A — Redis → WebSocket:** Polls both pub/sub channels in a loop. When a message arrives, forwards it to the client. When idle (no messages), yields with `asyncio.sleep(0.01)` to avoid busy-spinning. If any send fails (client disconnected), catches the exception and sets `disconnect_event`.
 
-**Task B — WebSocket → handler:** Awaits client messages (ping/pong), handles `WebSocketDisconnect` by raising a shared cancellation signal.
+**Task B — WebSocket → handler:** Awaits client messages (ping/pong). Handles `WebSocketDisconnect` by setting `disconnect_event` so Task A also exits.
 
-**Coordination:** Both tasks share a `asyncio.Event` called `disconnect_event`. When either task detects a disconnect or error, it sets the event and both tasks exit cleanly. `asyncio.gather()` runs both until one raises or the event fires.
+**Coordination:** Both tasks share an `asyncio.Event` called `disconnect_event`. Either task can set it on disconnect or error. Both tasks check the event on each iteration. `asyncio.gather(return_exceptions=True)` runs both concurrently. Note: after `disconnect_event` is set, Task A will exit on its next loop iteration (up to 10ms latency from `asyncio.sleep(0.01)`) — this is acceptable.
 
 ```python
 disconnect_event = asyncio.Event()
 
 async def redis_to_ws():
     while not disconnect_event.is_set():
+        had_message = False
         msg = await telemetry_pubsub.get_message(ignore_subscribe_messages=True)
         if msg:
-            await websocket.send_json({"type": "telemetry", "data": json.loads(msg["data"])})
+            had_message = True
+            try:
+                await websocket.send_json({"type": "telemetry", "data": json.loads(msg["data"])})
+            except Exception:
+                disconnect_event.set()
+                return
         msg = await alerts_pubsub.get_message(ignore_subscribe_messages=True)
         if msg:
-            await websocket.send_json({"type": "alert", "data": json.loads(msg["data"])})
-        if not msg:
-            await asyncio.sleep(0.01)
+            had_message = True
+            try:
+                await websocket.send_json({"type": "alert", "data": json.loads(msg["data"])})
+            except Exception:
+                disconnect_event.set()
+                return
+        if not had_message:
+            await asyncio.sleep(0.01)  # yield to event loop when idle
 
 async def ws_to_handler():
     try:
@@ -128,8 +153,8 @@ The `finally` block (unsubscribe, connection cleanup) remains unchanged.
 
 | File | Change |
 |------|--------|
-| `nginx/nginx.conf` | Add `proxy_read_timeout 3600s` and `proxy_send_timeout 3600s` to `/api/` location |
-| `api/app/routers/websocket.py` | Rewrite main loop as two concurrent asyncio tasks |
+| `nginx/nginx.conf` | Add dedicated `/api/v1/ws/` location block with 3600s timeouts before the general `/api/` block |
+| `api/app/routers/websocket.py` | Rewrite main loop as two concurrent asyncio tasks with shared `disconnect_event` |
 | `docker-compose.yml` | Only if primary localhost fix fails — change port `80:80` → `8080:80` |
 
 The localhost fix is a Windows system change (stop conflicting service), not a code change.
@@ -141,4 +166,5 @@ The localhost fix is a Windows system change (stop conflicting service), not a c
 1. After stopping the conflicting service, verify `localhost` loads the app
 2. Connect to device visualization — WebSocket should connect (check Network → WS tab in DevTools, look for status 101)
 3. Send test telemetry via MQTT — the visualization should update in real time without page refresh
-4. Leave the page open for 2+ minutes with no telemetry — connection should stay alive (no disconnect after 60s)
+4. Leave the page open for 2+ minutes with no telemetry — connection should stay alive (was dying after 60s before)
+5. Verify CPU usage of the `gito-api` container is not spiking when WebSocket clients are connected
