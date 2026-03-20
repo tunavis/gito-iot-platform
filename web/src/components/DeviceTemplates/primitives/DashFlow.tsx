@@ -27,7 +27,6 @@ export function DashFlow({
   const duration = active ? 0.4 + (1 - intensity) * 2.6 : 0;
   const dashLen = 8;
   const gapLen = 6;
-  const totalDash = dashLen + gapLen;
 
   return (
     <g>
@@ -44,18 +43,14 @@ export function DashFlow({
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeDasharray={`${dashLen} ${gapLen}`}
-        strokeOpacity={0.3 + intensity * 0.6}
-      >
-        {active && (
-          <animate
-            attributeName="stroke-dashoffset"
-            from="0"
-            to={`${-totalDash}`}
-            dur={`${duration}s`}
-            repeatCount="indefinite"
-          />
-        )}
-      </line>
+        style={{
+          strokeOpacity: 0.3 + intensity * 0.6,
+          animationName: active ? 'dash-flow-fwd' : 'none',
+          animationDuration: `${duration}s`,
+          animationTimingFunction: 'linear',
+          animationIterationCount: 'infinite',
+        }}
+      />
       {highlightColor && (
         <line x1={x1} y1={y1 - 1} x2={x2} y2={y2 - 1}
           stroke={highlightColor} strokeWidth={1.5}

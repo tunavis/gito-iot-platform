@@ -288,6 +288,24 @@ input:disabled, textarea:disabled, select:disabled {
   to   { stroke-dashoffset: 200; }
 }
 
+/* ─── Device Template Animation Primitives ──────────────────────────────── */
+@keyframes dash-flow-fwd {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -14; }
+}
+@keyframes template-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes pulse-ring-expand {
+  from { transform: scale(0.5); opacity: 0.7; }
+  to   { transform: scale(1.5); opacity: 0; }
+}
+@keyframes blink-led {
+  0%, 100% { fill-opacity: 0.9; }
+  50%      { fill-opacity: 0.2; }
+}
+
 /* ─── Device Template Offline State ──────────────────────────────────────── */
 /* Targets .device-template-content (a <g> wrapping the template SVG),
    NOT the whole <svg>, so the OfflineBadge renders in full color on top of greyed content. */

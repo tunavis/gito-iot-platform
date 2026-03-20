@@ -14,18 +14,14 @@ export function Spinner({ cx, cy, children, intensity, paused }: SpinnerProps) {
   const duration = active ? 0.5 + (1 - intensity) * 3.5 : 0;
 
   return (
-    <g>
+    <g style={{
+      transformOrigin: `${cx}px ${cy}px`,
+      animationName: active ? 'template-spin' : 'none',
+      animationDuration: `${duration}s`,
+      animationTimingFunction: 'linear',
+      animationIterationCount: 'infinite',
+    }}>
       {children}
-      {active && (
-        <animateTransform
-          attributeName="transform"
-          type="rotate"
-          from={`0 ${cx} ${cy}`}
-          to={`360 ${cx} ${cy}`}
-          dur={`${duration}s`}
-          repeatCount="indefinite"
-        />
-      )}
     </g>
   );
 }
