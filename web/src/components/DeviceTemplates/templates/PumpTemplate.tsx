@@ -1,24 +1,28 @@
 import React from 'react';
+import type { TemplateProps } from '../TemplateRenderer';
+import { Spinner, DashFlow, PulseRing, resolveNumeric, RPM_KEYS, FLOW_KEYS } from '../primitives';
 
 const BD  = 'var(--color-border)';
 const PNL = 'var(--color-panel)';
 // Inlet (suction) — blue water
 const W  = '#3b82f6';
 const WL = '#93c5fd';
-const WD = '#1d4ed8';
 // Outlet (discharge) — orange (higher pressure side)
 const D  = '#f97316';
 const DL = '#fed7aa';
-const DD = '#c2410c';
 
-export function PumpTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
+export function PumpTemplate({ width, height, telemetry, deviceStatus }: TemplateProps) {
+  const paused = deviceStatus !== 'online';
+  const rpm = resolveNumeric(telemetry, RPM_KEYS);
+  const flow = resolveNumeric(telemetry, FLOW_KEYS);
+  const rpmIntensity = Math.min(rpm / 3000, 1);
+  const flowIntensity = Math.min(flow / 100, 1);
+
   return (
     <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
 
       {/* ── Inlet pipe (left → pump, y=200) — blue (suction) ─────────── */}
-      <line x1="30"  y1="200" x2="175" y2="200" strokeWidth="12" strokeLinecap="round" stroke={WD} strokeOpacity="0.35" />
-      <line x1="30"  y1="200" x2="175" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W}  strokeOpacity="0.85" />
-      <line x1="30"  y1="197" x2="175" y2="197" strokeWidth="2.5" strokeLinecap="round" stroke={WL} strokeOpacity="0.55" />
+      <DashFlow x1={30} y1={200} x2={175} y2={200} intensity={flowIntensity} paused={paused} color="#3b82f6" shadowColor="#1d4ed8" highlightColor="#93c5fd" strokeWidth={10} />
       {/* Inlet tap (bottom) */}
       <line x1="192" y1="200" x2="192" y2="232" strokeWidth="5" strokeLinecap="round" stroke={W} strokeOpacity="0.6" />
       <circle cx="192" cy="238" r="9" strokeWidth="2" fill={PNL} stroke={BD} />
@@ -26,9 +30,7 @@ export function PumpTemplate({ width, height }: { width: number; height: number;
       <polyline points="142,192 158,200 142,208" strokeWidth="2" strokeLinejoin="round" stroke={WL} fill="none" />
 
       {/* ── Outlet pipe (pump → right, y=200) — orange (discharge) ────── */}
-      <line x1="325" y1="200" x2="470" y2="200" strokeWidth="12" strokeLinecap="round" stroke={DD} strokeOpacity="0.35" />
-      <line x1="325" y1="200" x2="470" y2="200" strokeWidth="10" strokeLinecap="round" stroke={D}  strokeOpacity="0.85" />
-      <line x1="325" y1="197" x2="470" y2="197" strokeWidth="2.5" strokeLinecap="round" stroke={DL} strokeOpacity="0.55" />
+      <DashFlow x1={325} y1={200} x2={470} y2={200} intensity={flowIntensity} paused={paused} color="#f97316" shadowColor="#c2410c" highlightColor="#fed7aa" strokeWidth={10} />
       {/* Outlet tap (bottom) */}
       <line x1="308" y1="200" x2="308" y2="232" strokeWidth="5" strokeLinecap="round" stroke={D} strokeOpacity="0.6" />
       <circle cx="308" cy="238" r="9" strokeWidth="2" fill={PNL} stroke={BD} />
@@ -41,21 +43,26 @@ export function PumpTemplate({ width, height }: { width: number; height: number;
       {/* Volute scroll */}
       <path d="M250,220 m0,-50 a50,50 0 1,1 -35,35" strokeWidth="1.5" strokeDasharray="4,3"
         style={{ stroke: BD, opacity: 0.4 }} fill="none" />
-      {/* Impeller blades */}
-      {[0, 60, 120, 180, 240, 300].map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const x1  = 250 + 18 * Math.cos(rad);
-        const y1  = 220 + 18 * Math.sin(rad);
-        const x2  = 250 + 44 * Math.cos(rad + 0.4);
-        const y2  = 220 + 44 * Math.sin(rad + 0.4);
-        return (
-          <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2}
-            strokeWidth="3.5" strokeLinecap="round" stroke={BD} strokeOpacity="0.55" />
-        );
-      })}
+      {/* Impeller blades — wrapped in Spinner */}
+      <Spinner cx={250} cy={220} intensity={rpmIntensity} paused={paused}>
+        {[0, 60, 120, 180, 240, 300].map((deg) => {
+          const rad = (deg * Math.PI) / 180;
+          const x1  = 250 + 18 * Math.cos(rad);
+          const y1  = 220 + 18 * Math.sin(rad);
+          const x2  = 250 + 44 * Math.cos(rad + 0.4);
+          const y2  = 220 + 44 * Math.sin(rad + 0.4);
+          return (
+            <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2}
+              strokeWidth="3.5" strokeLinecap="round" stroke={BD} strokeOpacity="0.55" />
+          );
+        })}
+      </Spinner>
       {/* Shaft hub */}
       <circle cx="250" cy="220" r="11" strokeWidth="2" fill={PNL} stroke={BD} />
       <circle cx="250" cy="220" r="4"  fill={BD} fillOpacity="0.5" />
+
+      {/* ── PulseRing behind motor ────────────────────────────────────── */}
+      <PulseRing cx={250} cy={131} r={20} intensity={rpmIntensity} paused={paused} color="#22d3ee" />
 
       {/* ── Motor body (above pump) ───────────────────────────────────── */}
       <rect x="198" y="100" width="104" height="62" rx="8" strokeWidth="2.5" fill={PNL} stroke={BD} />
