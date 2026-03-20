@@ -27,7 +27,7 @@ interface DeviceVisualizationProps {
   /** device type category — used to resolve the device illustration template */
   deviceCategory?: string;
   /** Current device status from the API — used to show stale-data indicator */
-  deviceStatus?: string;
+  deviceStatus?: 'online' | 'offline' | 'unknown' | 'idle';
   /**
    * Pre-fetched metrics from the parent page's useDeviceMetrics call.
    * When provided, the component skips its own hook call (single source of truth).
@@ -180,7 +180,7 @@ export default function DeviceVisualization({
             className="rounded-xl overflow-hidden border flex-shrink-0"
             style={{ borderColor: 'var(--color-border)', background: 'var(--color-page)', width: '100%', maxWidth: 360 }}
           >
-            <TemplateRenderer config={templateConfig} telemetry={latestValues} deviceStatus={deviceStatus as 'online' | 'offline' | 'unknown'} />
+            <TemplateRenderer config={templateConfig} telemetry={latestValues} deviceStatus={deviceStatus === 'idle' ? 'unknown' : deviceStatus} />
           </div>
           {/* Metric grid — only metrics not already shown as overlays on the illustration */}
           {gridMetrics.length > 0 && (
