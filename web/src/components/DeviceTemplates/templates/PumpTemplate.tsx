@@ -12,7 +12,7 @@ const D  = '#f97316';
 const DL = '#fed7aa';
 
 export function PumpTemplate({ width, height, telemetry, deviceStatus }: TemplateProps) {
-  const paused = deviceStatus !== 'online';
+  const paused = deviceStatus === 'offline';
   const rpm = resolveNumeric(telemetry, RPM_KEYS);
   const flow = resolveNumeric(telemetry, FLOW_KEYS);
   const rpmIntensity = Math.min(rpm / 3000, 1);

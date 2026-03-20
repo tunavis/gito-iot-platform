@@ -6,7 +6,7 @@ const BD  = 'var(--color-border)';
 const PNL = 'var(--color-panel)';
 
 export function WaterTankTemplate({ width, height, telemetry, deviceStatus }: TemplateProps) {
-  const paused = deviceStatus !== 'online';
+  const paused = deviceStatus === 'offline';
 
   const levelRaw = resolveNumeric(telemetry, LEVEL_KEYS);
   const levelIntensity = Math.min(levelRaw / 100, 1);

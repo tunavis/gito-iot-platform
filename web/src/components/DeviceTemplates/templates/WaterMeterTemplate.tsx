@@ -7,7 +7,7 @@ const PNL = 'var(--color-panel)';
 const W  = '#3b82f6';
 
 export function WaterMeterTemplate({ width, height, telemetry, deviceStatus }: TemplateProps) {
-  const paused = deviceStatus !== 'online';
+  const paused = deviceStatus === 'offline';
   const flow = resolveNumeric(telemetry, FLOW_KEYS);
   const flowIntensity = Math.min(flow / 100, 1);
 
