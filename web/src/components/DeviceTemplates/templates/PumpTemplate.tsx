@@ -19,7 +19,7 @@ export function PumpTemplate({ width, height, telemetry, deviceStatus }: Templat
   const flowIntensity = Math.min(flow / 100, 1);
 
   return (
-    <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
+    <g>
 
       {/* ── Inlet pipe (left → pump, y=200) — blue (suction) ─────────── */}
       <DashFlow x1={30} y1={200} x2={175} y2={200} intensity={flowIntensity} paused={paused} color="#3b82f6" shadowColor="#1d4ed8" highlightColor="#93c5fd" strokeWidth={10} />
@@ -92,6 +92,6 @@ export function PumpTemplate({ width, height, telemetry, deviceStatus }: Templat
         style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
         CENTRIFUGAL PUMP
       </text>
-    </svg>
+    </g>
   );
 }

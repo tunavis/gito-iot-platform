@@ -21,7 +21,7 @@ export function SolarTemplate({ width, height }: { width: number; height: number
   const ORIGIN_Y   = 48;
 
   return (
-    <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
+    <g>
 
       {/* ── Solar panel array ─────────────────────────────────────────── */}
       {Array.from({ length: PANEL_ROWS }, (_, row) =>
@@ -121,6 +121,6 @@ export function SolarTemplate({ width, height }: { width: number; height: number
         style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
         BATTERY
       </text>
-    </svg>
+    </g>
   );
 }

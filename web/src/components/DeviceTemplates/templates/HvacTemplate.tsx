@@ -15,7 +15,7 @@ const COIL = '#3b82f6';
 
 export function HvacTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
   return (
-    <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
+    <g>
 
       {/* ── Return duct (left → AHU) — warm/orange ─────────────────────── */}
       {/* Duct interior fill */}
@@ -137,6 +137,6 @@ export function HvacTemplate({ width, height }: { width: number; height: number;
         style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.08em' }}>
         AIR HANDLING UNIT
       </text>
-    </svg>
+    </g>
   );
 }

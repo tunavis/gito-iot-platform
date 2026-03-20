@@ -11,7 +11,7 @@ const EXH = '#64748b';
 
 export function GeneratorTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
   return (
-    <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
+    <g>
 
       {/* ── Engine block ──────────────────────────────────────────────── */}
       <rect x="55" y="115" width="190" height="175" rx="8" strokeWidth="3" fill={PNL} stroke={BD} />
@@ -102,6 +102,6 @@ export function GeneratorTemplate({ width, height }: { width: number; height: nu
         style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
         ALTERNATOR
       </text>
-    </svg>
+    </g>
   );
 }

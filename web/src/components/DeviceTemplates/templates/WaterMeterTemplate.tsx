@@ -12,7 +12,7 @@ export function WaterMeterTemplate({ width, height, telemetry, deviceStatus }: T
   const flowIntensity = Math.min(flow / 100, 1);
 
   return (
-    <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
+    <g>
 
       {/* ── Inlet pipe (left section, y=200) ──────────────────────────── */}
       <DashFlow x1={30} y1={200} x2={172} y2={200} intensity={flowIntensity} paused={paused} color="#3b82f6" shadowColor="#1d4ed8" highlightColor="#93c5fd" strokeWidth={10} />
@@ -76,6 +76,6 @@ export function WaterMeterTemplate({ width, height, telemetry, deviceStatus }: T
         style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.08em' }}>
         FLOW METER
       </text>
-    </svg>
+    </g>
   );
 }

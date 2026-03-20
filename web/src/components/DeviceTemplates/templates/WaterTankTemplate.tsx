@@ -14,7 +14,7 @@ export function WaterTankTemplate({ width, height, telemetry, deviceStatus }: Te
   const flowIntensity = Math.min(flow / 100, 1);
 
   return (
-    <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
+    <g>
 
       {/* ── Inlet pipe (left → tank, y=95) ────────────────────────────── */}
       <DashFlow x1={30} y1={95} x2={182} y2={95} intensity={flowIntensity} paused={paused} color="#3b82f6" shadowColor="#1d4ed8" highlightColor="#93c5fd" strokeWidth={10} />
@@ -87,6 +87,6 @@ export function WaterTankTemplate({ width, height, telemetry, deviceStatus }: Te
         style={{ fill: 'var(--color-text-muted)', fontSize: 9, fontFamily: 'system-ui,sans-serif' }}>
         PUMP
       </text>
-    </svg>
+    </g>
   );
 }
