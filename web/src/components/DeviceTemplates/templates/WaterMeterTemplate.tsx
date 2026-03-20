@@ -1,30 +1,28 @@
 import React from 'react';
+import type { TemplateProps } from '../TemplateRenderer';
+import { ArcSweep, DashFlow, resolveNumeric, FLOW_KEYS } from '../primitives';
 
 const BD  = 'var(--color-border)';
 const PNL = 'var(--color-panel)';
 const W  = '#3b82f6';
-const WL = '#93c5fd';
-const WD = '#1d4ed8';
-// Needle accent — readable blue
-const NEEDLE = '#3b82f6';
 
-export function WaterMeterTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
+export function WaterMeterTemplate({ width, height, telemetry, deviceStatus }: TemplateProps) {
+  const paused = deviceStatus !== 'online';
+  const flow = resolveNumeric(telemetry, FLOW_KEYS);
+  const flowIntensity = Math.min(flow / 100, 1);
+
   return (
     <svg width={width} height={height} viewBox="0 0 500 400" aria-hidden="true">
 
       {/* ── Inlet pipe (left section, y=200) ──────────────────────────── */}
-      <line x1="30"  y1="200" x2="172" y2="200" strokeWidth="12" strokeLinecap="round" stroke={WD} strokeOpacity="0.35" />
-      <line x1="30"  y1="200" x2="172" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W}  strokeOpacity="0.85" />
-      <line x1="30"  y1="197" x2="172" y2="197" strokeWidth="2.5" strokeLinecap="round" stroke={WL} strokeOpacity="0.55" />
+      <DashFlow x1={30} y1={200} x2={172} y2={200} intensity={flowIntensity} paused={paused} color="#3b82f6" shadowColor="#1d4ed8" highlightColor="#93c5fd" strokeWidth={10} />
       {/* Flow arrow */}
-      <polyline points="95,192 112,200 95,208" strokeWidth="2" strokeLinejoin="round" stroke={WL} fill="none" />
+      <polyline points="95,192 112,200 95,208" strokeWidth="2" strokeLinejoin="round" stroke="#93c5fd" fill="none" />
 
       {/* ── Outlet pipe (right section, y=200) ────────────────────────── */}
-      <line x1="328" y1="200" x2="470" y2="200" strokeWidth="12" strokeLinecap="round" stroke={WD} strokeOpacity="0.35" />
-      <line x1="328" y1="200" x2="470" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W}  strokeOpacity="0.85" />
-      <line x1="328" y1="197" x2="470" y2="197" strokeWidth="2.5" strokeLinecap="round" stroke={WL} strokeOpacity="0.55" />
+      <DashFlow x1={328} y1={200} x2={470} y2={200} intensity={flowIntensity} paused={paused} color="#3b82f6" shadowColor="#1d4ed8" highlightColor="#93c5fd" strokeWidth={10} />
       {/* Flow arrow */}
-      <polyline points="378,192 395,200 378,208" strokeWidth="2" strokeLinejoin="round" stroke={WL} fill="none" />
+      <polyline points="378,192 395,200 378,208" strokeWidth="2" strokeLinejoin="round" stroke="#93c5fd" fill="none" />
 
       {/* ── Pipe stubs through meter housing ──────────────────────────── */}
       <line x1="172" y1="200" x2="198" y2="200" strokeWidth="10" strokeLinecap="round" stroke={W} strokeOpacity="0.7" />
@@ -54,11 +52,8 @@ export function WaterMeterTemplate({ width, height }: { width: number; height: n
           x1={250 + dx} y1="149" x2={250 + dx} y2="162"
           strokeWidth="2.5" stroke={BD} strokeOpacity="0.8" />
       ))}
-      {/* Needle */}
-      <line x1="250" y1="182" x2="268" y2="161" strokeWidth="2.5" strokeLinecap="round"
-        stroke={NEEDLE} />
-      <circle cx="250" cy="182" r="4" fill={NEEDLE} />
-      <circle cx="250" cy="182" r="1.5" fill="white" />
+      {/* ArcSweep replaces static needle — shows flow rate as gauge position */}
+      <ArcSweep cx={250} cy={182} r={28} intensity={flowIntensity} paused={paused} color="#3b82f6" sweep={180} startAngle={180} strokeWidth={3} />
 
       {/* ── Serial register display ───────────────────────────────────── */}
       <rect x="198" y="238" width="104" height="28" rx="4" strokeWidth="1.5"
