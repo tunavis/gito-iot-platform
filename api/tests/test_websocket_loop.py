@@ -103,17 +103,40 @@ async def test_redis_to_ws_yields_when_idle():
 
     async def tracking_sleep(n):
         nonlocal sleep_called
-        if n <= 0.05:  # our idle sleep
-            sleep_called = True
-            disconnect_event.set()  # stop the loop after first idle sleep
+        sleep_called = True
+        disconnect_event.set()  # stop the loop after first idle sleep
         await original_sleep(0)
 
     from app.routers.websocket import _redis_to_ws
 
-    with patch("app.routers.websocket.asyncio") as mock_asyncio:
-        mock_asyncio.sleep = tracking_sleep
-        mock_asyncio.Event = asyncio.Event
-        mock_asyncio.gather = asyncio.gather
+    with patch("app.routers.websocket.asyncio.sleep", side_effect=tracking_sleep):
         await _redis_to_ws(ws, telemetry_pubsub, alerts_pubsub, disconnect_event)
 
     assert sleep_called, "redis_to_ws must call asyncio.sleep when idle"
+
+
+@pytest.mark.asyncio
+async def test_redis_to_ws_forwards_alert_message():
+    """redis_to_ws sends an alert message to the WebSocket when pub/sub delivers one."""
+    alert_data = {"alert_rule_id": "xyz", "device_id": "abc", "metric": "temperature", "value": 35.2}
+    telemetry_pubsub = _make_pubsub([])
+    alerts_pubsub = _make_pubsub([{"data": json.dumps(alert_data)}])
+
+    ws = MagicMock()
+    ws.send_json = AsyncMock()
+
+    disconnect_event = asyncio.Event()
+
+    from app.routers.websocket import _redis_to_ws
+
+    async def cancel_after_send():
+        await asyncio.sleep(0.05)
+        disconnect_event.set()
+
+    await asyncio.gather(
+        _redis_to_ws(ws, telemetry_pubsub, alerts_pubsub, disconnect_event),
+        cancel_after_send(),
+        return_exceptions=True,
+    )
+
+    ws.send_json.assert_called_once_with({"type": "alert", "data": alert_data})

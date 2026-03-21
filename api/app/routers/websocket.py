@@ -13,6 +13,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.config import get_settings
 
+_IDLE_POLL_INTERVAL = 0.01  # seconds to sleep when no Redis messages are queued
+
 # Type aliases
 PubSub = object  # Redis PubSub type
 
@@ -146,11 +148,14 @@ async def websocket_device_telemetry(
 
         try:
             disconnect_event = asyncio.Event()
-            await asyncio.gather(
+            results = await asyncio.gather(
                 _redis_to_ws(websocket, telemetry_pubsub, alerts_pubsub, disconnect_event),
                 _ws_to_handler(websocket, disconnect_event),
                 return_exceptions=True,
             )
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error("WebSocket task failed unexpectedly", exc_info=result)
 
         except Exception as e:
             logger.error(
@@ -255,7 +260,7 @@ async def _redis_to_ws(
                 return
 
         if not had_message:
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(_IDLE_POLL_INTERVAL)
 
 
 async def _ws_to_handler(
@@ -274,4 +279,5 @@ async def _ws_to_handler(
     except WebSocketDisconnect:
         disconnect_event.set()
     except Exception:
+        logger.warning("WebSocket client handler error", exc_info=True)
         disconnect_event.set()
