@@ -1,5 +1,6 @@
 """WebSocket router for real-time telemetry updates."""
 
+import asyncio
 import json
 import logging
 from typing import Set
@@ -8,6 +9,7 @@ from uuid import UUID
 import redis.asyncio as aioredis
 from fastapi import APIRouter, status
 from fastapi.websockets import WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from app.config import get_settings
 
@@ -143,43 +145,12 @@ async def websocket_device_telemetry(
         alerts_pubsub = await manager.subscribe_to_alerts(tenant_id, device_uuid)
 
         try:
-            # Listen for Redis messages and WebSocket messages
-            while True:
-                # Check for telemetry updates
-                message = await telemetry_pubsub.get_message(ignore_subscribe_messages=True)
-                if message:
-                    try:
-                        data = json.loads(message["data"])
-                        await websocket.send_json(
-                            {
-                                "type": "telemetry",
-                                "data": data,
-                            }
-                        )
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.error(f"Failed to parse telemetry message: {e}")
-
-                # Check for alert updates
-                message = await alerts_pubsub.get_message(ignore_subscribe_messages=True)
-                if message:
-                    try:
-                        data = json.loads(message["data"])
-                        await websocket.send_json(
-                            {
-                                "type": "alert",
-                                "data": data,
-                            }
-                        )
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.error(f"Failed to parse alert message: {e}")
-
-                # Check for client messages (ping/pong, custom commands)
-                try:
-                    client_msg = await websocket.receive_json(mode="text")
-                    await _handle_websocket_message(websocket, client_msg)
-                except Exception:
-                    # Timeout or connection issue - continue listening
-                    pass
+            disconnect_event = asyncio.Event()
+            await asyncio.gather(
+                _redis_to_ws(websocket, telemetry_pubsub, alerts_pubsub, disconnect_event),
+                _ws_to_handler(websocket, disconnect_event),
+                return_exceptions=True,
+            )
 
         except Exception as e:
             logger.error(
@@ -242,3 +213,65 @@ async def _handle_websocket_message(websocket: WebSocket, message: dict):
         )
     else:
         logger.debug(f"Unknown message type: {msg_type}")
+
+
+async def _redis_to_ws(
+    websocket: WebSocket,
+    telemetry_pubsub: PubSub,
+    alerts_pubsub: PubSub,
+    disconnect_event: asyncio.Event,
+) -> None:
+    """
+    Forwards Redis pub/sub messages to the WebSocket client.
+    Runs as a concurrent task alongside _ws_to_handler.
+    Sets disconnect_event and exits if the WebSocket send fails.
+    Yields to the event loop via asyncio.sleep(0.01) when no messages arrive.
+    """
+    while not disconnect_event.is_set():
+        had_message = False
+
+        message = await telemetry_pubsub.get_message(ignore_subscribe_messages=True)
+        if message:
+            had_message = True
+            try:
+                data = json.loads(message["data"])
+                await websocket.send_json({"type": "telemetry", "data": data})
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"Failed to parse telemetry message: {e}")
+            except Exception:
+                disconnect_event.set()
+                return
+
+        message = await alerts_pubsub.get_message(ignore_subscribe_messages=True)
+        if message:
+            had_message = True
+            try:
+                data = json.loads(message["data"])
+                await websocket.send_json({"type": "alert", "data": data})
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"Failed to parse alert message: {e}")
+            except Exception:
+                disconnect_event.set()
+                return
+
+        if not had_message:
+            await asyncio.sleep(0.01)
+
+
+async def _ws_to_handler(
+    websocket: WebSocket,
+    disconnect_event: asyncio.Event,
+) -> None:
+    """
+    Receives messages from the WebSocket client and dispatches them to handlers.
+    Runs as a concurrent task alongside _redis_to_ws.
+    Sets disconnect_event when the client disconnects or an error occurs.
+    """
+    try:
+        while not disconnect_event.is_set():
+            client_msg = await websocket.receive_json(mode="text")
+            await _handle_websocket_message(websocket, client_msg)
+    except WebSocketDisconnect:
+        disconnect_event.set()
+    except Exception:
+        disconnect_event.set()
