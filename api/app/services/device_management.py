@@ -277,7 +277,7 @@ class DeviceManagementService:
             True if sync successful, False if skipped or failed gracefully
         """
         # Skip if not a LoRaWAN device
-        if not device.dev_eui or not device.chirpstack_app_id:
+        if not device.dev_eui or not device.ttn_app_id:
             return False
         
         if not self.chirpstack_client:
@@ -297,7 +297,7 @@ class DeviceManagementService:
             else:
                 # Create device in ChirpStack
                 await self.chirpstack_client.create_device(
-                    application_id=device.chirpstack_app_id,
+                    application_id=device.ttn_app_id,
                     dev_eui=device.dev_eui,
                     name=device.name,
                     description=f"Tenant: {device.tenant_id}",
@@ -305,8 +305,8 @@ class DeviceManagementService:
                     variables={"gito_device_id": str(device.id)},
                 )
             
-            # Update device.chirpstack_synced flag
-            device.chirpstack_synced = True
+            # Update device.ttn_synced flag
+            device.ttn_synced = True
             if self.session:
                 self.session.add(device)
                 await self.session.commit()

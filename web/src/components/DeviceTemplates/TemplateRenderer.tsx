@@ -116,4 +116,4 @@ export default function TemplateRenderer({ config, telemetry, deviceStatus }: Te
       ))}
     </div>
   );
-}
+}// v2

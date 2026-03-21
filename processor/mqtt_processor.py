@@ -216,6 +216,8 @@ class DatabaseService:
         # Device existence cache: {device_id: (monotonic_time, exists)}
         self._device_cache: dict[str, tuple[float, bool]] = {}
         self._device_cache_ttl: int = 60  # seconds
+        # dev_eui → (tenant_id, device_id) cache for LoRaWAN uplinks
+        self._deveui_cache: dict[str, tuple[float, tuple[str, str] | None]] = {}
 
     async def connect(self):
         self.conn_pool = AsyncConnectionPool(
@@ -291,6 +293,40 @@ class DatabaseService:
                 device_id, tenant_id,
             )
         return exists
+
+    async def resolve_dev_eui(self, dev_eui: str) -> tuple[str, str] | None:
+        """
+        Resolve a LoRaWAN dev_eui to (tenant_id, device_id).
+        Only returns devices that are confirmed provisioned (ttn_synced = true).
+        Result cached for 60s; negative results also cached to block DB spam from
+        rogue/unregistered devices.
+        """
+        now = time.monotonic()
+        cached = self._deveui_cache.get(dev_eui)
+        if cached and (now - cached[0]) < self._device_cache_ttl:
+            return cached[1]
+
+        result_val: tuple[str, str] | None = None
+        try:
+            async with self.conn_pool.connection() as conn:
+                result = await conn.execute(
+                    "SELECT tenant_id::text, id::text FROM devices "
+                    "WHERE dev_eui = %s AND ttn_synced = true LIMIT 1",
+                    (dev_eui,),
+                )
+                row = await result.fetchone()
+                if row:
+                    result_val = (row["tenant_id"], row["id"])
+        except Exception as e:
+            logger.debug("dev_eui lookup failed for %s: %s", dev_eui, e)
+            return None  # don't cache on error
+
+        self._deveui_cache[dev_eui] = (now, result_val)
+        if result_val is None:
+            logger.warning(
+                "Unknown or unsynced dev_eui %s — uplink rejected", dev_eui
+            )
+        return result_val
 
     async def batch_insert_telemetry(self, rows: list[tuple]) -> set[str]:
         """
@@ -721,6 +757,67 @@ class StreamConsumer:
 # ---------------------------------------------------------------------------
 # Main processor
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Redis → MQTT Command Bridge
+# ---------------------------------------------------------------------------
+class CommandBridge:
+    """
+    Subscribes to Redis pub/sub command channels and republishes messages to
+    the MQTT broker so that devices actually receive commands.
+
+    The API publishes commands to Redis channel:
+        {tenant_id}/devices/{device_id}/commands
+
+    This bridge pattern-subscribes to `*/devices/*/commands` and forwards
+    each message verbatim to the same topic on Mosquitto.  The channel name
+    IS the MQTT topic, so no transformation is needed.
+
+    A dedicated Redis connection is used because pub/sub mode blocks the
+    connection — it cannot share the main RedisService connection.
+    """
+
+    RETRY_DELAY_S = 1.0
+
+    def __init__(self, redis_url: str, mqtt_client: aiomqtt.Client):
+        self.redis_url   = redis_url
+        self.mqtt_client = mqtt_client
+        self._running    = True
+
+    async def run(self) -> None:
+        while self._running:
+            try:
+                async with aioredis.from_url(self.redis_url, decode_responses=True) as redis:
+                    async with redis.pubsub() as ps:
+                        await ps.psubscribe("*/devices/*/commands")
+                        logger.info("CommandBridge subscribed to */devices/*/commands")
+                        async for msg in ps.listen():
+                            if not self._running:
+                                break
+                            if msg["type"] != "pmessage":
+                                continue
+                            mqtt_topic = msg["channel"]
+                            payload    = msg["data"]
+                            try:
+                                await self.mqtt_client.publish(mqtt_topic, payload)
+                                logger.debug(
+                                    "CommandBridge forwarded command to MQTT topic %s", mqtt_topic
+                                )
+                            except Exception as pub_err:
+                                logger.error(
+                                    "CommandBridge failed to publish to %s: %s",
+                                    mqtt_topic, pub_err,
+                                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                if self._running:
+                    logger.error(
+                        "CommandBridge Redis connection error: %s — retrying in %.1fs",
+                        e, self.RETRY_DELAY_S,
+                    )
+                    await asyncio.sleep(self.RETRY_DELAY_S)
+
+
 class MQTTProcessor:
     """
     Orchestrates MQTT ingestion, KeyDB Stream buffering, and alert evaluation.
@@ -978,6 +1075,123 @@ class MQTTProcessor:
                 "Failed to correlate command response %s: %s", command_id, e
             )
 
+    async def _process_chirpstack_uplink(self, dev_eui: str, payload_bytes: bytes) -> None:
+        """
+        Handle a ChirpStack v4 MQTT uplink.
+        Topic: application/{applicationId}/device/{devEui}/event/up
+
+        ChirpStack publishes decoded sensor data in the 'object' field.
+        We also capture LoRaWAN radio metadata as __lora_* internal metrics
+        so operators can create alert rules on signal quality (RSSI, SNR).
+        """
+        try:
+            # 1. Parse JSON
+            try:
+                cs_msg = json.loads(payload_bytes.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.warning("ChirpStack uplink parse error from dev_eui %s: %s", dev_eui, e)
+                return
+
+            # 2. Resolve dev_eui → (tenant_id, device_id)
+            resolved = await self.db_service.resolve_dev_eui(dev_eui)
+            if resolved is None:
+                return  # warning already logged by resolve_dev_eui
+            tenant_id, device_id = resolved
+
+            # 3. Deduplicate via ChirpStack's own deduplication ID (5s TTL)
+            dedup_id = cs_msg.get("deduplicationId", "")
+            if dedup_id:
+                dedup_key = f"cs_dedup:{dedup_id}"
+                if await self.redis_service.redis.set(dedup_key, 1, nx=True, ex=5) is None:
+                    logger.debug("Duplicate ChirpStack uplink skipped for dev_eui %s", dev_eui)
+                    return
+
+            # 4. Rate-limit (same sliding window as MQTT path)
+            rate_key  = f"rate:{device_id}:{int(time.time()) // 60}"
+            msg_count = await self.redis_service.redis.incr(rate_key)
+            if msg_count == 1:
+                await self.redis_service.redis.expire(rate_key, 120)
+            if msg_count > RATE_LIMIT_PER_MINUTE:
+                logger.warning(
+                    "Rate limit exceeded for LoRaWAN device %s (%d msgs/min, limit %d)",
+                    device_id, msg_count, RATE_LIMIT_PER_MINUTE,
+                )
+                return
+
+            # 5. Extract decoded sensor data from the 'object' field
+            sensor_data = cs_msg.get("object")
+            if not sensor_data or not isinstance(sensor_data, dict):
+                logger.warning(
+                    "ChirpStack uplink for dev_eui %s has no decoded 'object' — "
+                    "configure a payload codec in ChirpStack for application %s",
+                    dev_eui,
+                    cs_msg.get("deviceInfo", {}).get("applicationId", "unknown"),
+                )
+                return
+
+            # 6. Strip system keys and flatten nested dicts
+            payload = {k: v for k, v in sensor_data.items() if k not in SYSTEM_KEYS}
+            payload = TelemetryValidator.flatten_payload(payload)
+
+            if not self.validator.validate_payload(payload):
+                logger.warning("Invalid ChirpStack payload structure for dev_eui %s", dev_eui)
+                return
+
+            # 7. Extract LoRaWAN radio metadata as internal __lora_* metrics
+            rx_info = cs_msg.get("rxInfo", [])
+            tx_info = cs_msg.get("txInfo", {})
+            if rx_info and isinstance(rx_info, list):
+                best_gw = rx_info[0]  # first entry is best gateway (ChirpStack ordering)
+                if "rssi" in best_gw:
+                    payload["__lora_rssi"] = float(best_gw["rssi"])
+                if "snr" in best_gw:
+                    payload["__lora_snr"] = float(best_gw["snr"])
+                if "gatewayId" in best_gw:
+                    payload["__lora_gateway_id"] = str(best_gw["gatewayId"])
+            if "frequency" in tx_info:
+                payload["__lora_frequency"] = float(tx_info["frequency"])
+            lora_mod = tx_info.get("modulation", {}).get("lora", {})
+            if "spreadingFactor" in lora_mod:
+                payload["__lora_spreading_factor"] = float(lora_mod["spreadingFactor"])
+            if "fCnt" in cs_msg:
+                payload["__lora_frame_count"] = float(cs_msg["fCnt"])
+            if "dr" in cs_msg:
+                payload["__lora_data_rate"] = float(cs_msg["dr"])
+
+            timestamp = datetime.utcnow()
+
+            # 8. Buffer to KeyDB Stream
+            entry_id = await self.redis_service.stream_add(
+                tenant_id, device_id, payload, timestamp
+            )
+            if not entry_id:
+                logger.error("Failed to buffer ChirpStack uplink for dev_eui %s", dev_eui)
+                return
+
+            # 9. Publish to pub/sub for WebSocket real-time delivery
+            await self.redis_service.publish_telemetry(tenant_id, device_id, payload)
+
+            # 10. Evaluate alert rules (inline — works on __lora_* metrics too)
+            await self.evaluate_alerts(tenant_id, device_id, payload, timestamp)
+
+            # 11. Correlate command responses (device may echo back command_id in object)
+            if "command_id" in payload:
+                await self._handle_command_response(tenant_id, device_id, payload)
+
+            logger.info(
+                "ChirpStack uplink buffered",
+                extra={
+                    "tenant_id":  tenant_id,
+                    "device_id":  device_id,
+                    "dev_eui":    dev_eui,
+                    "metrics":    len(payload),
+                    "stream_id":  entry_id,
+                },
+            )
+
+        except Exception as e:
+            logger.error("Error processing ChirpStack uplink from %s: %s", dev_eui, e, exc_info=True)
+
     async def run(self):
         """Main entry point — starts MQTT listener and stream consumer concurrently."""
         await self.start()
@@ -990,23 +1204,55 @@ class MQTTProcessor:
                 password=MQTT_PASSWORD,
             ) as client:
                 logger.info(f"Connected to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
+
+                # Subscribe to native-MQTT device telemetry
                 await client.subscribe("+/devices/+/telemetry")
                 logger.info("Subscribed to +/devices/+/telemetry")
 
+                # Subscribe to ChirpStack uplinks (forwarded via ChirpStack MQTT integration)
+                await client.subscribe("application/+/device/+/event/up")
+                logger.info("Subscribed to application/+/device/+/event/up (ChirpStack uplinks)")
+
                 # Run stream consumer concurrently with MQTT listener
                 consumer_task = asyncio.create_task(self.stream_consumer.run())
+
+                # Run Redis→MQTT command bridge concurrently
+                bridge = CommandBridge(REDIS_URL, client)
+                bridge_task = asyncio.create_task(bridge.run())
 
                 try:
                     async for message in client.messages:
                         if not self.running:
                             break
-                        await self.process_telemetry(message.topic, message.payload)
+                        topic_str = str(message.topic)
+                        parts = topic_str.split("/")
+
+                        if (len(parts) == 4
+                                and parts[1] == "devices"
+                                and parts[3] == "telemetry"):
+                            # Native MQTT device telemetry
+                            await self.process_telemetry(message.topic, message.payload)
+
+                        elif (len(parts) == 6
+                              and parts[0] == "application"
+                              and parts[2] == "device"
+                              and parts[4] == "event"):
+                            # ChirpStack event — only process uplinks for now
+                            if parts[5] == "up":
+                                await self._process_chirpstack_uplink(parts[3], message.payload)
+                            # Future: handle 'join', 'status', 'ack', 'location' events
+
+                        else:
+                            logger.debug("Ignoring unknown topic: %s", topic_str)
+
                 finally:
                     consumer_task.cancel()
-                    try:
-                        await consumer_task
-                    except asyncio.CancelledError:
-                        pass
+                    bridge_task.cancel()
+                    for task in (consumer_task, bridge_task):
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
 
         except Exception as e:
             logger.error(f"MQTT connection error: {e}", exc_info=True)
