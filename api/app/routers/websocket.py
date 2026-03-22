@@ -7,7 +7,7 @@ from typing import Set
 from uuid import UUID
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 from fastapi.websockets import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
@@ -190,12 +190,12 @@ async def websocket_device_telemetry(
 async def _validate_websocket_token(token: str) -> tuple[UUID, UUID]:
     """
     Validate WebSocket token and extract tenant_id and user_id.
-    
+
     Returns: (tenant_id, user_id)
     """
-    from app.security import verify_token
+    from app.security import decode_token
 
-    payload = verify_token(token)
+    payload = decode_token(token)
     tenant_id = UUID(payload.get("tenant_id"))
     user_id = UUID(payload.get("sub"))
     return tenant_id, user_id
@@ -281,3 +281,150 @@ async def _ws_to_handler(
     except Exception:
         logger.warning("WebSocket client handler error", exc_info=True)
         disconnect_event.set()
+
+
+# ---------------------------------------------------------------------------
+# Tenant-level WebSocket: multiplexes all device telemetry for a tenant
+# ---------------------------------------------------------------------------
+
+
+@router.websocket("/ws/tenants/{tenant_id}/telemetry")
+async def websocket_tenant_telemetry(
+    websocket: WebSocket,
+    tenant_id: str,
+    token: str = Query(None),
+):
+    """
+    WebSocket endpoint that streams ALL device telemetry for a tenant on a
+    single connection.
+
+    Clients connect with:
+        ws://host/api/v1/ws/tenants/{tenant_id}/telemetry?token={jwt}
+
+    Messages emitted to the client:
+        {"type": "telemetry", "device_id": "...", "data": {...}}
+        {"type": "alerts",    "device_id": "...", "data": {...}}
+    """
+    if not token:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Authentication required",
+        )
+        return
+
+    try:
+        token_tenant_id, user_id = await _validate_websocket_token(token)
+    except Exception as e:
+        logger.warning(f"Tenant WebSocket auth failed: {e}")
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Invalid token",
+        )
+        return
+
+    try:
+        path_tenant_uuid = UUID(tenant_id)
+    except ValueError:
+        await websocket.close(
+            code=status.WS_1003_UNSUPPORTED_DATA,
+            reason="Invalid tenant ID format",
+        )
+        return
+
+    if token_tenant_id != path_tenant_uuid:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Tenant mismatch",
+        )
+        return
+
+    await websocket.accept()
+
+    logger.info(
+        "Tenant WebSocket client connected",
+        extra={"tenant_id": str(path_tenant_uuid), "user_id": str(user_id)},
+    )
+
+    try:
+        settings = get_settings()
+        redis_client = await aioredis.from_url(
+            settings.REDIS_URL, encoding="utf-8", decode_responses=True
+        )
+        pubsub = redis_client.pubsub()
+        # Subscribe to ALL device channels for this tenant using patterns
+        await pubsub.psubscribe(
+            f"telemetry:{path_tenant_uuid}:*",
+            f"alerts:{path_tenant_uuid}:*",
+        )
+
+        disconnect_event = asyncio.Event()
+        results = await asyncio.gather(
+            _tenant_redis_to_ws(websocket, pubsub, path_tenant_uuid, disconnect_event),
+            _ws_to_handler(websocket, disconnect_event),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("Tenant WebSocket task failed", exc_info=result)
+
+    except Exception as e:
+        logger.error(
+            "Tenant WebSocket error",
+            extra={"tenant_id": str(path_tenant_uuid), "error": str(e)},
+        )
+    finally:
+        try:
+            await pubsub.punsubscribe()
+            await redis_client.close()
+        except Exception:
+            pass
+
+        logger.info(
+            "Tenant WebSocket client disconnected",
+            extra={"tenant_id": str(path_tenant_uuid), "user_id": str(user_id)},
+        )
+
+
+async def _tenant_redis_to_ws(
+    websocket: WebSocket,
+    pubsub: object,
+    tenant_id: UUID,
+    disconnect_event: asyncio.Event,
+) -> None:
+    """
+    Forward pattern-subscribed Redis pub/sub messages to the WebSocket client.
+
+    Channel format:
+        telemetry:{tenant_id}:{device_id}
+        alerts:{tenant_id}:{device_id}
+
+    Emits:
+        {"type": "telemetry", "device_id": "...", "data": {...}}
+        {"type": "alerts",    "device_id": "...", "data": {...}}
+    """
+    while not disconnect_event.is_set():
+        message = await pubsub.get_message(ignore_subscribe_messages=True)
+        if message is None:
+            await asyncio.sleep(_IDLE_POLL_INTERVAL)
+            continue
+
+        try:
+            channel: str = message.get("channel", "")
+            # channel  →  "telemetry:{tenant_id}:{device_id}"
+            #          or "alerts:{tenant_id}:{device_id}"
+            parts = channel.split(":")
+            if len(parts) < 3:
+                continue
+
+            msg_type = parts[0]          # "telemetry" or "alerts"
+            device_id = parts[2]         # UUID string
+
+            data = json.loads(message["data"])
+            await websocket.send_json(
+                {"type": msg_type, "device_id": device_id, "data": data}
+            )
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse tenant telemetry message: {e}")
+        except Exception:
+            disconnect_event.set()
+            return
