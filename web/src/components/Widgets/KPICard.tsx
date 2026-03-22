@@ -28,6 +28,8 @@ interface KPICardProps {
   isEditMode?: boolean;
   onSettings?: () => void;
   onRemove?: () => void;
+  /** Latest values pushed from the tenant-level WebSocket for the primary device. */
+  realtimeData?: Record<string, any>;
 }
 
 export default function KPICard({
@@ -37,6 +39,7 @@ export default function KPICard({
   isEditMode = false,
   onSettings,
   onRemove,
+  realtimeData,
 }: KPICardProps) {
   const [value, setValue] = useState<number | null>(null);
   const [trend, setTrend] = useState<number>(0);
@@ -149,6 +152,23 @@ export default function KPICard({
 
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  // Apply WebSocket real-time data immediately when it arrives for the bound metric
+  useEffect(() => {
+    if (!realtimeData) return;
+    const source = data_sources?.[0];
+    const metricName = source?.metric || metric;
+    const realtimeValue = realtimeData[metricName];
+    if (realtimeValue !== undefined && realtimeValue !== null) {
+      const parsed = typeof realtimeValue === "number"
+        ? realtimeValue
+        : parseFloat(realtimeValue);
+      if (!isNaN(parsed)) {
+        setValue(parsed);
+        setLoading(false);
+      }
+    }
+  }, [realtimeData, data_sources, metric]);
 
   // Determine color based on thresholds
   const getValueColor = () => {

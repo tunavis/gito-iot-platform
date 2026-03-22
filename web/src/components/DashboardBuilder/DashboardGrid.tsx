@@ -5,8 +5,12 @@
 // See CLEANUP_TODO.md for upgrade steps
 import RGL from "react-grid-layout";
 import type { Layout } from "react-grid-layout";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import KPICard from "../Widgets/KPICard";
+import {
+  useDashboardWebSocket,
+  type DashboardWebSocketMessage,
+} from "@/hooks/useDashboardWebSocket";
 import ChartWidget from "../Widgets/ChartWidget";
 import GaugeWidget from "../Widgets/GaugeWidget";
 import DeviceInfoWidget from "../Widgets/DeviceInfoWidget";
@@ -53,6 +57,44 @@ export default function DashboardGrid({
   onWidgetSettings,
   onWidgetRemove,
 }: DashboardGridProps) {
+  // ---- Real-time WebSocket state ----
+  const [realtimeData, setRealtimeData] = useState<
+    Record<string, Record<string, any>>
+  >({});
+
+  const { token, tenantId } = useMemo(() => {
+    if (typeof window === "undefined") return { token: "", tenantId: "" };
+    const t = localStorage.getItem("auth_token") ?? "";
+    if (!t) return { token: "", tenantId: "" };
+    try {
+      const payload = JSON.parse(atob(t.split(".")[1]));
+      return { token: t, tenantId: payload.tenant_id ?? "" };
+    } catch {
+      return { token: "", tenantId: "" };
+    }
+  }, []);
+
+  const handleWsMessage = useCallback((msg: DashboardWebSocketMessage) => {
+    if (msg.type === "telemetry") {
+      setRealtimeData((prev) => ({
+        ...prev,
+        [msg.device_id]: {
+          ...prev[msg.device_id],
+          ...msg.data,
+          _ts: Date.now(),
+        },
+      }));
+    }
+  }, []);
+
+  useDashboardWebSocket({
+    tenantId,
+    token,
+    enabled: !isEditMode,
+    onMessage: handleWsMessage,
+  });
+  // -----------------------------------
+
   const [layouts, setLayouts] = useState<{ lg: Layout[] }>({
     lg: widgets.map((w) => ({
       i: w.id,
@@ -93,7 +135,8 @@ export default function DashboardGrid({
 
   const renderWidget = (widget: Widget) => {
     switch (widget.widget_type) {
-      case "kpi_card":
+      case "kpi_card": {
+        const primaryDeviceId = widget.data_sources?.[0]?.device_id;
         return (
           <KPICard
             key={widget.id}
@@ -104,8 +147,12 @@ export default function DashboardGrid({
             isEditMode={isEditMode}
             onSettings={() => onWidgetSettings?.(widget.id)}
             onRemove={() => onWidgetRemove?.(widget.id)}
+            realtimeData={
+              primaryDeviceId ? realtimeData[primaryDeviceId] : undefined
+            }
           />
         );
+      }
 
       case "chart":
         return (
