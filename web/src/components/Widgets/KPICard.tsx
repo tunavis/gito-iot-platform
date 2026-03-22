@@ -28,6 +28,8 @@ interface KPICardProps {
   isEditMode?: boolean;
   onSettings?: () => void;
   onRemove?: () => void;
+  /** Latest values pushed from the tenant-level WebSocket for the primary device. */
+  realtimeData?: Record<string, any>;
 }
 
 export default function KPICard({
@@ -37,6 +39,7 @@ export default function KPICard({
   isEditMode = false,
   onSettings,
   onRemove,
+  realtimeData,
 }: KPICardProps) {
   const [value, setValue] = useState<number | null>(null);
   const [trend, setTrend] = useState<number>(0);
@@ -55,10 +58,7 @@ export default function KPICard({
 
   const fetchData = useCallback(async () => {
       try {
-        console.log("[KPICard] data_sources:", data_sources);
-
         if (!data_sources || data_sources.length === 0) {
-          console.log("[KPICard] No data sources configured");
           setValue(null);
           setLoading(false);
           return;
@@ -97,14 +97,6 @@ export default function KPICard({
         const dataPoint = data.data?.[0];
         // Check both direct field and payload JSONB
         const latestValue = dataPoint?.[metricName] ?? dataPoint?.payload?.[metricName];
-
-        console.log("[KPICard] Fetched data:", {
-          deviceId,
-          metricName,
-          dataPointCount: data.data?.length || 0,
-          latestValue,
-          dataPoint
-        });
 
         setValue(latestValue ?? null);
 
@@ -148,10 +140,6 @@ export default function KPICard({
         setLoading(false);
       } catch (error) {
         console.error("[KPICard] Error fetching data:", error);
-        console.error("[KPICard] Context:", {
-          data_sources,
-          configuration
-        });
         setLoading(false);
       }
     }, [data_sources, metric, show_trend, trend_period, configuration]);
@@ -164,6 +152,23 @@ export default function KPICard({
 
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  // Apply WebSocket real-time data immediately when it arrives for the bound metric
+  useEffect(() => {
+    if (!realtimeData) return;
+    const source = data_sources?.[0];
+    const metricName = source?.metric || metric;
+    const realtimeValue = realtimeData[metricName];
+    if (realtimeValue !== undefined && realtimeValue !== null) {
+      const parsed = typeof realtimeValue === "number"
+        ? realtimeValue
+        : parseFloat(realtimeValue);
+      if (!isNaN(parsed)) {
+        setValue(parsed);
+        setLoading(false);
+      }
+    }
+  }, [realtimeData, data_sources, metric]);
 
   // Determine color based on thresholds
   const getValueColor = () => {

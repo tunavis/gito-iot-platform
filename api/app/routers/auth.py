@@ -1,6 +1,6 @@
 """Authentication routes for user login and token management."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
@@ -12,6 +12,7 @@ from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from app.schemas.common import SuccessResponse, ErrorDetail, ErrorResponse
 from app.security import verify_password, create_access_token, decode_token
 from app.config import get_settings
+from app.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,10 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post("/login", response_model=SuccessResponse[TokenResponse])
+@limiter.limit("5/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    body: LoginRequest,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     x_forwarded_proto: str | None = Header(None, alias="X-Forwarded-Proto"),
@@ -36,11 +39,11 @@ async def login(
         Also sets auth_token cookie for Next.js middleware
     """
     # Query user by email (case-insensitive)
-    query = select(User).where(User.email == request.email.lower())
+    query = select(User).where(User.email == body.email.lower())
     result = await session.execute(query)
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(request.password, user.password_hash):
+    if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

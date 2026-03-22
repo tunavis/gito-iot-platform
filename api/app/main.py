@@ -1,12 +1,41 @@
 """Gito IoT Platform - FastAPI Application Factory."""
 
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import redis.asyncio as aioredis
+from sqlalchemy import text
 
 from app.config import get_settings
-from app.database import init_db, close_db
+from app.database import init_db, close_db, _SessionLocal
+
+
+async def _check_database() -> dict:
+    """Check database connectivity and measure latency."""
+    try:
+        start = time.monotonic()
+        async with _SessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        latency = round((time.monotonic() - start) * 1000, 1)
+        return {"status": "ok", "latency_ms": latency}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+async def _check_keydb() -> dict:
+    """Check KeyDB/Redis connectivity and measure latency."""
+    settings = get_settings()
+    try:
+        start = time.monotonic()
+        r = aioredis.from_url(settings.REDIS_URL)
+        await r.ping()
+        await r.aclose()
+        latency = round((time.monotonic() - start) * 1000, 1)
+        return {"status": "ok", "latency_ms": latency}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 # Lifespan context manager for startup/shutdown
@@ -23,6 +52,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ Database initialization warning: {e}")
 
+    # Initialize shared Redis client for app-wide use
+    try:
+        app_state_redis = aioredis.from_url(settings.REDIS_URL)
+        await app_state_redis.ping()
+        app.state.redis = app_state_redis
+        print("✅ Redis/KeyDB connected")
+    except Exception as e:
+        app.state.redis = None
+        print(f"⚠️ Redis/KeyDB connection warning: {e}")
+
     # Initialize background task scheduler for notification retry and queue processing
     try:
         from app.services.background_tasks import notification_background_tasks
@@ -34,6 +73,9 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     await close_db()
+    # Close shared Redis client
+    if hasattr(app, 'state') and hasattr(app.state, 'redis') and app.state.redis:
+        await app.state.redis.aclose()
     # Stop background task scheduler
     try:
         from app.services.background_tasks import notification_background_tasks
@@ -66,12 +108,31 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["x-total-count", "x-page"],
     )
-    
+
+    # Rate limiting (slowapi)
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from app.limiter import limiter
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
     # Health check endpoint (unauthenticated)
-    @app.get("/api/health", status_code=status.HTTP_200_OK)
+    @app.get("/api/health")
     async def health_check():
-        """Health check endpoint for Docker/K8s."""
-        return {"status": "ok", "service": settings.APP_NAME}
+        """Health check with dependency probing."""
+        db_check = await _check_database()
+        keydb_check = await _check_keydb()
+        checks = {"database": db_check, "keydb": keydb_check}
+
+        if db_check["status"] != "ok":
+            return JSONResponse(
+                status_code=503,
+                content={"status": "unhealthy", "checks": checks, "service": settings.APP_NAME},
+            )
+        if keydb_check["status"] != "ok":
+            return {"status": "degraded", "checks": checks, "service": settings.APP_NAME}
+        return {"status": "healthy", "checks": checks, "service": settings.APP_NAME}
     
     # Root endpoint
     @app.get("/")
@@ -107,6 +168,7 @@ def create_app() -> FastAPI:
     from app.routers import events as events_router  # IoT event stream
     from app.routers import firmware as firmware_router  # OTA firmware management
     from app.routers import admin_tenants as admin_tenants_router  # Tenant management (management tenants only)
+    from app.routers import solution_templates as solution_templates_router  # Industry vertical templates
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
@@ -133,6 +195,7 @@ def create_app() -> FastAPI:
     app.include_router(device_credentials.router, prefix="/api/v1")  # Token CRUD
     app.include_router(device_ingest.router, prefix="/api/v1")        # Token-based ingest
     app.include_router(commands.router, prefix="/api/v1")              # Device RPC commands
+    app.include_router(solution_templates_router.router, prefix="/api/v1")  # Solution templates
     app.include_router(websocket.router, prefix="/api/v1")
     
     # Disabled routers (superseded by unified systems):

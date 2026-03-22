@@ -1,8 +1,7 @@
 """Audit Logs API - Compliance and security monitoring."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
@@ -12,52 +11,9 @@ from app.services.tenant_access import validate_tenant_access
 from app.models.base import AuditLog, User
 from app.schemas.audit import AuditLogResponse
 from app.schemas.common import SuccessResponse, PaginationMeta
-from app.security import decode_token
+from app.dependencies import get_current_tenant, get_current_user_info
 
 router = APIRouter(prefix="/tenants/{tenant_id}/audit-logs", tags=["audit-logs"])
-
-
-async def get_current_tenant(
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-
-    return UUID(tenant_id)
-
-
-async def get_current_user(
-    authorization: str = Header(None),
-) -> dict:
-    """Extract current user info from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-
-    return {
-        "user_id": UUID(payload.get("sub")),
-        "tenant_id": UUID(payload.get("tenant_id")),
-        "role": payload.get("role"),
-    }
 
 
 @router.get("", response_model=SuccessResponse)
@@ -65,7 +21,7 @@ async def list_audit_logs(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     user_id: Optional[UUID] = Query(None, description="Filter by user"),
@@ -100,7 +56,7 @@ async def list_audit_logs(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission (only admins can view audit logs)
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to view audit logs"
@@ -163,7 +119,7 @@ async def get_audit_stats(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
 ):
     """Get audit log statistics for dashboard visualization.
@@ -182,7 +138,7 @@ async def get_audit_stats(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to view audit logs"
@@ -260,7 +216,7 @@ async def get_audit_log(
     log_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
 ):
     """Get a specific audit log entry by ID.
 
@@ -279,7 +235,7 @@ async def get_audit_log(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to view audit logs"

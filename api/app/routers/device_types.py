@@ -13,7 +13,7 @@ import logging
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, text
 
 from app.database import get_session, RLSSession
@@ -25,41 +25,11 @@ from app.schemas.device_type import (
     DeviceTypeListResponse,
 )
 from app.schemas.common import SuccessResponse
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/device-types", tags=["device-types"])
-
-
-async def get_current_tenant(
-    tenant_id: UUID,
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    token_tenant_id = payload.get("tenant_id")
-
-    if not token_tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-
-    if str(tenant_id) != str(token_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
-
-    return UUID(token_tenant_id)
 
 
 async def _fetch_device_counts(session: RLSSession, device_type_ids: list[UUID]) -> dict[str, int]:
@@ -96,6 +66,8 @@ async def list_device_types(
     per_page: int = Query(20, ge=1, le=100),
 ) -> DeviceTypeListResponse:
     """List all device types for the tenant."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     # Build query
@@ -165,6 +137,8 @@ async def create_device_type(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ) -> SuccessResponse:
     """Create a new device type template."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     # Serialise data_model preserving min/max aliases
@@ -234,6 +208,8 @@ async def get_device_type(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ) -> SuccessResponse:
     """Get a device type by ID."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     result = await session.execute(
@@ -276,6 +252,8 @@ async def update_device_type(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ) -> SuccessResponse:
     """Update a device type."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     result = await session.execute(
@@ -353,6 +331,8 @@ async def delete_device_type(
     force: bool = Query(False, description="Force delete even if devices exist"),
 ) -> SuccessResponse:
     """Delete a device type."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     result = await session.execute(
@@ -404,6 +384,8 @@ async def clone_device_type(
     name: Optional[str] = Query(None, description="Name for the cloned type"),
 ) -> SuccessResponse:
     """Clone an existing device type."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     result = await session.execute(
@@ -467,6 +449,8 @@ async def get_discovered_metrics(
     so users can see which MQTT payload keys match their schema and which
     are missing.
     """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
     # Verify device type exists and load its data_model

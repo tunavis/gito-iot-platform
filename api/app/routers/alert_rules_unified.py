@@ -16,7 +16,7 @@ import logging
 from typing import Annotated, Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_
 
 from app.database import get_session, RLSSession
@@ -29,42 +29,11 @@ from app.schemas.alert_unified import (
     RuleType,
 )
 from app.schemas.common import SuccessResponse, PaginationMeta
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/alert-rules", tags=["alert-rules"])
-
-
-async def get_current_tenant(
-    tenant_id: UUID,
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token and verify against path."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    token_tenant_id = payload.get("tenant_id")
-    
-    if not token_tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-    
-    # Verify path tenant matches token tenant
-    if str(tenant_id) != str(token_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
-    
-    return UUID(token_tenant_id)
 
 
 # ============================================================================
@@ -87,13 +56,15 @@ async def list_alert_rules(
     List all alert rules for tenant with optional filters.
     
     Supports both THRESHOLD and COMPOSITE rule types in a single unified list.
-    
+
     Filters:
     - rule_type: THRESHOLD or COMPOSITE
     - device_id: Filter by specific device (THRESHOLD rules)
     - severity: info, warning, critical
     - enabled: true or false
     """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     # Build query
@@ -159,6 +130,8 @@ async def create_alert_rule(
     For COMPOSITE rules, provide:
     - conditions (array), logic (AND/OR)
     """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     # Validate based on rule type
@@ -269,6 +242,8 @@ async def get_alert_rule(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Get alert rule details."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -303,6 +278,8 @@ async def update_alert_rule(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update an existing alert rule."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -377,6 +354,8 @@ async def delete_alert_rule(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete an alert rule."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -420,6 +399,8 @@ async def preview_alert_rule(
     Shows how many alerts would have been triggered in recent history.
     Useful for testing rules before enabling them.
     """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(

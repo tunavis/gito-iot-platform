@@ -9,7 +9,7 @@ from collections import defaultdict
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import case, func, select
 
 from app.database import RLSSession, get_session
@@ -19,32 +19,16 @@ from app.models.base import Device
 from app.models.device_group import DeviceGroup
 from app.models.organization import Organization
 from app.models.site import Site
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 router = APIRouter(prefix="/tenants/{tenant_id}/hierarchy", tags=["hierarchy"])
-
-
-async def _get_current_tenant(authorization: str = Header(None)) -> UUID:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    payload = decode_token(authorization.split(" ")[1])
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-    return UUID(tenant_id)
 
 
 @router.get("")
 async def get_hierarchy(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(_get_current_tenant)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Return the full asset hierarchy tree for the tenant."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):

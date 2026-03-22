@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select, text
 
 from app.database import get_session, RLSSession
@@ -38,6 +38,7 @@ SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id"}
 
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def ingest_with_token(
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     payload: Dict[str, Any],
     x_device_token: str = Header(None, alias="X-Device-Token"),
@@ -125,22 +126,28 @@ async def ingest_with_token(
     )
     await session.commit()
 
-    # Publish to Redis for WebSocket real-time delivery (non-critical)
-    try:
-        from app.config import get_settings
-        import redis.asyncio as aioredis
-        settings = get_settings()
-        redis_client = await aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-        channel = f"telemetry:{tenant_id}:{device_id}"
-        message = _json.dumps({
-            "device_id": str(device_id),
-            "payload": {k: v for k, v in payload.items() if k not in SYSTEM_KEYS},
-            "timestamp": ts.isoformat(),
-        })
-        await redis_client.publish(channel, message)
-        await redis_client.aclose()
-    except Exception as e:
-        logger.warning("Failed to publish telemetry to Redis: %s", e)
+    # Publish to Redis for WebSocket real-time delivery + update digital twin cache (non-critical)
+    clean_payload = {k: v for k, v in payload.items() if k not in SYSTEM_KEYS}
+    redis_client_app = getattr(request.app.state, "redis", None)
+    if redis_client_app:
+        try:
+            channel = f"telemetry:{tenant_id}:{device_id}"
+            message = _json.dumps({
+                "device_id": str(device_id),
+                "payload": clean_payload,
+                "timestamp": ts.isoformat(),
+            })
+            await redis_client_app.publish(channel, message)
+        except Exception as e:
+            logger.warning("Failed to publish telemetry to Redis: %s", e)
+        try:
+            from app.services.digital_twin import DigitalTwinService
+            twin = DigitalTwinService(redis_client_app)
+            await twin.update_device_state(device_id, clean_payload, timestamp=ts.isoformat())
+        except Exception as e:
+            logger.warning("Failed to update digital twin cache: %s", e)
+    else:
+        logger.debug("app.state.redis not available — skipping pub/sub and digital twin update")
 
     logger.info("Token ingest: %d metrics for device %s (tenant %s)", len(rows), device_id, tenant_id)
     return SuccessResponse(data={"ingested": len(rows), "timestamp": ts.isoformat()})
@@ -176,6 +183,7 @@ def _build_telemetry_rows(tenant_id, device_id, metrics: dict, ts: datetime) -> 
 
 @router.post("/gateway", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def ingest_gateway(
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     payload: Dict[str, Any],
     x_device_token: str = Header(None, alias="X-Device-Token"),
@@ -298,26 +306,37 @@ async def ingest_gateway(
     )
     await session.commit()
 
-    # Publish to Redis for WebSocket real-time delivery (non-critical)
-    try:
-        from app.config import get_settings
-        import redis.asyncio as aioredis
-        settings = get_settings()
-        redis_client = await aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+    # Publish to Redis for WebSocket real-time delivery + update digital twin cache (non-critical)
+    redis_client_app = getattr(request.app.state, "redis", None)
+    if redis_client_app:
+        try:
+            from app.services.digital_twin import DigitalTwinService
+            twin = DigitalTwinService(redis_client_app)
+        except Exception as e:
+            logger.warning("Failed to import DigitalTwinService: %s", e)
+            twin = None
         for entry in devices_list:
             did = entry.get("device_id")
-            if did and did in sub_device_ids:
+            if not did or did not in sub_device_ids:
+                continue
+            clean_metrics = {k: v for k, v in entry.items() if k not in SYSTEM_KEYS and k != "device_id"}
+            try:
                 channel = f"telemetry:{tenant_id}:{did}"
-                metrics = {k: v for k, v in entry.items() if k not in SYSTEM_KEYS and k != "device_id"}
                 message = _json.dumps({
                     "device_id": did,
-                    "payload": metrics,
+                    "payload": clean_metrics,
                     "timestamp": ts.isoformat(),
                 })
-                await redis_client.publish(channel, message)
-        await redis_client.aclose()
-    except Exception as e:
-        logger.warning("Failed to publish gateway telemetry to Redis: %s", e)
+                await redis_client_app.publish(channel, message)
+            except Exception as e:
+                logger.warning("Failed to publish gateway telemetry to Redis for device %s: %s", did, e)
+            if twin:
+                try:
+                    await twin.update_device_state(did, clean_metrics, timestamp=ts.isoformat())
+                except Exception as e:
+                    logger.warning("Failed to update digital twin cache for device %s: %s", did, e)
+    else:
+        logger.debug("app.state.redis not available — skipping pub/sub and digital twin update")
 
     logger.info(
         "Gateway ingest: %d metrics for %d sub-devices via gateway %s (tenant %s)",

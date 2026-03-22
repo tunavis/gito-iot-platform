@@ -71,8 +71,6 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
 
         // If no data sources bound, show ALL devices with location
         if (!dataSources || dataSources.length === 0) {
-          console.log("[MapWidget] No bindings - showing all devices with location");
-
           const response = await fetch(
             `/api/v1/tenants/${tenantId}/devices?per_page=100`,
             {
@@ -99,7 +97,6 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
             (d: any) => d.latitude && d.longitude
           );
 
-          console.log("[MapWidget] Found devices with location:", validDevices.length);
           setDevices(validDevices);
           setLoading(false);
           return;

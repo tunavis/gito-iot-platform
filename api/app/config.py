@@ -43,6 +43,8 @@ class Settings(BaseSettings):
 
     # Security
     RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_DEFAULT: str = "60/minute"
+    RATE_LIMIT_AUTH: str = "5/minute"
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1"]
 

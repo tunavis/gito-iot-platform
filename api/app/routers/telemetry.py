@@ -7,7 +7,7 @@ Uses key-value storage pattern (industry-standard like ThingsBoard/Cumulocity):
 - Efficient queries for specific metrics or all metrics
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy import select, func, and_, text, desc
 from typing import Annotated, Literal, Optional, List, Any, Dict
 from uuid import UUID
@@ -19,34 +19,11 @@ from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
 from app.models.base import Device, Telemetry
 from app.schemas.common import SuccessResponse, PaginationMeta
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/devices/{device_id}/telemetry", tags=["telemetry"])
-
-
-async def get_current_tenant(
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-
-    return UUID(tenant_id)
 
 
 class TelemetryAggregator:
@@ -609,6 +586,7 @@ async def list_available_metrics(
 
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def ingest_telemetry(
+    request: Request,
     tenant_id: UUID,
     device_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
@@ -679,23 +657,82 @@ async def ingest_telemetry(
     )
     await session.commit()
 
-    # Publish to Redis for WebSocket real-time delivery
-    try:
-        from app.config import get_settings
-        import redis.asyncio as aioredis
-        settings = get_settings()
-        redis_client = await aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-        channel = f"telemetry:{tenant_id}:{device_id}"
-        message = _json.dumps({
-            "device_id": str(device_id),
-            "payload": {k: v for k, v in payload.items() if k not in system_keys},
-            "timestamp": ts.isoformat(),
-        })
-        await redis_client.publish(channel, message)
-        await redis_client.aclose()
-    except Exception as e:
-        # Redis publish failure is non-critical — data is already stored in DB
-        logger.warning(f"Failed to publish telemetry to Redis: {e}")
+    # Publish to Redis for WebSocket real-time delivery + update digital twin cache
+    clean_payload = {k: v for k, v in payload.items() if k not in system_keys}
+    redis_client_app = getattr(request.app.state, "redis", None)
+    if redis_client_app:
+        try:
+            channel = f"telemetry:{tenant_id}:{device_id}"
+            message = _json.dumps({
+                "device_id": str(device_id),
+                "payload": clean_payload,
+                "timestamp": ts.isoformat(),
+            })
+            await redis_client_app.publish(channel, message)
+        except Exception as e:
+            # Redis publish failure is non-critical — data is already stored in DB
+            logger.warning(f"Failed to publish telemetry to Redis: {e}")
+        try:
+            from app.services.digital_twin import DigitalTwinService
+            twin = DigitalTwinService(redis_client_app)
+            await twin.update_device_state(device_id, clean_payload, timestamp=ts.isoformat())
+        except Exception as e:
+            logger.warning(f"Failed to update digital twin cache: {e}")
+    else:
+        logger.debug("app.state.redis not available — skipping pub/sub and digital twin update")
 
     logger.info(f"Ingested {len(rows)} metrics for device {device_id}")
     return SuccessResponse(data={"ingested": len(rows), "timestamp": ts.isoformat()})
+
+
+@router.get("/cached")
+async def get_cached_telemetry(
+    request: Request,
+    tenant_id: UUID,
+    device_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+):
+    """
+    Get latest telemetry from digital twin cache (instant, no DB query).
+
+    Returns the last-known-value for every metric stored in the KeyDB hash.
+    Falls back gracefully when the cache has no entry yet (cached=False).
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch",
+        )
+
+    await session.set_tenant_context(tenant_id)
+
+    # Verify device exists and belongs to tenant
+    device_result = await session.execute(
+        select(Device).where(Device.tenant_id == tenant_id, Device.id == device_id)
+    )
+    device = device_result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    redis_client = getattr(request.app.state, "redis", None)
+    if not redis_client:
+        return {"device_id": str(device_id), "metrics": {}, "cached": False}
+
+    from app.services.digital_twin import DigitalTwinService
+    twin = DigitalTwinService(redis_client)
+    state = await twin.get_device_state(device_id)
+
+    if not state:
+        return {"device_id": str(device_id), "metrics": {}, "cached": False}
+
+    updated_at = state.pop("_updated_at", None)
+    return {
+        "device_id": str(device_id),
+        "metrics": state,
+        "updated_at": updated_at,
+        "cached": True,
+    }

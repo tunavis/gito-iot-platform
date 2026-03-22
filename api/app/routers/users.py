@@ -1,6 +1,6 @@
 """User Management API - RBAC and user administration within tenants."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
@@ -19,52 +19,10 @@ from app.schemas.user import (
     UserInviteResponse,
 )
 from app.schemas.common import SuccessResponse, PaginationMeta
-from app.security import decode_token, hash_password, verify_password
+from app.security import hash_password, verify_password
+from app.dependencies import get_current_tenant, get_current_user_info
 
 router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["users"])
-
-
-async def get_current_tenant(
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-
-    return UUID(tenant_id)
-
-
-async def get_current_user(
-    authorization: str = Header(None),
-) -> dict:
-    """Extract current user info from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-
-    return {
-        "user_id": UUID(payload.get("sub")),
-        "tenant_id": UUID(payload.get("tenant_id")),
-        "role": payload.get("role"),
-    }
 
 
 @router.get("", response_model=SuccessResponse)
@@ -168,7 +126,7 @@ async def create_user(
     request: UserCreate,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
 ):
     """Create a new user.
 
@@ -187,7 +145,7 @@ async def create_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission (only TENANT_ADMIN and SUPER_ADMIN can create users)
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to create users"
@@ -232,7 +190,7 @@ async def invite_user(
     request: UserInviteRequest,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
 ):
     """Invite a new user (creates user with temporary password and sends invitation email).
 
@@ -251,7 +209,7 @@ async def invite_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to invite users"
@@ -314,7 +272,7 @@ async def update_user(
     request: UserUpdate,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
 ):
     """Update a user.
 
@@ -334,9 +292,9 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         # Users can update their own profile (except role and status)
-        if str(current_user["user_id"]) != str(user_id):
+        if str(current_user_info["user_id"]) != str(user_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions to update other users"
@@ -398,7 +356,7 @@ async def update_password(
     request: UserPasswordUpdate,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
 ):
     """Update user password.
 
@@ -418,7 +376,7 @@ async def update_password(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Users can only change their own password
-    if str(current_user["user_id"]) != str(user_id):
+    if str(current_user_info["user_id"]) != str(user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Can only change your own password"
@@ -456,7 +414,7 @@ async def delete_user(
     user_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user_info: Annotated[dict, Depends(get_current_user_info)],
 ):
     """Delete a user (soft delete by setting status to 'inactive').
 
@@ -475,14 +433,14 @@ async def delete_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
 
     # Check permission
-    if current_user["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
+    if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to delete users"
         )
 
     # Prevent self-deletion
-    if str(current_user["user_id"]) == str(user_id):
+    if str(current_user_info["user_id"]) == str(user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot delete your own account"

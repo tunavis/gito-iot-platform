@@ -20,32 +20,16 @@ import string
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, text
 
 from app.database import RLSSession, get_session
 from app.models.base import Tenant, User, Device, AlertEvent
-from app.security import decode_token, hash_password, create_access_token
+from app.security import hash_password, create_access_token
+from app.dependencies import get_management_tenant
 
 router = APIRouter(prefix="/admin/tenants", tags=["admin"])
-
-
-# ── Auth dependency ─────────────────────────────────────────────────────────
-
-async def _get_management_tenant(authorization: str = Header(None)) -> tuple[UUID, UUID]:
-    """Validates caller is from a management-type tenant. Returns (tenant_id, user_id)."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    payload = decode_token(authorization.split(" ")[1])
-    tenant_id = payload.get("tenant_id")
-    user_id = payload.get("sub")
-    tenant_type = payload.get("tenant_type", "client")
-    if not tenant_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if tenant_type != "management":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Management tenant access required")
-    return UUID(tenant_id), UUID(user_id)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -130,7 +114,7 @@ async def _tenant_summary(session: RLSSession, tenant: Tenant, management_tenant
 @router.get("", response_model=list[TenantSummary])
 async def list_tenants(
     session: Annotated[RLSSession, Depends(get_session)],
-    current: Annotated[tuple[UUID, UUID], Depends(_get_management_tenant)],
+    current: Annotated[tuple[UUID, UUID], Depends(get_management_tenant)],
 ):
     """List all child tenants of the management tenant."""
     management_tenant_id, _ = current
@@ -157,7 +141,7 @@ async def list_tenants(
 async def create_tenant(
     body: CreateTenantRequest,
     session: Annotated[RLSSession, Depends(get_session)],
-    current: Annotated[tuple[UUID, UUID], Depends(_get_management_tenant)],
+    current: Annotated[tuple[UUID, UUID], Depends(get_management_tenant)],
 ):
     """Create a new client tenant and its first admin user."""
     management_tenant_id, _ = current
@@ -222,7 +206,7 @@ async def create_tenant(
 async def get_tenant(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
-    current: Annotated[tuple[UUID, UUID], Depends(_get_management_tenant)],
+    current: Annotated[tuple[UUID, UUID], Depends(get_management_tenant)],
 ):
     """Get details for a specific client tenant."""
     management_tenant_id, _ = current
@@ -255,7 +239,7 @@ async def update_tenant(
     tenant_id: UUID,
     body: UpdateTenantRequest,
     session: Annotated[RLSSession, Depends(get_session)],
-    current: Annotated[tuple[UUID, UUID], Depends(_get_management_tenant)],
+    current: Annotated[tuple[UUID, UUID], Depends(get_management_tenant)],
 ):
     """Update a client tenant's name or status."""
     management_tenant_id, _ = current
