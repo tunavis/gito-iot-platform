@@ -55,10 +55,7 @@ export default function KPICard({
 
   const fetchData = useCallback(async () => {
       try {
-        console.log("[KPICard] data_sources:", data_sources);
-
         if (!data_sources || data_sources.length === 0) {
-          console.log("[KPICard] No data sources configured");
           setValue(null);
           setLoading(false);
           return;
@@ -97,14 +94,6 @@ export default function KPICard({
         const dataPoint = data.data?.[0];
         // Check both direct field and payload JSONB
         const latestValue = dataPoint?.[metricName] ?? dataPoint?.payload?.[metricName];
-
-        console.log("[KPICard] Fetched data:", {
-          deviceId,
-          metricName,
-          dataPointCount: data.data?.length || 0,
-          latestValue,
-          dataPoint
-        });
 
         setValue(latestValue ?? null);
 

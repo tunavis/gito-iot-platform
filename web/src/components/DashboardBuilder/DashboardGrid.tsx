@@ -19,6 +19,7 @@ import ScatterPlotWidget from "../Widgets/ScatterPlotWidget";
 import HeatmapWidget from "../Widgets/HeatmapWidget";
 import StatusMatrixWidget from "../Widgets/StatusMatrixWidget";
 import WidgetWrapper from "../Widgets/WidgetWrapper";
+import ErrorBoundary from "../ErrorBoundary";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -322,7 +323,9 @@ export default function DashboardGrid({
               h: widget.height,
             }}
           >
-            {renderWidget(widget)}
+            <ErrorBoundary widgetId={widget.id} widgetTitle={widget.title}>
+              {renderWidget(widget)}
+            </ErrorBoundary>
           </div>
         ))}
       </ResponsiveGridLayout>

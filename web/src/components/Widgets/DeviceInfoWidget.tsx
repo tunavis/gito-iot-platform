@@ -60,10 +60,7 @@ export default function DeviceInfoWidget({
   useEffect(() => {
     const fetchDevice = async () => {
       try {
-        console.log("[DeviceInfoWidget] dataSources:", dataSources);
-
         if (!dataSources || dataSources.length === 0) {
-          console.log("[DeviceInfoWidget] No data sources configured");
           setDevice(null);
           setLoading(false);
           return;
@@ -80,8 +77,6 @@ export default function DeviceInfoWidget({
         const tenantId = payload.tenant_id;
         const deviceId = dataSources[0].device_id;
 
-        console.log("[DeviceInfoWidget] Fetching device:", deviceId);
-
         const response = await fetch(
           `/api/v1/tenants/${tenantId}/devices/${deviceId}`,
           {
@@ -97,12 +92,9 @@ export default function DeviceInfoWidget({
         }
 
         let data = await response.json();
-        console.log("[DeviceInfoWidget] Device data:", data);
 
         // Handle wrapped response (some endpoints return {data: {...}})
         const deviceData = data.data || data;
-
-        console.log("[DeviceInfoWidget] Unwrapped device:", deviceData);
 
         // Validate essential fields
         if (!deviceData || !deviceData.id) {

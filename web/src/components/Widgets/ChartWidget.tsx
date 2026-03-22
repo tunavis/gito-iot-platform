@@ -161,12 +161,6 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
           return;
         }
 
-        console.log(
-          `[ChartWidget] Fetching ${activeRange} (${rangeHours}h), ` +
-          `aggregation=${aggregationType}, resolved sources:`,
-          effectiveSources
-        );
-
         // Fetch telemetry for each resolved source
         const promises = effectiveSources.map(async (src) => {
           const params = new URLSearchParams({
@@ -192,10 +186,6 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
           }
 
           const result = await response.json();
-          console.log(
-            `[ChartWidget] ${src.metric}: ${result.data?.length || 0} points`,
-            result.data?.slice(0, 2)
-          );
           return {
             metric: src.metric,
             alias: src.alias,
@@ -251,16 +241,6 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         // Sort ascending (oldest first) for chart display
         const sortedData = Object.values(mergedData).sort(
           (a, b) => a._ts - b._ts
-        );
-
-        console.log(
-          `[ChartWidget] Merged ${sortedData.length} data points`,
-          sortedData.length > 0
-            ? {
-                first: sortedData[0],
-                last: sortedData[sortedData.length - 1],
-              }
-            : "empty"
         );
 
         setChartData(sortedData);
