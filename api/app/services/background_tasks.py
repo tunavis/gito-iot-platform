@@ -138,7 +138,7 @@ class NotificationBackgroundTasks:
                         # Mark as processing
                         queue_item.status = "processing"
                         queue_item.attempted_at = datetime.utcnow()
-                        session.commit()
+                        await session.commit()
                         
                         # Dispatch the notification
                         dispatcher = NotificationDispatcher(
@@ -172,7 +172,7 @@ class NotificationBackgroundTasks:
                             }
                         )
                     finally:
-                        session.commit()
+                        await session.commit()
             finally:
                 await session_gen.aclose()
         except Exception as e:
@@ -238,14 +238,14 @@ class NotificationBackgroundTasks:
                             logger.warning(
                                 f"Channel {notif.channel_id} not found for notification {notif.id}"
                             )
-                            session.commit()
+                            await session.commit()
                             continue
-                        
+
                         service = ChannelFactory.create_service(channel.channel_type)
                         if not service:
                             notif.status = "failed"
                             notif.error_message = f"Service not available: {channel.channel_type}"
-                            session.commit()
+                            await session.commit()
                             continue
                         
                         # Attempt to send again (use existing content from notification record)
@@ -260,7 +260,7 @@ class NotificationBackgroundTasks:
                             f"Error retrying notification {notif.id}: {e}"
                         )
                     finally:
-                        session.commit()
+                        await session.commit()
             finally:
                 await session_gen.aclose()
         except Exception as e:
@@ -292,22 +292,11 @@ class NotificationBackgroundTasks:
                 
                 if not old_notifications:
                     return
-                
-                # Soft delete: mark as archived instead of permanent delete
+
                 for notif in old_notifications:
-                    # Could add an 'archived_at' field instead of deleting
-                    # For now, we'll just log
-                    logger.debug(
-                        f"Old notification eligible for cleanup: {notif.id}",
-                        extra={
-                            "created_at": notif.created_at.isoformat(),
-                            "status": notif.status
-                        }
-                    )
-                
-                logger.info(
-                    f"Found {len(old_notifications)} old notifications for cleanup"
-                )
+                    await session.delete(notif)
+                await session.commit()
+                logger.info(f"Cleaned up {len(old_notifications)} old notifications")
             finally:
                 await session_gen.aclose()
         except Exception as e:
