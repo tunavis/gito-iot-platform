@@ -234,7 +234,7 @@ Return HTTP 200 for healthy, 503 for unhealthy. Docker health checks and CI can 
 
 **Data model:**
 ```sql
-ALTER TABLE dashboards ADD COLUMN share_token VARCHAR(64) UNIQUE;
+ALTER TABLE dashboards ADD COLUMN share_token VARCHAR(128) UNIQUE;
 ALTER TABLE dashboards ADD COLUMN share_enabled BOOLEAN DEFAULT false;
 ALTER TABLE dashboards ADD COLUMN share_expires_at TIMESTAMPTZ;
 ALTER TABLE dashboards ADD COLUMN share_password_hash VARCHAR(255);
@@ -427,7 +427,7 @@ CREATE TABLE report_history (
   generated_at TIMESTAMPTZ DEFAULT NOW(),
   file_path VARCHAR(500), -- stored PDF path on mounted volume
   status VARCHAR(20) DEFAULT 'generated', -- 'generated', 'sent', 'failed'
-  expires_at TIMESTAMPTZ -- auto-delete after 90 days
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '90 days'
 );
 ```
 
