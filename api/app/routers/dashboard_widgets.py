@@ -1,6 +1,6 @@
 """Dashboard widget management routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, delete
 from typing import Annotated
 from uuid import UUID
@@ -16,7 +16,7 @@ from app.schemas.dashboard import (
     DeviceBindingRequest
 )
 from app.schemas.common import SuccessResponse
-from app.security import decode_token
+from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -24,30 +24,6 @@ router = APIRouter(
     prefix="/tenants/{tenant_id}/dashboards/{dashboard_id}/widgets",
     tags=["dashboard-widgets"]
 )
-
-
-async def get_current_user(
-    authorization: str = Header(None),
-) -> tuple[UUID, UUID]:
-    """Extract and validate tenant_id and user_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-    user_id = payload.get("sub")  # user_id is stored in "sub" field
-
-    if not tenant_id or not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id or user_id",
-        )
-
-    return UUID(tenant_id), UUID(user_id)
 
 
 async def verify_dashboard_ownership(

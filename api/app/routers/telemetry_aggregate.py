@@ -6,7 +6,7 @@ for efficient pre-computed rollups. Falls back to raw telemetry for the most
 recent data that hasn't been materialized yet (within the refresh lag).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from uuid import UUID
 import logging
@@ -14,21 +14,10 @@ import logging
 from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
 from app.schemas.common import SuccessResponse
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 router = APIRouter(prefix="/tenants/{tenant_id}/telemetry", tags=["telemetry-aggregate"])
 logger = logging.getLogger(__name__)
-
-
-async def get_current_tenant(authorization: str = Header(None)) -> UUID:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing auth")
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    return UUID(tenant_id)
 
 
 @router.get("/hourly", response_model=SuccessResponse)

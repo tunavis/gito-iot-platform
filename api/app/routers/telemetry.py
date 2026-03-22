@@ -7,7 +7,7 @@ Uses key-value storage pattern (industry-standard like ThingsBoard/Cumulocity):
 - Efficient queries for specific metrics or all metrics
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, text, desc
 from typing import Annotated, Literal, Optional, List, Any, Dict
 from uuid import UUID
@@ -19,34 +19,11 @@ from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
 from app.models.base import Device, Telemetry
 from app.schemas.common import SuccessResponse, PaginationMeta
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/devices/{device_id}/telemetry", tags=["telemetry"])
-
-
-async def get_current_tenant(
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-
-    return UUID(tenant_id)
 
 
 class TelemetryAggregator:

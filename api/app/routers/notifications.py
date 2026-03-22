@@ -4,62 +4,16 @@ import logging
 from typing import List, Optional, Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, and_, func
 
 from app.database import get_session, RLSSession
 from app.models import NotificationChannel, NotificationTemplate, Notification
-from app.security import decode_token
+from app.dependencies import get_current_tenant, get_current_user_id
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/notifications", tags=["notifications"])
-
-
-async def get_current_tenant(
-    tenant_id: UUID,
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token and verify it matches path."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    token_tenant_id = payload.get("tenant_id")
-    
-    if not token_tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-    
-    # Verify path tenant matches token tenant
-    if str(tenant_id) != str(token_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
-        )
-    
-    return UUID(token_tenant_id)
-
-
-async def get_current_user_id(
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract user_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    return UUID(payload["sub"])
 
 
 # ============================================================================
@@ -73,6 +27,8 @@ async def list_channels(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """List all notification channels for tenant."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -106,6 +62,8 @@ async def create_channel(
     current_user_id: Annotated[UUID, Depends(get_current_user_id)],
 ):
     """Create a new notification channel."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     channel = NotificationChannel(
@@ -140,6 +98,8 @@ async def update_channel(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update a notification channel."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -186,6 +146,8 @@ async def delete_channel(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Delete a notification channel."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -218,6 +180,8 @@ async def list_templates(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """List all notification templates for tenant."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     result = await session.execute(
@@ -254,6 +218,8 @@ async def list_notifications(
     per_page: int = Query(50, ge=1, le=100),
 ):
     """List notification delivery history."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
     offset = (page - 1) * per_page

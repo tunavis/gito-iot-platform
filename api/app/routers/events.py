@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
@@ -17,27 +17,9 @@ from app.database import RLSSession, get_session
 from app.services.tenant_access import validate_tenant_access
 from app.models.event import Event
 from app.models.base import Device
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 router = APIRouter(prefix="/tenants/{tenant_id}/events", tags=["events"])
-
-
-# ── Auth dependency ────────────────────────────────────────────────────────────
-
-async def _get_current_tenant(authorization: str = Header(None)) -> UUID:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    payload = decode_token(authorization.split(" ")[1])
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-    return UUID(tenant_id)
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -74,7 +56,7 @@ class EventListResponse(BaseModel):
 async def list_events(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(_get_current_tenant)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     device_id: Optional[UUID] = Query(None),
     event_type: Optional[str] = Query(None),
     severity: Optional[str] = Query(None, pattern="^(INFO|WARNING|ERROR|CRITICAL)$"),
@@ -150,7 +132,7 @@ async def create_event(
     tenant_id: UUID,
     body: EventCreate,
     session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(_get_current_tenant)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Emit a custom event (for automation rules, webhooks, or manual testing)."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):

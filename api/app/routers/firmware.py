@@ -25,7 +25,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,27 +42,12 @@ from app.models.firmware import (
     OTACampaignDeviceResponse,
     DeviceFirmwareHistoryResponse,
 )
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 from app.services.ota_dispatch import OTADispatchService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["firmware"])
-
-
-def _get_tenant_from_token(authorization: str = Header(None)) -> UUID:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
-    payload = decode_token(authorization.split(" ")[1])
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: missing tenant_id")
-    return UUID(tenant_id)
-
-
-def _check_tenant(path_tenant_id: UUID, token_tenant_id: UUID) -> None:
-    if str(path_tenant_id) != str(token_tenant_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
 
 
 # ---------------------------------------------------------------------------
@@ -77,10 +62,11 @@ def _check_tenant(path_tenant_id: UUID, token_tenant_id: UUID) -> None:
 async def create_firmware_version(
     tenant_id: UUID,
     body: FirmwareVersionCreate,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     fw = FirmwareVersion(
@@ -105,10 +91,11 @@ async def list_firmware_versions(
     release_type: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     q = select(FirmwareVersion).where(FirmwareVersion.tenant_id == tenant_id)
@@ -124,10 +111,11 @@ async def list_firmware_versions(
 async def get_firmware_version(
     tenant_id: UUID,
     firmware_id: UUID,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     fw = (await session.execute(
@@ -142,10 +130,11 @@ async def get_firmware_version(
 async def delete_firmware_version(
     tenant_id: UUID,
     firmware_id: UUID,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     fw = (await session.execute(
@@ -166,10 +155,11 @@ async def delete_firmware_version(
 async def create_campaign(
     tenant_id: UUID,
     body: OTACampaignCreate,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     fw = (await session.execute(
@@ -199,10 +189,11 @@ async def list_campaigns(
     status_filter: Optional[str] = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     q = select(OTACampaign).where(OTACampaign.tenant_id == tenant_id)
@@ -218,10 +209,11 @@ async def list_campaigns(
 async def get_campaign(
     tenant_id: UUID,
     campaign_id: UUID,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     campaign = (await session.execute(
@@ -237,10 +229,11 @@ async def update_campaign(
     tenant_id: UUID,
     campaign_id: UUID,
     body: OTACampaignUpdate,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     campaign = (await session.execute(
@@ -263,10 +256,11 @@ async def update_campaign(
 async def delete_campaign(
     tenant_id: UUID,
     campaign_id: UUID,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     campaign = (await session.execute(
@@ -286,11 +280,12 @@ async def execute_campaign(
     tenant_id: UUID,
     campaign_id: UUID,
     body: OTACampaignExecute,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
     """Start an OTA campaign — adds devices and submits Cadence workflows."""
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     campaign = (await session.execute(
@@ -370,10 +365,11 @@ async def execute_campaign(
 async def campaign_status(
     tenant_id: UUID,
     campaign_id: UUID,
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     campaign = (await session.execute(
@@ -414,10 +410,11 @@ async def device_firmware_history(
     device_id: UUID,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    current_tenant_id: UUID = Depends(_get_tenant_from_token),
+    current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    _check_tenant(tenant_id, current_tenant_id)
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
     # Verify device belongs to tenant

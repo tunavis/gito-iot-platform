@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.database import get_session, RLSSession
@@ -22,7 +22,7 @@ from app.models.device_type import DeviceType
 from app.schemas.commands import CommandCreate, CommandListResponse, CommandResponse
 from app.services.command_dispatch import CommandDispatchService
 from app.services.tenant_access import validate_tenant_access
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -32,24 +32,6 @@ router = APIRouter(
 )
 
 _dispatch = CommandDispatchService()
-
-
-async def get_current_tenant(authorization: str = Header(None)) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-    return UUID(tenant_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 """Notification Rules API - Route alerts to notification channels."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
@@ -16,32 +16,9 @@ from app.schemas.notification_rule import (
     NotificationRuleResponse,
 )
 from app.schemas.common import SuccessResponse, PaginationMeta
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 router = APIRouter(prefix="/tenants/{tenant_id}/notification-rules", tags=["notification-rules"])
-
-
-async def get_current_tenant(
-    authorization: str = Header(None),
-) -> UUID:
-    """Extract and validate tenant_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    tenant_id = payload.get("tenant_id")
-
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-
-    return UUID(tenant_id)
 
 
 @router.get("", response_model=SuccessResponse)

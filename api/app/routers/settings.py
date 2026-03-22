@@ -7,34 +7,16 @@ PUT  /tenants/{id}/settings/profile  → update name and metadata fields
 from typing import Annotated, Any, Dict, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, text
 
 from app.database import RLSSession, get_session
 from app.services.tenant_access import validate_tenant_access
 from app.models.base import Tenant
-from app.security import decode_token
+from app.dependencies import get_current_tenant
 
 router = APIRouter(prefix="/tenants/{tenant_id}/settings", tags=["settings"])
-
-
-# ── Auth dependency ────────────────────────────────────────────────────────────
-
-async def _get_current_tenant(authorization: str = Header(None)) -> UUID:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    payload = decode_token(authorization.split(" ")[1])
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing tenant_id",
-        )
-    return UUID(tenant_id)
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -92,7 +74,7 @@ def _build_profile(tenant: Tenant) -> TenantProfileResponse:
 async def get_profile(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(_get_current_tenant)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Return tenant profile and configuration."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
@@ -112,7 +94,7 @@ async def update_profile(
     tenant_id: UUID,
     body: TenantProfileUpdate,
     session: Annotated[RLSSession, Depends(get_session)],
-    current_tenant: Annotated[UUID, Depends(_get_current_tenant)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
 ):
     """Update tenant name and metadata fields."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
