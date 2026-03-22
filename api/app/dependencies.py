@@ -154,6 +154,12 @@ async def get_management_tenant(authorization: str = Header(None)) -> tuple[UUID
             detail="Invalid token",
         )
 
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing user_id",
+        )
+
     if tenant_type != "management":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

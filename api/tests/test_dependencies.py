@@ -222,3 +222,11 @@ class TestGetManagementTenant:
             with pytest.raises(HTTPException) as exc_info:
                 await get_management_tenant(authorization="Bearer valid.token.here")
         assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_missing_user_id_raises_401(self):
+        payload_no_user = {"tenant_id": TENANT_ID, "tenant_type": "management"}
+        with patch("app.dependencies.decode_token", return_value=payload_no_user):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_management_tenant(authorization="Bearer valid.token.here")
+        assert exc_info.value.status_code == 401

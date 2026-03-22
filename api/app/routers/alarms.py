@@ -5,9 +5,8 @@ Following Cumulocity patterns: ACTIVE → ACKNOWLEDGED → CLEARED
 from datetime import datetime
 from typing import Optional, Annotated
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, func, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
@@ -20,7 +19,7 @@ from app.schemas.alarm import (
     AlarmSummary,
     AlarmListResponse,
 )
-from app.dependencies import get_current_tenant
+from app.dependencies import get_current_tenant, get_current_user_id
 
 router = APIRouter(prefix="/tenants/{tenant_id}/alarms", tags=["Alarms"])
 
@@ -206,7 +205,7 @@ async def acknowledge_alarm(
     alarm_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    authorization: str = Header(None),
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
 ):
     """
     Acknowledge an alarm (transition ACTIVE → ACKNOWLEDGED)
@@ -214,12 +213,7 @@ async def acknowledge_alarm(
     """
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
-    # Get user ID from token
-    token = authorization.split(" ")[1]
-    payload = decode_token(token)
-    user_id = UUID(payload.get("sub"))
-    
+
     await session.set_tenant_context(tenant_id)
 
     # Get alarm
