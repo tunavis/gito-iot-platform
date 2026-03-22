@@ -108,7 +108,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["x-total-count", "x-page"],
     )
-    
+
+    # Rate limiting (slowapi)
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from app.limiter import limiter
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
     # Health check endpoint (unauthenticated)
     @app.get("/api/health")
     async def health_check():
