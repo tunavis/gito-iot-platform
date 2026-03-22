@@ -42,7 +42,3 @@ class ApplyTemplateRequest(BaseModel):
         max_length=200,
         description="Override the default dashboard name from the template",
     )
-    create_demo_devices: bool = Field(
-        False,
-        description="If true, create placeholder demo devices for each device type in the template",
-    )

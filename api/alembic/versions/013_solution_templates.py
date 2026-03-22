@@ -58,8 +58,7 @@ def upgrade():
             }'::jsonb,
             '[
                 {"name": "Tank Level Low", "metric_key": "level_percent", "operator": "<", "threshold": 20, "severity": "WARNING", "message": "Tank level low"},
-                {"name": "Tank Level Critical", "metric_key": "level_percent", "operator": "<", "threshold": 10, "severity": "CRITICAL", "message": "Tank level critical"},
-                {"name": "Sensor Offline", "metric_key": "_no_data", "operator": "no_data", "threshold": 900, "severity": "WARNING", "message": "Sensor offline — no data for 15 minutes"}
+                {"name": "Tank Level Critical", "metric_key": "level_percent", "operator": "<", "threshold": 10, "severity": "CRITICAL", "message": "Tank level critical"}
             ]'::jsonb
         )
         ON CONFLICT (slug) DO NOTHING;

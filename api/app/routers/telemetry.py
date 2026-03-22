@@ -586,6 +586,7 @@ async def list_available_metrics(
 
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def ingest_telemetry(
+    request: Request,
     tenant_id: UUID,
     device_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
@@ -656,23 +657,29 @@ async def ingest_telemetry(
     )
     await session.commit()
 
-    # Publish to Redis for WebSocket real-time delivery
-    try:
-        from app.config import get_settings
-        import redis.asyncio as aioredis
-        settings = get_settings()
-        redis_client = await aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-        channel = f"telemetry:{tenant_id}:{device_id}"
-        message = _json.dumps({
-            "device_id": str(device_id),
-            "payload": {k: v for k, v in payload.items() if k not in system_keys},
-            "timestamp": ts.isoformat(),
-        })
-        await redis_client.publish(channel, message)
-        await redis_client.aclose()
-    except Exception as e:
-        # Redis publish failure is non-critical — data is already stored in DB
-        logger.warning(f"Failed to publish telemetry to Redis: {e}")
+    # Publish to Redis for WebSocket real-time delivery + update digital twin cache
+    clean_payload = {k: v for k, v in payload.items() if k not in system_keys}
+    redis_client_app = getattr(request.app.state, "redis", None)
+    if redis_client_app:
+        try:
+            channel = f"telemetry:{tenant_id}:{device_id}"
+            message = _json.dumps({
+                "device_id": str(device_id),
+                "payload": clean_payload,
+                "timestamp": ts.isoformat(),
+            })
+            await redis_client_app.publish(channel, message)
+        except Exception as e:
+            # Redis publish failure is non-critical — data is already stored in DB
+            logger.warning(f"Failed to publish telemetry to Redis: {e}")
+        try:
+            from app.services.digital_twin import DigitalTwinService
+            twin = DigitalTwinService(redis_client_app)
+            await twin.update_device_state(device_id, clean_payload, timestamp=ts.isoformat())
+        except Exception as e:
+            logger.warning(f"Failed to update digital twin cache: {e}")
+    else:
+        logger.debug("app.state.redis not available — skipping pub/sub and digital twin update")
 
     logger.info(f"Ingested {len(rows)} metrics for device {device_id}")
     return SuccessResponse(data={"ingested": len(rows), "timestamp": ts.isoformat()})
