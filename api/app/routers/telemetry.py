@@ -7,7 +7,7 @@ Uses key-value storage pattern (industry-standard like ThingsBoard/Cumulocity):
 - Efficient queries for specific metrics or all metrics
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy import select, func, and_, text, desc
 from typing import Annotated, Literal, Optional, List, Any, Dict
 from uuid import UUID
@@ -676,3 +676,56 @@ async def ingest_telemetry(
 
     logger.info(f"Ingested {len(rows)} metrics for device {device_id}")
     return SuccessResponse(data={"ingested": len(rows), "timestamp": ts.isoformat()})
+
+
+@router.get("/cached")
+async def get_cached_telemetry(
+    request: Request,
+    tenant_id: UUID,
+    device_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+):
+    """
+    Get latest telemetry from digital twin cache (instant, no DB query).
+
+    Returns the last-known-value for every metric stored in the KeyDB hash.
+    Falls back gracefully when the cache has no entry yet (cached=False).
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch",
+        )
+
+    await session.set_tenant_context(tenant_id)
+
+    # Verify device exists and belongs to tenant
+    device_result = await session.execute(
+        select(Device).where(Device.tenant_id == tenant_id, Device.id == device_id)
+    )
+    device = device_result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    redis_client = getattr(request.app.state, "redis", None)
+    if not redis_client:
+        return {"device_id": str(device_id), "metrics": {}, "cached": False}
+
+    from app.services.digital_twin import DigitalTwinService
+    twin = DigitalTwinService(redis_client)
+    state = await twin.get_device_state(device_id)
+
+    if not state:
+        return {"device_id": str(device_id), "metrics": {}, "cached": False}
+
+    updated_at = state.pop("_updated_at", None)
+    return {
+        "device_id": str(device_id),
+        "metrics": state,
+        "updated_at": updated_at,
+        "cached": True,
+    }

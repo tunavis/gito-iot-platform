@@ -926,6 +926,16 @@ class MQTTProcessor:
                 logger.error(f"Failed to buffer telemetry for {device_id}")
                 return
 
+            # ── Update digital twin cache (last-known-value per device) ──
+            try:
+                cache_key = f"device:{device_id}:latest"
+                flat_metrics = {"_updated_at": timestamp.isoformat()}
+                for k, v in payload.items():
+                    flat_metrics[k] = str(v)
+                await self.redis_service.redis.hset(cache_key, mapping=flat_metrics)
+            except Exception as _dt_err:
+                logger.warning("Digital twin update failed for %s: %s", device_id, _dt_err)
+
             # ── Publish to pub/sub for WebSocket delivery ─────────────────
             await self.redis_service.publish_telemetry(tenant_id, device_id, payload)
 
