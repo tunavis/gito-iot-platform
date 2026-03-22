@@ -137,10 +137,6 @@ export default function KPICard({
         setLoading(false);
       } catch (error) {
         console.error("[KPICard] Error fetching data:", error);
-        console.error("[KPICard] Context:", {
-          data_sources,
-          configuration
-        });
         setLoading(false);
       }
     }, [data_sources, metric, show_trend, trend_period, configuration]);

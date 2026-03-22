@@ -323,7 +323,7 @@ export default function DashboardGrid({
               h: widget.height,
             }}
           >
-            <ErrorBoundary widgetId={widget.id} widgetTitle={widget.title}>
+            <ErrorBoundary key={widget.id} widgetId={widget.id} widgetTitle={widget.title}>
               {renderWidget(widget)}
             </ErrorBoundary>
           </div>
