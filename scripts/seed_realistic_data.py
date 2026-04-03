@@ -78,6 +78,16 @@ DEVICE_TYPES = [
         "capabilities": ["temperature", "humidity", "target_temperature", "hvac_state"],
         "telemetry_interval": 600,  # 10 minutes
     },
+    {
+        "name": "VSD Panel",
+        "identifier": "vsd_panel",
+        "description": "Variable speed drive panel for client synchronization R&D testing",
+        "manufacturer": "ABB",
+        "model": "ACS580",
+        "category": "controller",
+        "capabilities": ["current", "power", "energy", "temperature", "pressure"],
+        "telemetry_interval": 120,  # 2 minutes
+    },
 ]
 
 # Real-world locations for devices
