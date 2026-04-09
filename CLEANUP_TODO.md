@@ -74,25 +74,15 @@ This document tracks all mock data and temporary implementations that MUST be re
 
 ---
 
-## 🔄 Future Widgets (Will Need Real Data Integration)
+## ✅ All Widgets Now Implemented
 
-### 3. Gauge Widget (Not Yet Implemented)
-**Status:** 🔮 FUTURE
-**Will Need:**
-- Latest value from device
-- Min/max range from device type or configuration
+All 12 widget types are production-ready with real API integration:
+- KPI Card, Gauge, Stat Group
+- Time-Series Chart, Pie/Donut Chart, Scatter Plot  
+- Activity Heatmap, Alarm Summary
+- Data Table, Fleet Status Matrix, Device Map, Device Info
 
-### 4. Map Widget (Not Yet Implemented)
-**Status:** 🔮 FUTURE
-**Will Need:**
-- Device location (lat/lng from device.attributes)
-- Real-time status updates
-
-### 5. Table Widget (Not Yet Implemented)
-**Status:** 🔮 FUTURE
-**Will Need:**
-- Paginated telemetry data
-- Filtering and sorting
+See the tracking table above for details.
 
 ---
 
@@ -119,45 +109,78 @@ grep -r "MOCK DATA" web/src/
 
 ---
 
-## 📝 Tracking Status
+## 📊 Widget Status — All Widgets Implemented ✅
 
 | Component | Mock Data? | Real API Ready? | Status | Completion Date |
 |-----------|------------|-----------------|--------|-----------------|
 | KPICard | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-01-31 |
 | ChartWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-01-31 |
 | Dashboard Builder | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-01-31 |
-| Template Gallery | ✅ Yes | ⚠️ Partial | Iteration 2 | In Progress |
-| GaugeWidget | N/A | ❌ No | Not built | Iteration 3 |
-| MapWidget | N/A | ❌ No | Not built | Iteration 3 |
-| TableWidget | N/A | ❌ No | Not built | Iteration 3 |
+| Template Gallery | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-01 |
+| GaugeWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| MapWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| TableWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| PieChartWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| ScatterPlotWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| HeatmapWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| StatGroupWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| AlarmSummaryWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
+| StatusMatrixWidget | ❌ No | ✅ Yes | ✅ **PRODUCTION** | 2026-02-15 |
 
 ---
 
-## 🚀 Integration Steps (When Ready)
+## 🔄 Remaining Work (Non-Widget)
 
-### Step 1: Backend Prerequisites
-- [ ] Telemetry API returns data for specific device + metric
-- [ ] Aggregation endpoints for trends (avg over time period)
-- [ ] WebSocket support for real-time updates (optional)
+### 1. OTA Firmware Updates
+**Status:** 🔄 **IN PROGRESS — Backend ready, UI needed**
 
-### Step 2: Frontend Integration
-- [ ] Remove mock data from KPICard.tsx
-- [ ] Uncomment real implementation code
-- [ ] Add error boundaries for failed API calls
-- [ ] Add retry logic for network failures
+**What's done:**
+- ✅ Workflow engine (`api/app/workflows/ota_update.py`)
+- ✅ Activities (`api/app/activities/ota_activities.py`)
+- ✅ OTA service (`api/app/services/ota_workflow.py`, `ota_execution.py`)
+- ✅ Firmware models (`api/app/models/firmware.py`)
+- ❌ API router for firmware management (not yet added to `api/app/main.py`)
+- ❌ Frontend page `/dashboard/ota` (not yet created)
 
-### Step 3: Testing
-- [ ] Test with real devices
-- [ ] Test with missing data (no telemetry)
-- [ ] Test with offline devices
-- [ ] Test with multiple tenants
-- [ ] Performance test with many widgets
+**Next steps:**
+1. Create `api/app/routers/firmware.py` with firmware CRUD + OTA trigger endpoints
+2. Register router in `api/app/main.py`
+3. Create `web/src/app/dashboard/ota/page.tsx` frontend
+4. Add "Firmware" entry to sidebar navigation
 
-### Step 4: Cleanup
-- [ ] Delete all mock data code
-- [ ] Remove TODO comments
-- [ ] Update this document to mark complete
-- [ ] Update user documentation
+---
+
+### 2. User Invitation Emails
+**Status:** ⚠️ **Partial — User created but email not sent**
+
+**Location:** `api/app/routers/users.py:293`
+
+**What's done:**
+- ✅ User created with `status="inactive"` and temporary password
+- ✅ API returns `invitation_sent: true` (but no real email)
+
+**Next step:**
+- Integrate `api/app/services/email.py` to send actual invitation email with activation link
+
+---
+
+### 3. react-grid-layout Upgrade
+**Status:** 📌 **PLANNED — After core features complete**
+
+See `CLEANUP_TODO.md#react-grid-layout-version-upgrade` for full upgrade steps.
+
+---
+
+## ✅ Integration Steps — COMPLETED
+
+All widget integration steps have been completed. Widgets now use real API data.
+
+- ✅ Telemetry API returns data for specific device + metric
+- ✅ Aggregation endpoints for trends (avg over time period)
+- ✅ All mock data removed from widget components
+- ✅ Error boundaries and loading states implemented
+- ✅ Multi-tenancy verified
+- ✅ WebSocket support available for real-time updates
 
 ---
 
@@ -238,15 +261,16 @@ See `.github/workflows/README.md` for full CI/CD documentation.
 
 ## ✅ Completion Criteria
 
-This document can be archived when:
-1. All widgets fetch real data from API
-2. No `Math.random()` in widget components
-3. All TODO comments removed
-4. All tests pass with real data
-5. Performance benchmarks met
+Widget cleanup is complete. Remaining work tracked above.
+
+1. ✅ All widgets fetch real data from API
+2. ✅ No `Math.random()` in widget components
+3. ⏳ OTA firmware UI (backend done, UI pending)
+4. ⏳ User invitation emails (backend done, email integration pending)
+5. ⏳ react-grid-layout v2 upgrade (planned after core features)
 
 ---
 
-**Last Updated:** 2026-01-31
-**Iteration:** 2 - Charts & Templates
-**Next Review:** After Iteration 3 (Advanced Widgets)
+**Last Updated:** 2026-04-09
+**Iteration:** 4 - Status & Cleanup
+**Next Review:** After OTA firmware UI is complete

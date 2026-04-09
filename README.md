@@ -171,16 +171,25 @@ MQTT_PASSWORD=mqtt-password
 ✅ **Production-Ready Features:**
 - Authentication & Authorization (RBAC)
 - Multi-tenancy (Row-level security)
-- Device Management
-- Alert Rules & Alarms
-- Notifications (Email)
-- Dashboard Builder (KPI Cards, Charts)
+- Device Management (with Sites, Groups, Device Types)
+- Alert Rules & Alarms (THRESHOLD and COMPOSITE rules)
+- Alert rule preview evaluation (historical telemetry matching)
+- Notifications (Email) & Notification Rules
+- Dashboard Builder — 12 widget types:
+  - KPI Card, Gauge, Stat Group
+  - Time-Series Chart, Pie/Donut Chart, Scatter Plot
+  - Activity Heatmap, Alarm Summary
+  - Data Table, Fleet Status Matrix
+  - Device Map (GPS), Device Info
 - Solution Templates
+- Analytics & Fleet Overview
+- Audit Logs
 
-⏳ **Planned:**
-- Gauge/Map/Table widgets
+⏳ **In Progress / Planned:**
+- OTA firmware updates (backend workflow ready; API router + UI page pending)
+- User invitation emails (user creation works; email delivery pending)
 - Grafana integration
-- OTA firmware updates
+- react-grid-layout upgrade to v2.x+
 
 ---
 

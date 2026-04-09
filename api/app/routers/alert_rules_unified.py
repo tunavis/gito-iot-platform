@@ -13,15 +13,17 @@ Endpoints:
 """
 
 import logging
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, text
 
 from app.database import get_session, RLSSession
-from app.models.unified_alert_rule import UnifiedAlertRule
-from app.models.base import Device
+from app.models.unified_alert_rule import UnifiedAlertRule, OPERATOR_DB_TO_API
+from app.models.base import Device, Telemetry
 from app.schemas.alert_unified import (
     AlertRuleCreate,
     AlertRuleUpdate,
@@ -438,14 +440,129 @@ async def preview_alert_rule(
             detail="Alert rule not found",
         )
     
-    # TODO: Implement actual rule evaluation against historical data
-    # For now, return a placeholder response
+    start_ms = time.monotonic()
+
+    preview_hours = 24
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=preview_hours)
+
+    matching_alerts: list[dict] = []
+
+    if rule.rule_type == "THRESHOLD" and rule.device_id and rule.metric and rule.operator and rule.threshold is not None:
+        # Evaluate THRESHOLD rule against recent telemetry rows
+        operator_map = {
+            ">":  lambda v, t: v > t,
+            ">=": lambda v, t: v >= t,
+            "<":  lambda v, t: v < t,
+            "<=": lambda v, t: v <= t,
+            "==": lambda v, t: v == t,
+            "!=": lambda v, t: v != t,
+        }
+        op_fn = operator_map.get(rule.operator)
+
+        telemetry_rows = await session.execute(
+            select(Telemetry.ts, Telemetry.metric_value)
+            .where(
+                and_(
+                    Telemetry.tenant_id == current_tenant,
+                    Telemetry.device_id == rule.device_id,
+                    Telemetry.metric_key == rule.metric,
+                    Telemetry.metric_value.isnot(None),
+                    Telemetry.ts >= cutoff,
+                )
+            )
+            .order_by(Telemetry.ts.desc())
+            .limit(500)
+        )
+        rows = telemetry_rows.all()
+
+        operator_api = OPERATOR_DB_TO_API.get(rule.operator, rule.operator)
+
+        for row in rows:
+            if op_fn and op_fn(row.metric_value, rule.threshold):
+                matching_alerts.append({
+                    "timestamp": row.ts.isoformat(),
+                    "metric": rule.metric,
+                    "value": row.metric_value,
+                    "operator": operator_api,
+                    "threshold": rule.threshold,
+                })
+
+    elif rule.rule_type in ("COMPOSITE", "COMPLEX") and rule.device_id and rule.conditions:
+        # For COMPOSITE rules, fetch telemetry for all referenced metrics and evaluate each row
+        metrics = list({c.get("field") for c in rule.conditions if c.get("field")})
+        logic = (rule.logic or "AND").upper()
+
+        operator_map = {
+            ">":  lambda v, t: v > t,
+            ">=": lambda v, t: v >= t,
+            "<":  lambda v, t: v < t,
+            "<=": lambda v, t: v <= t,
+            "==": lambda v, t: v == t,
+            "!=": lambda v, t: v != t,
+        }
+
+        if metrics:
+            # Pivot rows by timestamp (1-minute buckets) to evaluate multi-metric conditions
+            telemetry_rows = await session.execute(
+                select(
+                    func.date_trunc("minute", Telemetry.ts).label("bucket"),
+                    Telemetry.metric_key,
+                    func.avg(Telemetry.metric_value).label("avg_val"),
+                )
+                .where(
+                    and_(
+                        Telemetry.tenant_id == current_tenant,
+                        Telemetry.device_id == rule.device_id,
+                        Telemetry.metric_key.in_(metrics),
+                        Telemetry.metric_value.isnot(None),
+                        Telemetry.ts >= cutoff,
+                    )
+                )
+                .group_by(text("bucket"), Telemetry.metric_key)
+                .order_by(text("bucket DESC"))
+                .limit(500)
+            )
+            rows = telemetry_rows.all()
+
+            # Build bucket → {metric: value} mapping
+            from collections import defaultdict
+            buckets: dict = defaultdict(dict)
+            for row in rows:
+                buckets[row.bucket][row.metric_key] = row.avg_val
+
+            for bucket_ts, metric_values in sorted(buckets.items(), reverse=True):
+                condition_results = []
+                for cond in rule.conditions:
+                    field = cond.get("field")
+                    op = cond.get("operator", ">")
+                    threshold = cond.get("threshold")
+                    if field and threshold is not None and field in metric_values:
+                        op_fn = operator_map.get(op)
+                        if op_fn:
+                            condition_results.append(op_fn(metric_values[field], threshold))
+
+                if not condition_results:
+                    continue
+
+                triggered = all(condition_results) if logic == "AND" else any(condition_results)
+                if triggered:
+                    matching_alerts.append({
+                        "timestamp": bucket_ts.isoformat(),
+                        "metric_values": metric_values,
+                        "conditions_met": sum(condition_results),
+                        "conditions_total": len(condition_results),
+                        "logic": logic,
+                    })
+
+    elapsed_ms = int((time.monotonic() - start_ms) * 1000)
+
     return {
         "rule_id": str(rule.id),
-        "rule_name": rule.name,
+        "rule_name": rule.name or f"{rule.metric} Alert" if rule.metric else "Alert Rule",
         "rule_type": rule.rule_type,
-        "matching_alerts": 0,
-        "sample_alerts": [],
-        "evaluation_time_ms": 0,
-        "message": "Preview evaluation not yet implemented",
+        "preview_hours": preview_hours,
+        "matching_alerts": len(matching_alerts),
+        "sample_alerts": matching_alerts[:10],
+        "evaluation_time_ms": elapsed_ms,
+        "message": f"Found {len(matching_alerts)} matching events in the last {preview_hours} hours.",
     }
