@@ -14,6 +14,7 @@ Endpoints:
 
 import logging
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, List
 from uuid import UUID
@@ -447,16 +448,17 @@ async def preview_alert_rule(
 
     matching_alerts: list[dict] = []
 
+    operator_map = {
+        ">":  lambda v, t: v > t,
+        ">=": lambda v, t: v >= t,
+        "<":  lambda v, t: v < t,
+        "<=": lambda v, t: v <= t,
+        "==": lambda v, t: v == t,
+        "!=": lambda v, t: v != t,
+    }
+
     if rule.rule_type == "THRESHOLD" and rule.device_id and rule.metric and rule.operator and rule.threshold is not None:
         # Evaluate THRESHOLD rule against recent telemetry rows
-        operator_map = {
-            ">":  lambda v, t: v > t,
-            ">=": lambda v, t: v >= t,
-            "<":  lambda v, t: v < t,
-            "<=": lambda v, t: v <= t,
-            "==": lambda v, t: v == t,
-            "!=": lambda v, t: v != t,
-        }
         op_fn = operator_map.get(rule.operator)
 
         telemetry_rows = await session.execute(
@@ -492,15 +494,6 @@ async def preview_alert_rule(
         metrics = list({c.get("field") for c in rule.conditions if c.get("field")})
         logic = (rule.logic or "AND").upper()
 
-        operator_map = {
-            ">":  lambda v, t: v > t,
-            ">=": lambda v, t: v >= t,
-            "<":  lambda v, t: v < t,
-            "<=": lambda v, t: v <= t,
-            "==": lambda v, t: v == t,
-            "!=": lambda v, t: v != t,
-        }
-
         if metrics:
             # Pivot rows by timestamp (1-minute buckets) to evaluate multi-metric conditions
             telemetry_rows = await session.execute(
@@ -525,7 +518,6 @@ async def preview_alert_rule(
             rows = telemetry_rows.all()
 
             # Build bucket → {metric: value} mapping
-            from collections import defaultdict
             buckets: dict = defaultdict(dict)
             for row in rows:
                 buckets[row.bucket][row.metric_key] = row.avg_val
