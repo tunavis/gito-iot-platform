@@ -431,7 +431,7 @@ class Integration(BaseModel):
     __table_args__ = (
         Index("idx_integrations_tenant", "tenant_id"),
         CheckConstraint(
-            "provider IN ('chirpstack', 'ttn', 'helium', 'actility', 'custom')",
+            "provider IN ('chirpstack', 'ttn', 'helium', 'actility', 'custom', 'mqtt', 'http')",
             name="valid_provider",
         ),
     )

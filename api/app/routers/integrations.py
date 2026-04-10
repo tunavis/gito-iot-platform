@@ -53,10 +53,16 @@ def _generate_key() -> tuple[str, str, str]:
     return raw, key_hash, key_prefix
 
 
-def _webhook_url(provider: str) -> str:
+def _connection_endpoint(provider: str) -> str:
     settings = get_settings()
     base = getattr(settings, "API_BASE_URL", "https://iot.gito.co.za")
-    return f"{base}/api/v1/ingest/lorawan/{provider}"
+    if provider == "mqtt":
+        domain = base.replace("https://", "").replace("http://", "").split("/")[0]
+        return f"mqtt://{domain}:1883"
+    elif provider == "http":
+        return f"{base}/api/v1/ingest/http"
+    else:
+        return f"{base}/api/v1/ingest/lorawan/{provider}"
 
 
 async def _validate_tenant(
@@ -99,7 +105,7 @@ async def create_integration(
     await session.commit()
     await session.refresh(integration)
 
-    webhook_url = _webhook_url(body.provider.value)
+    webhook_url = _connection_endpoint(body.provider.value)
     instructions = build_setup_instructions(body.provider.value, webhook_url, key_prefix)
 
     return IntegrationCreatedResponse(
@@ -167,7 +173,7 @@ async def get_integration(
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
 
-    webhook_url = _webhook_url(integration.provider)
+    webhook_url = _connection_endpoint(integration.provider)
     instructions = build_setup_instructions(integration.provider, webhook_url, integration.key_prefix)
 
     response_data = IntegrationResponse.model_validate(integration, from_attributes=True).model_dump()
@@ -281,7 +287,7 @@ async def rotate_key(
     await session.commit()
     await session.refresh(integration)
 
-    webhook_url = _webhook_url(integration.provider)
+    webhook_url = _connection_endpoint(integration.provider)
     instructions = build_setup_instructions(integration.provider, webhook_url, key_prefix)
 
     return IntegrationCreatedResponse(

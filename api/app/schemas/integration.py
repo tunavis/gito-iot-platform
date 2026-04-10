@@ -50,6 +50,26 @@ PROVIDER_DOCS = {
             "Link your devices to this application server",
         ],
     },
+    "mqtt": {
+        "name": "MQTT",
+        "docs_url": None,
+        "steps": [
+            "Configure your MQTT client or gateway to connect to: {webhook_url}",
+            "Use your device EUI or identifier as the MQTT username",
+            "Use this key as the MQTT password: {key_preview}...",
+            "Publish telemetry to topic: devices/<dev_eui>/telemetry",
+            'Payload must be JSON: { "metric_key": value, ... }',
+        ],
+    },
+    "http": {
+        "name": "HTTP Ingest",
+        "docs_url": None,
+        "steps": [
+            "POST device telemetry as JSON to: {webhook_url}",
+            "Add header: Authorization = Bearer {key_preview}...",
+            'Payload must be JSON: { "dev_eui": "...", "metrics": { "temperature": 22.5 } }',
+        ],
+    },
     "custom": {
         "name": "Custom / Other",
         "docs_url": None,
@@ -67,6 +87,8 @@ class ProviderEnum(str, Enum):
     ttn = "ttn"
     helium = "helium"
     actility = "actility"
+    mqtt = "mqtt"
+    http = "http"
     custom = "custom"
 
 
