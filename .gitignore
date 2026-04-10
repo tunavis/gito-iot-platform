@@ -2,6 +2,9 @@
 # GITO IOT PLATFORM - GITIGNORE
 # ============================================================================
 
+# Git worktrees
+.worktrees/
+
 # Environment variables (NEVER commit .env with secrets)
 .env
 .env.local
