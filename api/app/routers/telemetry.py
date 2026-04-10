@@ -624,6 +624,16 @@ async def ingest_telemetry(
     ts = datetime.now(timezone.utc)
     system_keys = {"timestamp", "ts", "device_id", "tenant_id", "id"}
 
+    # Apply key mapping from device type (raw device keys → canonical keys)
+    if device.device_type_id:
+        from app.models.base import DeviceType
+        dt_result = await session.execute(
+            select(DeviceType.key_mapping).where(DeviceType.id == device.device_type_id)
+        )
+        key_mapping = dt_result.scalar_one_or_none()
+        if key_mapping:
+            payload = {key_mapping.get(k, k): v for k, v in payload.items()}
+
     rows = []
     for key, value in payload.items():
         if key in system_keys:

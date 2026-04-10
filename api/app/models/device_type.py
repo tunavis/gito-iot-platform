@@ -68,7 +68,10 @@ class DeviceType(BaseModel):
     
     # Extra Metadata - custom fields (renamed from 'metadata' to avoid SQLAlchemy conflict)
     extra_metadata = Column("metadata", JSONB, nullable=True, default=dict)
-    
+
+    # Key Mapping - maps device telemetry keys to standard metric names
+    key_mapping = Column(JSONB, nullable=False, default={})
+
     # Status
     is_active = Column(Boolean, default=True, nullable=False)
     device_count = Column(Integer, default=0, nullable=False)  # cached count

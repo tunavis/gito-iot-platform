@@ -90,6 +90,20 @@ async def ingest_with_token(
 
     ts = datetime.now(timezone.utc)
 
+    # Apply key mapping from device type (raw device keys → canonical keys)
+    device_type_result = await session.execute(
+        text(
+            "SELECT dt.key_mapping FROM devices d "
+            "JOIN device_types dt ON d.device_type_id = dt.id "
+            "WHERE d.id = :device_id"
+        ),
+        {"device_id": str(device_id)},
+    )
+    dt_row = device_type_result.fetchone()
+    key_mapping = (dt_row[0] if dt_row and dt_row[0] else {}) if dt_row else {}
+    if key_mapping:
+        payload = {key_mapping.get(k, k): v for k, v in payload.items()}
+
     rows = []
     for key, value in payload.items():
         if key in SYSTEM_KEYS:

@@ -78,11 +78,20 @@ export default function DeviceVisualization({
   // When no schema is declared, fall back to showing every non-null metric.
   const schemaKeys = useMemo(() => Object.keys(telemetrySchema), [telemetrySchema]);
 
-  // Metrics already rendered as overlays on the illustration — exclude from the grid
+  // Metrics already rendered as overlays on the illustration — exclude from the grid.
+  // Only count overlays that actually have live data — empty overlays are hidden.
   const overlayMetricKeys = useMemo(
-    () => new Set(templateConfig?.overlays.map(o => o.metric) ?? []),
-    [templateConfig]
+    () => new Set(
+      (templateConfig?.overlays ?? [])
+        .filter(o => latestValues[o.metric] !== null && latestValues[o.metric] !== undefined)
+        .map(o => o.metric)
+    ),
+    [templateConfig, latestValues]
   );
+
+  // If template resolved but none of its overlays have data, don't show the illustration —
+  // fall back to the metric grid so orphan metrics render cleanly instead of next to an empty diagram.
+  const showTemplate = templateConfig !== null && overlayMetricKeys.size > 0;
 
   const resolvedMetrics = useMemo<Array<{ key: string; def: MetricDefinition }>>(() => {
     return Object.entries(latestValues)
@@ -97,13 +106,13 @@ export default function DeviceVisualization({
       }));
   }, [latestValues, schemaDefinitions, schemaKeys]);
 
-  // When a template is active, only the metrics NOT already shown as overlays
-  // appear in the right-hand grid — avoids showing the same value twice.
+  // When a template is active and has live overlays, only the metrics NOT already
+  // shown as overlays appear in the right-hand grid — avoids showing the same value twice.
   const gridMetrics = useMemo(
-    () => templateConfig
+    () => showTemplate
       ? resolvedMetrics.filter(({ key }) => !overlayMetricKeys.has(key))
       : resolvedMetrics,
-    [resolvedMetrics, overlayMetricKeys, templateConfig]
+    [resolvedMetrics, overlayMetricKeys, showTemplate]
   );
 
   // ── Loading state ─────────────────────────────────────────────────────────
@@ -172,7 +181,7 @@ export default function DeviceVisualization({
         </div>
       </div>
 
-      {templateConfig ? (
+      {showTemplate && templateConfig ? (
         /* ── Template layout: illustration left, metrics right ── */
         <div className={`flex flex-col lg:flex-row gap-4 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>
           {/* Illustration — constrained width so it never dominates */}
@@ -192,7 +201,7 @@ export default function DeviceVisualization({
           )}
         </div>
       ) : (
-        /* ── No template: standard metric grid ── */
+        /* ── No template (or template has no live data): standard metric grid ── */
         <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 transition-opacity ${isOffline ? 'opacity-50' : 'opacity-100'}`}>
           {resolvedMetrics.map(({ key, def }) => (
             <MetricRenderer key={key} metricKey={key} value={latestValues[key] ?? null} definition={def} />

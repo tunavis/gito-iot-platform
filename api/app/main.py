@@ -169,6 +169,8 @@ def create_app() -> FastAPI:
     from app.routers import firmware as firmware_router  # OTA firmware management
     from app.routers import admin_tenants as admin_tenants_router  # Tenant management (management tenants only)
     from app.routers import solution_templates as solution_templates_router  # Industry vertical templates
+    from app.routers import integrations as integrations_router  # LoRaWAN integration management
+    from app.routers import lorawan_ingest as lorawan_ingest_router  # Universal LoRaWAN webhook ingest
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
@@ -196,6 +198,8 @@ def create_app() -> FastAPI:
     app.include_router(device_ingest.router, prefix="/api/v1")        # Token-based ingest
     app.include_router(commands.router, prefix="/api/v1")              # Device RPC commands
     app.include_router(solution_templates_router.router, prefix="/api/v1")  # Solution templates
+    app.include_router(integrations_router.router, prefix="/api/v1")       # LoRaWAN integration management
+    app.include_router(lorawan_ingest_router.router, prefix="/api/v1")     # Universal LoRaWAN webhook ingest
     app.include_router(websocket.router, prefix="/api/v1")
     
     # Disabled routers (superseded by unified systems):

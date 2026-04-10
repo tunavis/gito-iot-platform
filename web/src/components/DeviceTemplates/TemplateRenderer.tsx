@@ -104,16 +104,20 @@ export default function TemplateRenderer({ config, telemetry, deviceStatus }: Te
         )}
       </svg>
 
-      {/* Layer 2: Live telemetry overlays */}
-      {config.overlays.map((overlay, i) => (
-        <OverlayWidget
-          key={`${overlay.metric}-${i}`}
-          overlay={overlay}
-          value={telemetry[overlay.metric] ?? null}
-          svgScale={svgScale}
-          crop={crop}
-        />
-      ))}
+      {/* Layer 2: Live telemetry overlays — only render overlays that have data */}
+      {config.overlays.map((overlay, i) => {
+        const value = telemetry[overlay.metric] ?? null;
+        if (value === null || value === undefined) return null;
+        return (
+          <OverlayWidget
+            key={`${overlay.metric}-${i}`}
+            overlay={overlay}
+            value={value}
+            svgScale={svgScale}
+            crop={crop}
+          />
+        );
+      })}
     </div>
   );
 }// v2

@@ -106,6 +106,7 @@ class DeviceTypeCreate(BaseModel):
     connectivity: Optional[ConnectivityConfig] = Field(default=None, description="Connectivity configuration")
     command_schema: Optional[dict] = Field(default={}, description="Available commands with parameter schemas")
     metadata: Optional[dict] = Field(default={}, description="Custom metadata")
+    key_mapping: Optional[Dict[str, str]] = Field(default={}, description="Maps raw device telemetry keys to canonical data_model keys. E.g. {'WATER_FLOW_BOILER': 'flow_rate'}")
 
     @model_validator(mode="after")
     def validate_unique_field_names(self) -> "DeviceTypeCreate":
@@ -137,6 +138,7 @@ class DeviceTypeUpdate(BaseModel):
     connectivity: Optional[ConnectivityConfig] = None
     command_schema: Optional[dict] = None
     metadata: Optional[dict] = None
+    key_mapping: Optional[Dict[str, str]] = None
     is_active: Optional[bool] = None
 
     @model_validator(mode="after")
@@ -171,6 +173,7 @@ class DeviceTypeResponse(BaseModel):
     connectivity: Optional[dict]
     command_schema: Optional[dict] = Field(default={})
     metadata: Optional[dict] = Field(None, validation_alias="extra_metadata")
+    key_mapping: Optional[Dict[str, str]] = Field(default={})
 
     is_active: bool
     device_count: int

@@ -218,6 +218,8 @@ class DatabaseService:
         self._device_cache_ttl: int = 60  # seconds
         # dev_eui → (tenant_id, device_id) cache for LoRaWAN uplinks
         self._deveui_cache: dict[str, tuple[float, tuple[str, str] | None]] = {}
+        # key_mapping cache: {device_id: (monotonic_time, {raw_key: canonical_key})}
+        self._key_mapping_cache: dict[str, tuple[float, dict[str, str]]] = {}
 
     async def connect(self):
         self.conn_pool = AsyncConnectionPool(
@@ -261,6 +263,38 @@ class DatabaseService:
 
         self._unit_cache[device_id] = (now, unit_map)
         return unit_map
+
+    async def get_key_mapping(self, device_id: str) -> dict[str, str]:
+        """Return {raw_key: canonical_key} from device type's key_mapping. Cached 5 min."""
+        now = time.monotonic()
+        cached = self._key_mapping_cache.get(device_id)
+        if cached and (now - cached[0]) < UNIT_CACHE_TTL:
+            return cached[1]
+
+        mapping: dict[str, str] = {}
+        try:
+            async with self.conn_pool.connection() as conn:
+                result = await conn.execute(
+                    "SELECT dt.key_mapping FROM devices d "
+                    "JOIN device_types dt ON d.device_type_id = dt.id WHERE d.id = %s",
+                    (device_id,),
+                )
+                row = await result.fetchone()
+                if row:
+                    raw = row.get("key_mapping") if isinstance(row, dict) else row[0]
+                    if isinstance(raw, dict):
+                        mapping = raw
+        except Exception as e:
+            logger.debug(f"Key mapping lookup failed for {device_id}: {e}")
+
+        self._key_mapping_cache[device_id] = (now, mapping)
+        return mapping
+
+    def apply_key_mapping(self, payload: dict, mapping: dict[str, str]) -> dict:
+        """Rename payload keys using the mapping. Unmapped keys pass through as-is."""
+        if not mapping:
+            return payload
+        return {mapping.get(k, k): v for k, v in payload.items()}
 
     async def device_exists(self, tenant_id: str, device_id: str) -> bool:
         """
@@ -916,6 +950,11 @@ class MQTTProcessor:
                 logger.warning(f"Invalid payload structure for {device_id}")
                 return
 
+            # ── Apply key mapping (raw device keys → canonical keys) ──────
+            key_mapping = await self.db_service.get_key_mapping(device_id)
+            if key_mapping:
+                payload = self.db_service.apply_key_mapping(payload, key_mapping)
+
             timestamp = datetime.utcnow()
 
             # ── Write to KeyDB Stream (async buffer) ─────────────────────
@@ -1146,6 +1185,11 @@ class MQTTProcessor:
             if not self.validator.validate_payload(payload):
                 logger.warning("Invalid ChirpStack payload structure for dev_eui %s", dev_eui)
                 return
+
+            # 6b. Apply key mapping (raw device keys → canonical keys)
+            key_mapping = await self.db_service.get_key_mapping(device_id)
+            if key_mapping:
+                payload = self.db_service.apply_key_mapping(payload, key_mapping)
 
             # 7. Extract LoRaWAN radio metadata as internal __lora_* metrics
             rx_info = cs_msg.get("rxInfo", [])

@@ -391,3 +391,47 @@ class DeviceFirmwareHistory(BaseModel):
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'in_progress', 'completed', 'failed', 'rolled_back')", name="valid_fw_history_status"),
     )
+
+
+# ---------------------------------------------------------------------------
+# LoRaWAN Integrations
+# ---------------------------------------------------------------------------
+
+class Integration(BaseModel):
+    """Tenant integration for external LoRaWAN network server webhooks.
+
+    Stores one row per integration (TTN, ChirpStack, Helium, Actility, custom).
+    The raw integration key is never stored — only its SHA256 hash.
+    """
+    __tablename__ = "integrations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(100), nullable=False)
+    provider = Column(String(50), nullable=False)
+    key_hash = Column(String(64), nullable=False, unique=True)
+    key_prefix = Column(String(12), nullable=False)
+    config = Column(JSONB, nullable=False, server_default="{}")
+    is_active = Column(Boolean, nullable=False, default=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    message_count = Column(Integer, nullable=False, default=0)
+    created_by = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_integrations_tenant", "tenant_id"),
+        CheckConstraint(
+            "provider IN ('chirpstack', 'ttn', 'helium', 'actility', 'custom')",
+            name="valid_provider",
+        ),
+    )

@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@gito-iot.local"
     SMTP_USE_TLS: bool = True
 
+    # Webhook URL base for integration setup instructions
+    API_BASE_URL: str = "https://iot.gito.co.za"
+
     # Features
     ENABLE_MQTT_PROCESSOR: bool = True
 
