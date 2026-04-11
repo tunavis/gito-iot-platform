@@ -55,7 +55,7 @@ def _generate_key() -> tuple[str, str, str]:
 
 def _connection_endpoint(provider: str) -> str:
     settings = get_settings()
-    base = getattr(settings, "API_BASE_URL", "https://iot.gito.co.za")
+    base = settings.API_BASE_URL
     if provider == "mqtt":
         url_without_scheme = base.replace("https://", "").replace("http://", "")
         domain = url_without_scheme.split("/")[0].split(":")[0]

@@ -544,7 +544,8 @@ export default function ConnectionsPage() {
         body: JSON.stringify({ is_active: active }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const updated: Integration = await res.json();
+      const result = await res.json();
+      const updated: Integration = result.data;
       setIntegrations(prev => prev.map(i => i.id === id ? updated : i));
     } catch (err: any) {
       setError(err.message);
