@@ -228,10 +228,8 @@ type ModalStep = 'pick' | 'form' | 'success';
 
 function AddConnectionModal({
   onClose,
-  onCreate,
 }: {
   onClose: () => void;
-  onCreate: (integration: CreatedIntegration) => void;
 }) {
   const [step, setStep] = useState<ModalStep>('pick');
   const [provider, setProvider] = useState<ProviderKey | null>(null);
@@ -267,7 +265,6 @@ function AddConnectionModal({
       const data: CreatedIntegration = await res.json();
       setCreated(data);
       setStep('success');
-      onCreate(data);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -539,6 +536,7 @@ export default function ConnectionsPage() {
   const handleToggle = useCallback(async (id: string, active: boolean) => {
     const auth = getAuth();
     if (!auth) return;
+    setError(null);
     try {
       const res = await fetch(`/api/v1/tenants/${auth.tenantId}/integrations/${id}`, {
         method: 'PUT',
@@ -546,8 +544,8 @@ export default function ConnectionsPage() {
         body: JSON.stringify({ is_active: active }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const result = await res.json();
-      setIntegrations(prev => prev.map(i => i.id === id ? result.data : i));
+      const updated: Integration = await res.json();
+      setIntegrations(prev => prev.map(i => i.id === id ? updated : i));
     } catch (err: any) {
       setError(err.message);
     }
@@ -632,7 +630,6 @@ export default function ConnectionsPage() {
       {showAdd && (
         <AddConnectionModal
           onClose={() => { setShowAdd(false); fetchIntegrations(); }}
-          onCreate={() => {}}
         />
       )}
 
