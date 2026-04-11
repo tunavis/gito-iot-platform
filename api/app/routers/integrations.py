@@ -57,7 +57,8 @@ def _connection_endpoint(provider: str) -> str:
     settings = get_settings()
     base = getattr(settings, "API_BASE_URL", "https://iot.gito.co.za")
     if provider == "mqtt":
-        domain = base.replace("https://", "").replace("http://", "").split("/")[0]
+        url_without_scheme = base.replace("https://", "").replace("http://", "")
+        domain = url_without_scheme.split("/")[0].split(":")[0]
         return f"mqtt://{domain}:1883"
     elif provider == "http":
         return f"{base}/api/v1/ingest/http"
