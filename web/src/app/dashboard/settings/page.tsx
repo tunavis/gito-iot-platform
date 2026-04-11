@@ -3,16 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import {
-  User, Globe, Link2, Database, Save, Check, AlertCircle,
-  Mail, Clock, Server, Key, Wifi, Settings,
+  User, Globe, Database, Save, Check, AlertCircle,
+  Mail, Clock, Settings,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface IntegrationsConfig {
-  mqtt_broker_url?: string;
-  chirpstack_api_key?: string;
-  chirpstack_server?: string;
   smtp_host?: string;
   smtp_port?: number;
   smtp_user?: string;
@@ -30,7 +27,7 @@ interface TenantProfile {
   integrations: IntegrationsConfig;
 }
 
-type Tab = 'profile' | 'integrations' | 'retention';
+type Tab = 'profile' | 'notifications' | 'retention';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -156,7 +153,7 @@ function ProfileTab({
   );
 }
 
-function IntegrationsTab({
+function NotificationsTab({
   profile,
   onSave,
   saving,
@@ -168,9 +165,6 @@ function IntegrationsTab({
   saved: boolean;
 }) {
   const integ = profile.integrations ?? {};
-  const [mqttUrl, setMqttUrl] = useState(integ.mqtt_broker_url ?? '');
-  const [csServer, setCsServer] = useState(integ.chirpstack_server ?? '');
-  const [csKey, setCsKey] = useState(integ.chirpstack_api_key ?? '');
   const [smtpHost, setSmtpHost] = useState(integ.smtp_host ?? '');
   const [smtpPort, setSmtpPort] = useState(String(integ.smtp_port ?? ''));
   const [smtpUser, setSmtpUser] = useState(integ.smtp_user ?? '');
@@ -178,9 +172,6 @@ function IntegrationsTab({
 
   useEffect(() => {
     const i = profile.integrations ?? {};
-    setMqttUrl(i.mqtt_broker_url ?? '');
-    setCsServer(i.chirpstack_server ?? '');
-    setCsKey(i.chirpstack_api_key ?? '');
     setSmtpHost(i.smtp_host ?? '');
     setSmtpPort(String(i.smtp_port ?? ''));
     setSmtpUser(i.smtp_user ?? '');
@@ -191,9 +182,6 @@ function IntegrationsTab({
     e.preventDefault();
     onSave({
       integrations: {
-        mqtt_broker_url: mqttUrl || undefined,
-        chirpstack_server: csServer || undefined,
-        chirpstack_api_key: csKey || undefined,
         smtp_host: smtpHost || undefined,
         smtp_port: smtpPort ? parseInt(smtpPort) : undefined,
         smtp_user: smtpUser || undefined,
@@ -204,36 +192,11 @@ function IntegrationsTab({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* MQTT */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Wifi className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">MQTT Broker</h3>
-        </div>
-        <div className="space-y-0 rounded-xl border border-[var(--color-border)] px-4 bg-[var(--color-panel)]">
-          <FieldRow label="Broker URL" hint="mqtt:// or mqtts:// connection string">
-            <Input value={mqttUrl} onChange={setMqttUrl} placeholder="mqtt://broker.example.com:1883" />
-          </FieldRow>
-        </div>
-      </div>
-
-      {/* ChirpStack */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Server className="w-4 h-4 text-purple-400" />
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">ChirpStack / LoRaWAN</h3>
-        </div>
-        <div className="space-y-0 rounded-xl border border-[var(--color-border)] px-4 bg-[var(--color-panel)]">
-          <FieldRow label="Server URL" hint="ChirpStack gRPC or REST endpoint">
-            <Input value={csServer} onChange={setCsServer} placeholder="https://chirpstack.example.com" />
-          </FieldRow>
-          <FieldRow label="API Key" hint="ChirpStack application API key">
-            <Input value={csKey} onChange={setCsKey} placeholder="eyJ…" type="password" />
-          </FieldRow>
-        </div>
-      </div>
-
-      {/* SMTP */}
+      <p className="text-sm text-[var(--color-text-secondary)]">
+        Configure the SMTP server Gito uses to send alarm and notification emails.
+        To configure device data connections (LoRaWAN, MQTT), visit the{' '}
+        <a href="/dashboard/connections" className="text-blue-400 hover:underline">Connections</a> page.
+      </p>
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Mail className="w-4 h-4 text-emerald-400" />
@@ -254,7 +217,6 @@ function IntegrationsTab({
           </FieldRow>
         </div>
       </div>
-
       <div className="flex justify-end">
         <SaveButton loading={saving} saved={saved} />
       </div>
@@ -376,9 +338,9 @@ export default function SettingsPage() {
   }, [profile]);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'profile',      label: 'Profile',      icon: <User className="w-4 h-4" /> },
-    { id: 'integrations', label: 'Integrations', icon: <Link2 className="w-4 h-4" /> },
-    { id: 'retention',    label: 'Retention',    icon: <Database className="w-4 h-4" /> },
+    { id: 'profile',       label: 'Profile',       icon: <User className="w-4 h-4" /> },
+    { id: 'notifications', label: 'Notifications', icon: <Mail className="w-4 h-4" /> },
+    { id: 'retention',     label: 'Retention',     icon: <Database className="w-4 h-4" /> },
   ];
 
   return (
@@ -424,8 +386,8 @@ export default function SettingsPage() {
             {activeTab === 'profile' && (
               <ProfileTab profile={profile} onSave={handleSave} saving={saving} saved={saved} />
             )}
-            {activeTab === 'integrations' && (
-              <IntegrationsTab profile={profile} onSave={handleSave} saving={saving} saved={saved} />
+            {activeTab === 'notifications' && (
+              <NotificationsTab profile={profile} onSave={handleSave} saving={saving} saved={saved} />
             )}
             {activeTab === 'retention' && (
               <RetentionTab profile={profile} onSave={handleSave} saving={saving} saved={saved} />
