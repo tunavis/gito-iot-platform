@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import {
-  User, Globe, Database, Save, Check, AlertCircle,
-  Mail, Clock, Settings,
+  User, Database, Save, Check, AlertCircle,
+  Mail, Settings,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
