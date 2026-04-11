@@ -22,9 +22,6 @@ router = APIRouter(prefix="/tenants/{tenant_id}/settings", tags=["settings"])
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
 class IntegrationsConfig(BaseModel):
-    mqtt_broker_url: Optional[str] = None
-    chirpstack_api_key: Optional[str] = None
-    chirpstack_server: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None
     smtp_user: Optional[str] = None
