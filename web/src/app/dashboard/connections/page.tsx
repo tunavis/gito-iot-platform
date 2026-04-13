@@ -254,13 +254,15 @@ function ConnectionCard({
               {integration.is_active ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
               {integration.is_active ? 'Deactivate' : 'Activate'}
             </button>
-            <button
-              onClick={() => onRotate(integration.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-amber-400 transition-colors"
-            >
-              <Key className="w-3.5 h-3.5" />
-              Rotate key
-            </button>
+            {integration.provider !== 'chirpstack_mqtt' && (
+              <button
+                onClick={() => onRotate(integration.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-amber-400 transition-colors"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Rotate key
+              </button>
+            )}
             <button
               onClick={() => onDelete(integration.id)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors ml-auto"
@@ -734,7 +736,7 @@ export default function ConnectionsPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      const updated: Integration = result;
+      const updated: Integration = result.data;
       setIntegrations(prev => prev.map(i => i.id === id ? updated : i));
     } catch (err: any) {
       setError(err.message);

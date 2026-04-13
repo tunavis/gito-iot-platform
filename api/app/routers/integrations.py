@@ -114,7 +114,7 @@ async def _get_bridge_status(request: Request, integration_id: str) -> str:
         return "pending"
     try:
         val = await redis.get(f"bridge:status:{integration_id}")
-        return val.decode() if val else "pending"
+        return (val.decode() if isinstance(val, bytes) else val) if val else "pending"
     except Exception:
         return "pending"
 
@@ -146,7 +146,7 @@ async def create_integration(
             provider=body.provider.value,
             key_hash=None,
             key_prefix=None,
-            config=body.config,
+            config=mqtt_conf.model_dump(exclude_none=True),
             created_by=current_user_id,
         )
         session.add(integration)
@@ -229,7 +229,7 @@ async def list_integrations(
                 keys = [f"bridge:status:{iid}" for iid in mqtt_ids]
                 vals = await redis.mget(*keys)
                 for iid, val in zip(mqtt_ids, vals):
-                    bridge_statuses[iid] = val.decode() if val else "pending"
+                    bridge_statuses[iid] = (val.decode() if isinstance(val, bytes) else val) if val else "pending"
             except Exception as e:
                 logger.warning("Failed to fetch bridge statuses: %s", e)
 
@@ -318,6 +318,8 @@ async def update_integration(
     if body.name is not None:
         integration.name = body.name
     if body.config is not None:
+        if integration.provider == "chirpstack_mqtt":
+            MqttConfigValidator(**body.config)  # validate — raises 422 on invalid
         integration.config = body.config
     if body.is_active is not None:
         integration.is_active = body.is_active

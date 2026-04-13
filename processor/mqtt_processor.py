@@ -1049,24 +1049,26 @@ class ChirpStackBridgeManager:
 
     async def _listen_for_changes(self) -> None:
         """Subscribe to Redis integration:changes and trigger sync on each message."""
-        redis = self.redis_service.redis
-        try:
-            async with redis.pubsub() as ps:
-                await ps.subscribe("integration:changes")
-                logger.info("ChirpStackBridgeManager listening on integration:changes")
-                async for message in ps.listen():
-                    if message["type"] != "message":
-                        continue
-                    try:
-                        payload = json.loads(message["data"])
-                        logger.info("Bridge manager received change: %s", payload)
-                    except Exception:
-                        pass
-                    await self._sync()
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error("Bridge manager pub/sub error: %s", e, exc_info=True)
+        while True:
+            redis = self.redis_service.redis
+            try:
+                async with redis.pubsub() as ps:
+                    await ps.subscribe("integration:changes")
+                    logger.info("ChirpStackBridgeManager listening on integration:changes")
+                    async for message in ps.listen():
+                        if message["type"] != "message":
+                            continue
+                        try:
+                            payload = json.loads(message["data"])
+                            logger.info("Bridge manager received change: %s", payload)
+                        except Exception:
+                            pass
+                        await self._sync()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("Bridge manager pub/sub error: %s — reconnecting in 5s", e, exc_info=True)
+                await asyncio.sleep(5)
 
     async def _periodic_sync(self) -> None:
         """Safety-net sync every BRIDGE_SYNC_INTERVAL_S seconds."""
