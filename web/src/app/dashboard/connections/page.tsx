@@ -10,14 +10,15 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type ProviderKey = 'chirpstack' | 'ttn' | 'helium' | 'actility' | 'mqtt' | 'http' | 'custom';
+type ProviderKey = 'chirpstack' | 'ttn' | 'helium' | 'actility' | 'mqtt' | 'http' | 'custom' | 'chirpstack_mqtt';
 
 interface Integration {
   id: string;
   tenant_id: string;
   name: string;
   provider: ProviderKey;
-  key_prefix: string;
+  key_prefix: string | null;
+  bridge_status?: string;
   config: Record<string, string>;
   is_active: boolean;
   last_used_at: string | null;
@@ -41,14 +42,30 @@ interface CreatedIntegration {
   created_at: string;
 }
 
+interface CreatedMqttIntegration {
+  id: string;
+  name: string;
+  provider: ProviderKey;
+  broker_url: string;
+  port: number;
+  bridge_status: string;
+  created_at: string;
+}
+
 // ── Provider metadata ──────────────────────────────────────────────────────────
 
 const PROVIDERS: Record<ProviderKey, { label: string; description: string; icon: React.ReactNode; color: string }> = {
   chirpstack: {
-    label: 'ChirpStack',
-    description: 'Open-source LoRaWAN Network Server',
+    label: 'ChirpStack Webhook',
+    description: 'ChirpStack sends uplinks to Gito (inbound)',
     icon: <Radio className="w-5 h-5" />,
     color: 'text-purple-400',
+  },
+  chirpstack_mqtt: {
+    label: 'ChirpStack MQTT',
+    description: 'Gito subscribes to ChirpStack MQTT broker (outbound)',
+    icon: <Server className="w-5 h-5" />,
+    color: 'text-purple-300',
   },
   ttn: {
     label: 'The Things Network',
@@ -117,6 +134,37 @@ function CopyButton({ value }: { value: string }) {
   );
 }
 
+// ── BridgeStatusDot ────────────────────────────────────────────────────────────
+
+function BridgeStatusDot({ status }: { status: string }) {
+  const isConnected = status === 'connected';
+  const isReconnecting = status === 'reconnecting';
+  const isPending = status === 'pending';
+
+  const color = isConnected
+    ? 'bg-emerald-400'
+    : isReconnecting
+    ? 'bg-amber-400'
+    : isPending
+    ? 'bg-slate-400'
+    : 'bg-red-400';
+
+  const label = isConnected
+    ? 'Connected'
+    : isReconnecting
+    ? 'Reconnecting…'
+    : isPending
+    ? 'Pending'
+    : status.replace('error: ', '');
+
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
+      {label}
+    </span>
+  );
+}
+
 // ── ConnectionCard ─────────────────────────────────────────────────────────────
 
 function ConnectionCard({
@@ -144,13 +192,18 @@ function ConnectionCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{integration.name}</p>
-          <p className="text-xs text-[var(--color-text-secondary)]">{meta.label} · {integration.key_prefix}...</p>
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            {meta.label}{integration.key_prefix ? ` · ${integration.key_prefix}...` : ''}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {integration.is_active
             ? <span className="flex items-center gap-1 text-xs text-emerald-400"><CheckCircle className="w-3.5 h-3.5" />Active</span>
             : <span className="flex items-center gap-1 text-xs text-slate-400"><XCircle className="w-3.5 h-3.5" />Inactive</span>
           }
+          {integration.provider === 'chirpstack_mqtt' && integration.bridge_status && (
+            <BridgeStatusDot status={integration.bridge_status} />
+          )}
           <span className="text-xs text-[var(--color-text-secondary)] pl-2 border-l border-[var(--color-border)]">
             {integration.message_count.toLocaleString()} msgs
           </span>
@@ -239,6 +292,12 @@ function AddConnectionModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedIntegration | null>(null);
+  const [brokerUrl, setBrokerUrl] = useState('');
+  const [brokerPort, setBrokerPort] = useState('1883');
+  const [mqttUsername, setMqttUsername] = useState('');
+  const [mqttPassword, setMqttPassword] = useState('');
+  const [mqttTls, setMqttTls] = useState(false);
+  const [createdMqtt, setCreatedMqtt] = useState<CreatedMqttIntegration | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -248,6 +307,30 @@ function AddConnectionModal({
     setLoading(true);
     setError(null);
     try {
+      if (provider === 'chirpstack_mqtt') {
+        const config: Record<string, unknown> = {
+          broker_url: brokerUrl.trim(),
+          port: parseInt(brokerPort, 10) || 1883,
+          tls: mqttTls,
+        };
+        if (mqttUsername.trim()) config.username = mqttUsername.trim();
+        if (mqttPassword) config.password = mqttPassword;
+
+        const res = await fetch(`/api/v1/tenants/${auth.tenantId}/integrations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+          body: JSON.stringify({ name, provider, config }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Failed to create connection');
+        }
+        const data: CreatedMqttIntegration = await res.json();
+        setCreatedMqtt(data);
+        setStep('success');
+        return;
+      }
+
       const config: Record<string, string> = {};
       if (provider === 'chirpstack') {
         if (serverUrl) config.server_url = serverUrl;
@@ -321,6 +404,70 @@ function AddConnectionModal({
               />
             </div>
 
+            {/* chirpstack_mqtt: outbound MQTT broker config */}
+            {provider === 'chirpstack_mqtt' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
+                    Broker address
+                  </label>
+                  <input
+                    value={brokerUrl}
+                    onChange={e => setBrokerUrl(e.target.value)}
+                    placeholder="10.0.0.5"
+                    required
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
+                    Port
+                  </label>
+                  <input
+                    value={brokerPort}
+                    onChange={e => setBrokerPort(e.target.value)}
+                    placeholder="1883"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
+                    Username <span className="text-[var(--color-text-secondary)] font-normal">(optional)</span>
+                  </label>
+                  <input
+                    value={mqttUsername}
+                    onChange={e => setMqttUsername(e.target.value)}
+                    placeholder="admin"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
+                    Password <span className="text-[var(--color-text-secondary)] font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={mqttPassword}
+                    onChange={e => setMqttPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mqttTls}
+                    onChange={e => setMqttTls(e.target.checked)}
+                    className="rounded"
+                  />
+                  Use TLS
+                </label>
+              </>
+            )}
+
             {/* ChirpStack-specific: outbound config */}
             {provider === 'chirpstack' && (
               <>
@@ -364,7 +511,41 @@ function AddConnectionModal({
           </form>
         )}
 
-        {/* Step: success */}
+        {/* Step: success — MQTT bridge */}
+        {step === 'success' && createdMqtt && (
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              Bridge created — connecting to ChirpStack MQTT…
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">Broker</p>
+              <div className="flex items-center gap-2 font-mono text-xs bg-black/20 rounded-lg px-3 py-2">
+                <span className="flex-1 text-[var(--color-text-primary)]">
+                  {createdMqtt.broker_url}:{createdMqtt.port}
+                </span>
+                <CopyButton value={`${createdMqtt.broker_url}:${createdMqtt.port}`} />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">Status</p>
+              <BridgeStatusDot status={createdMqtt.bridge_status} />
+            </div>
+
+            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+              Make sure your devices are registered in Gito with matching <span className="font-mono">dev_eui</span> values.
+              Uplinks will flow automatically once the bridge connects (typically within 60 seconds).
+            </p>
+
+            <button onClick={onClose} className="w-full px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+              Done
+            </button>
+          </div>
+        )}
+
+        {/* Step: success — webhook */}
         {step === 'success' && created && (
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
@@ -533,6 +714,14 @@ export default function ConnectionsPage() {
 
   useEffect(() => { fetchIntegrations(); }, [fetchIntegrations]);
 
+  // Auto-refresh every 10s if any MQTT bridge integration is present
+  useEffect(() => {
+    const hasBridge = integrations.some(i => i.provider === 'chirpstack_mqtt');
+    if (!hasBridge) return;
+    const interval = setInterval(fetchIntegrations, 10_000);
+    return () => clearInterval(interval);
+  }, [integrations, fetchIntegrations]);
+
   const handleToggle = useCallback(async (id: string, active: boolean) => {
     const auth = getAuth();
     if (!auth) return;
@@ -545,7 +734,7 @@ export default function ConnectionsPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      const updated: Integration = result.data;
+      const updated: Integration = result;
       setIntegrations(prev => prev.map(i => i.id === id ? updated : i));
     } catch (err: any) {
       setError(err.message);
