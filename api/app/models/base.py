@@ -414,8 +414,8 @@ class Integration(BaseModel):
     )
     name = Column(String(100), nullable=False)
     provider = Column(String(50), nullable=False)
-    key_hash = Column(String(64), nullable=False, unique=True)
-    key_prefix = Column(String(12), nullable=False)
+    key_hash = Column(String(64), nullable=True, unique=False)  # partial unique enforced by DB index
+    key_prefix = Column(String(12), nullable=True)
     config = Column(JSONB, nullable=False, server_default="{}")
     is_active = Column(Boolean, nullable=False, default=True)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
@@ -431,7 +431,7 @@ class Integration(BaseModel):
     __table_args__ = (
         Index("idx_integrations_tenant", "tenant_id"),
         CheckConstraint(
-            "provider IN ('chirpstack', 'ttn', 'helium', 'actility', 'custom', 'mqtt', 'http')",
+            "provider IN ('chirpstack', 'ttn', 'helium', 'actility', 'custom', 'mqtt', 'http', 'chirpstack_mqtt')",
             name="valid_provider",
         ),
     )
