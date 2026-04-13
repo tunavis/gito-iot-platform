@@ -340,7 +340,7 @@ class DatabaseService:
     async def resolve_dev_eui(self, dev_eui: str) -> tuple[str, str] | None:
         """
         Resolve a LoRaWAN dev_eui to (tenant_id, device_id).
-        Only returns devices that are confirmed provisioned (ttn_synced = true).
+        Only returns devices that have a dev_eui registered.
         Result cached for 60s; negative results also cached to block DB spam from
         rogue/unregistered devices.
         """
@@ -354,7 +354,7 @@ class DatabaseService:
             async with self.conn_pool.connection() as conn:
                 result = await conn.execute(
                     "SELECT tenant_id::text, id::text FROM devices "
-                    "WHERE dev_eui = %s AND ttn_synced = true LIMIT 1",
+                    "WHERE dev_eui = %s LIMIT 1",
                     (dev_eui,),
                 )
                 row = await result.fetchone()
