@@ -74,6 +74,15 @@ COMMAND_RESPONSE_KEYS = {"command_id", "command_status", "command_result", "comm
 
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
 
+# ChirpStack MQTT Bridge config
+BRIDGE_SYNC_INTERVAL_S  = 60    # seconds between periodic DB syncs
+BRIDGE_LOCK_TTL_S       = 90    # Redis lock TTL — lost if process crashes
+BRIDGE_LOCK_RENEW_S     = 30    # renew lock every N seconds
+BRIDGE_BACKOFF_BASE_S   = 1.0   # initial reconnect backoff
+BRIDGE_BACKOFF_MAX_S    = 60.0  # max reconnect backoff
+BRIDGE_AUTH_FAIL_MAX    = 5     # stop retrying after N consecutive auth failures
+BRIDGE_COUNT_FLUSH_S    = 30    # flush message_count to DB every N seconds
+
 # KeyDB Streams config
 STREAM_KEY       = 'telemetry:ingest'
 STREAM_GROUP     = 'telemetry-processors'
@@ -852,6 +861,279 @@ class CommandBridge:
                     await asyncio.sleep(self.RETRY_DELAY_S)
 
 
+# ---------------------------------------------------------------------------
+# ChirpStack MQTT Bridge — outbound connection per tenant integration
+# ---------------------------------------------------------------------------
+
+class BridgeWorker:
+    """
+    Manages one outbound MQTT connection to a tenant's ChirpStack broker.
+
+    Lifecycle: started by ChirpStackBridgeManager, cancelled when the
+    integration is deleted/disabled or config changes.
+    """
+
+    def __init__(
+        self,
+        integration_id: str,
+        config: dict,
+        db_service,
+        redis_service,
+        process_uplink_fn,
+    ):
+        self.integration_id = integration_id
+        self.config = config
+        self.db_service = db_service
+        self.redis_service = redis_service
+        self._process_uplink = process_uplink_fn
+        self._pending_count = 0
+
+    async def run(self) -> None:
+        """Run with exponential backoff reconnection. Stops after too many auth failures."""
+        redis = self.redis_service.redis
+        lock_key = f"bridge:lock:{self.integration_id}"
+        status_key = f"bridge:status:{self.integration_id}"
+        auth_failures = 0
+        backoff = BRIDGE_BACKOFF_BASE_S
+
+        while True:
+            # Acquire distributed lock — skip if another instance holds it
+            acquired = await redis.set(lock_key, "1", nx=True, ex=BRIDGE_LOCK_TTL_S)
+            if not acquired:
+                logger.info("Bridge lock held by another instance for %s — skipping", self.integration_id)
+                await asyncio.sleep(BRIDGE_SYNC_INTERVAL_S)
+                continue
+
+            try:
+                await self._run_connection(redis, lock_key, status_key)
+                auth_failures = 0
+                backoff = BRIDGE_BACKOFF_BASE_S
+            except aiomqtt.MqttError as e:
+                err_str = str(e).lower()
+                if "not authorised" in err_str or "unauthorized" in err_str or "authentication" in err_str:
+                    auth_failures += 1
+                    logger.error(
+                        "ChirpStack bridge auth failure %d/%d for integration %s: %s",
+                        auth_failures, BRIDGE_AUTH_FAIL_MAX, self.integration_id, e,
+                    )
+                    if auth_failures >= BRIDGE_AUTH_FAIL_MAX:
+                        await redis.set(status_key, "error: authentication failed (retries exhausted)", ex=3600)
+                        logger.error(
+                            "ChirpStack bridge %s stopped — too many auth failures. Fix credentials and re-enable.",
+                            self.integration_id,
+                        )
+                        return
+                else:
+                    logger.warning("ChirpStack bridge %s disconnected: %s — retrying in %.0fs", self.integration_id, e, backoff)
+            except asyncio.CancelledError:
+                logger.info("ChirpStack bridge %s cancelled — disconnecting", self.integration_id)
+                await redis.delete(status_key)
+                raise
+            except Exception as e:
+                logger.error("ChirpStack bridge %s unexpected error: %s", self.integration_id, e, exc_info=True)
+
+            await redis.set(status_key, "reconnecting", ex=BRIDGE_LOCK_TTL_S)
+            await redis.delete(lock_key)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, BRIDGE_BACKOFF_MAX_S)
+
+    async def _run_connection(self, redis, lock_key: str, status_key: str) -> None:
+        """Establish and maintain one MQTT connection."""
+        cfg = self.config
+        broker = cfg.get("broker_url", "")
+        port = int(cfg.get("port", 1883))
+        username = cfg.get("username") or None
+        password = cfg.get("password") or None
+        tls_params = aiomqtt.TLSParameters() if cfg.get("tls") else None
+
+        connect_kwargs: dict = dict(hostname=broker, port=port)
+        if username:
+            connect_kwargs["username"] = username
+        if password:
+            connect_kwargs["password"] = password
+        if tls_params:
+            connect_kwargs["tls_params"] = tls_params
+
+        async with aiomqtt.Client(**connect_kwargs) as client:
+            await client.subscribe("application/+/device/+/event/up", qos=1)
+            await redis.set(status_key, "connected", ex=BRIDGE_LOCK_TTL_S)
+            logger.info(
+                "ChirpStack bridge %s connected to %s:%s — subscribed to application/+/device/+/event/up",
+                self.integration_id, broker, port,
+            )
+
+            lock_renewer = asyncio.create_task(self._renew_lock_loop(redis, lock_key, status_key))
+            count_flusher = asyncio.create_task(self._flush_count_loop())
+
+            try:
+                async for message in client.messages:
+                    topic_parts = str(message.topic).split("/")
+                    # topic: application/{appId}/device/{devEui}/event/up
+                    if (
+                        len(topic_parts) == 6
+                        and topic_parts[0] == "application"
+                        and topic_parts[2] == "device"
+                        and topic_parts[4] == "event"
+                        and topic_parts[5] == "up"
+                    ):
+                        dev_eui = topic_parts[3]
+                        await self._process_uplink(dev_eui, message.payload)
+                        self._pending_count += 1
+            finally:
+                lock_renewer.cancel()
+                count_flusher.cancel()
+                for t in (lock_renewer, count_flusher):
+                    try:
+                        await t
+                    except asyncio.CancelledError:
+                        pass
+                await self._flush_count_to_db()
+
+    async def _renew_lock_loop(self, redis, lock_key: str, status_key: str) -> None:
+        """Renew the Redis lock and status TTL periodically."""
+        while True:
+            await asyncio.sleep(BRIDGE_LOCK_RENEW_S)
+            await redis.expire(lock_key, BRIDGE_LOCK_TTL_S)
+            await redis.expire(status_key, BRIDGE_LOCK_TTL_S)
+
+    async def _flush_count_loop(self) -> None:
+        """Periodically flush accumulated message_count to DB."""
+        while True:
+            await asyncio.sleep(BRIDGE_COUNT_FLUSH_S)
+            await self._flush_count_to_db()
+
+    async def _flush_count_to_db(self) -> None:
+        """Write accumulated message_count + last_used_at to integrations row."""
+        if self._pending_count == 0:
+            return
+        count = self._pending_count
+        self._pending_count = 0
+        try:
+            async with self.db_service.conn_pool.connection() as conn:
+                await conn.execute(
+                    "UPDATE integrations SET message_count = message_count + %s, last_used_at = now() WHERE id = %s",
+                    (count, self.integration_id),
+                )
+        except Exception as e:
+            logger.warning("Failed to flush bridge message_count for %s: %s", self.integration_id, e)
+            self._pending_count += count  # put it back
+
+
+class ChirpStackBridgeManager:
+    """
+    Manages all outbound ChirpStack MQTT bridge connections.
+
+    Uses a Kubernetes-style reconciliation loop:
+      - Desired state: active chirpstack_mqtt integrations in DB
+      - Current state: dict of running BridgeWorker tasks
+      - Sync: start new, stop removed, restart config-changed workers
+
+    Triggered by:
+      1. Redis pub/sub 'integration:changes' channel (immediate)
+      2. Periodic sync every BRIDGE_SYNC_INTERVAL_S (safety net)
+    """
+
+    def __init__(self, db_service, redis_service, process_uplink_fn):
+        self.db_service = db_service
+        self.redis_service = redis_service
+        self._process_uplink = process_uplink_fn
+        self._workers: dict[str, asyncio.Task] = {}
+        self._configs: dict[str, dict] = {}
+
+    async def run(self) -> None:
+        """Main loop — listens for Redis changes and syncs periodically."""
+        await asyncio.gather(
+            self._listen_for_changes(),
+            self._periodic_sync(),
+        )
+
+    async def _listen_for_changes(self) -> None:
+        """Subscribe to Redis integration:changes and trigger sync on each message."""
+        redis = self.redis_service.redis
+        try:
+            async with redis.pubsub() as ps:
+                await ps.subscribe("integration:changes")
+                logger.info("ChirpStackBridgeManager listening on integration:changes")
+                async for message in ps.listen():
+                    if message["type"] != "message":
+                        continue
+                    try:
+                        payload = json.loads(message["data"])
+                        logger.info("Bridge manager received change: %s", payload)
+                    except Exception:
+                        pass
+                    await self._sync()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error("Bridge manager pub/sub error: %s", e, exc_info=True)
+
+    async def _periodic_sync(self) -> None:
+        """Safety-net sync every BRIDGE_SYNC_INTERVAL_S seconds."""
+        while True:
+            await asyncio.sleep(BRIDGE_SYNC_INTERVAL_S)
+            await self._sync()
+
+    async def _sync(self) -> None:
+        """Reconcile running workers against DB desired state."""
+        try:
+            active = await self._load_active_integrations()
+        except Exception as e:
+            logger.error("Bridge manager sync failed to load integrations: %s", e)
+            return
+
+        active_map = {row["id"]: row for row in active}
+
+        # Stop workers for integrations that are gone or disabled
+        for iid in list(self._workers):
+            if iid not in active_map:
+                await self._stop_worker(iid)
+
+        # Start or restart workers
+        for iid, row in active_map.items():
+            new_config = dict(row["config"] or {})
+            if iid not in self._workers:
+                await self._start_worker(iid, new_config)
+            elif new_config != self._configs.get(iid):
+                logger.info("Bridge config changed for %s — restarting worker", iid)
+                await self._stop_worker(iid)
+                await self._start_worker(iid, new_config)
+
+    async def _load_active_integrations(self) -> list[dict]:
+        """Query DB for all active chirpstack_mqtt integrations."""
+        async with self.db_service.conn_pool.connection() as conn:
+            rows = await conn.execute(
+                "SELECT id::text, tenant_id::text, config FROM integrations "
+                "WHERE provider = 'chirpstack_mqtt' AND is_active = true"
+            )
+            return [dict(r) for r in await rows.fetchall()]
+
+    async def _start_worker(self, integration_id: str, config: dict) -> None:
+        worker = BridgeWorker(
+            integration_id=integration_id,
+            config=config,
+            db_service=self.db_service,
+            redis_service=self.redis_service,
+            process_uplink_fn=self._process_uplink,
+        )
+        self._workers[integration_id] = asyncio.create_task(
+            worker.run(), name=f"bridge:{integration_id}"
+        )
+        self._configs[integration_id] = config
+        logger.info("Started ChirpStack bridge worker for integration %s", integration_id)
+
+    async def _stop_worker(self, integration_id: str) -> None:
+        task = self._workers.pop(integration_id, None)
+        self._configs.pop(integration_id, None)
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Stopped ChirpStack bridge worker for integration %s", integration_id)
+
+
 class MQTTProcessor:
     """
     Orchestrates MQTT ingestion, KeyDB Stream buffering, and alert evaluation.
@@ -1247,9 +1529,15 @@ class MQTTProcessor:
             logger.error("Error processing ChirpStack uplink from %s: %s", dev_eui, e, exc_info=True)
 
     async def run(self):
-        """Main entry point — starts MQTT listener and stream consumer concurrently."""
+        """Convenience entry point for standalone use — starts and runs loop."""
         await self.start()
+        try:
+            await self.run_loop()
+        finally:
+            await self.stop()
 
+    async def run_loop(self):
+        """MQTT listener loop — call after start()."""
         try:
             async with aiomqtt.Client(
                 MQTT_BROKER,
@@ -1310,8 +1598,6 @@ class MQTTProcessor:
 
         except Exception as e:
             logger.error(f"MQTT connection error: {e}", exc_info=True)
-        finally:
-            await self.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -1319,10 +1605,22 @@ class MQTTProcessor:
 # ---------------------------------------------------------------------------
 async def main():
     processor = MQTTProcessor()
+    bridge_manager = ChirpStackBridgeManager(
+        db_service=processor.db_service,
+        redis_service=processor.redis_service,
+        process_uplink_fn=processor._process_chirpstack_uplink,
+    )
+
     try:
-        await processor.run()
+        await processor.start()
+        await bridge_manager._sync()
+        await asyncio.gather(
+            processor.run_loop(),
+            bridge_manager.run(),
+        )
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
+    finally:
         await processor.stop()
 
 
