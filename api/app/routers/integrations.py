@@ -5,16 +5,20 @@ ChirpStack, Helium, Actility) into Gito via HTTP webhook.
 
 Each integration has a hashed bearer key. The raw key is returned only
 on create and rotate-key — it is never retrievable afterward.
+
+ChirpStack MQTT bridge integrations use a direct broker connection instead
+of a bearer key — they receive no key and cannot rotate one.
 """
 
 import hashlib
+import json
 import logging
 import secrets
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.database import get_session, RLSSession
@@ -26,6 +30,9 @@ from app.schemas.integration import (
     IntegrationCreatedResponse,
     IntegrationResponse,
     IntegrationUpdate,
+    MqttConfigValidator,
+    MqttIntegrationCreatedResponse,
+    ProviderEnum,
     build_setup_instructions,
 )
 from app.config import get_settings
@@ -75,22 +82,90 @@ async def _validate_tenant(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
 
 
+def _mask_config(config: dict, provider: str) -> dict:
+    """Strip sensitive fields from MQTT bridge config before returning."""
+    if provider == "chirpstack_mqtt":
+        masked = dict(config)
+        if "password" in masked:
+            masked["password"] = "••••••••"
+        if "ca_cert" in masked and masked["ca_cert"]:
+            masked["ca_cert"] = "(set)"
+        return masked
+    return config
+
+
+async def _notify_bridge_manager(request: Request, action: str, integration_id: str) -> None:
+    """Publish integration change to Redis so the processor reconciles immediately."""
+    redis = getattr(request.app.state, "redis", None)
+    if redis:
+        try:
+            await redis.publish(
+                "integration:changes",
+                json.dumps({"action": action, "integration_id": integration_id}),
+            )
+        except Exception as e:
+            logger.warning("Failed to publish integration change to Redis: %s", e)
+
+
+async def _get_bridge_status(request: Request, integration_id: str) -> str:
+    """Read live bridge connection status from Redis."""
+    redis = getattr(request.app.state, "redis", None)
+    if not redis:
+        return "pending"
+    try:
+        val = await redis.get(f"bridge:status:{integration_id}")
+        return val.decode() if val else "pending"
+    except Exception:
+        return "pending"
+
+
 # ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
 
-@router.post("", response_model=IntegrationCreatedResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_integration(
     tenant_id: UUID,
     body: IntegrationCreate,
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     current_user: Annotated[tuple[UUID, UUID], Depends(get_current_user)],
 ):
-    """Create a new integration and return the raw key (shown only once)."""
+    """Create a new integration. MQTT bridge integrations return broker info; webhook integrations return a bearer key."""
     await _validate_tenant(tenant_id, current_user)
     current_tenant_id, current_user_id = current_user
     await session.set_tenant_context(current_tenant_id, current_user_id)
 
+    if body.provider == ProviderEnum.chirpstack_mqtt:
+        # Validate MQTT config — broker_url required
+        mqtt_conf = MqttConfigValidator(**body.config)
+
+        integration = Integration(
+            tenant_id=tenant_id,
+            name=body.name,
+            provider=body.provider.value,
+            key_hash=None,
+            key_prefix=None,
+            config=body.config,
+            created_by=current_user_id,
+        )
+        session.add(integration)
+        await session.commit()
+        await session.refresh(integration)
+
+        await _notify_bridge_manager(request, "created", str(integration.id))
+
+        return MqttIntegrationCreatedResponse(
+            id=integration.id,
+            name=integration.name,
+            provider=integration.provider,
+            broker_url=mqtt_conf.broker_url,
+            port=mqtt_conf.port,
+            bridge_status="pending",
+            created_at=integration.created_at,
+        )
+
+    # Webhook path — existing behaviour unchanged
     raw_key, key_hash, key_prefix = _generate_key()
 
     integration = Integration(
@@ -128,6 +203,7 @@ async def create_integration(
 @router.get("", response_model=SuccessResponse)
 async def list_integrations(
     tenant_id: UUID,
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     current_user: Annotated[tuple[UUID, UUID], Depends(get_current_user)],
 ):
@@ -143,9 +219,29 @@ async def list_integrations(
     )
     integrations = result.scalars().all()
 
-    return SuccessResponse(
-        data=[IntegrationResponse.model_validate(i, from_attributes=True) for i in integrations]
-    )
+    # Batch-fetch bridge statuses for all chirpstack_mqtt integrations
+    mqtt_ids = [str(i.id) for i in integrations if i.provider == "chirpstack_mqtt"]
+    bridge_statuses: dict[str, str] = {}
+    if mqtt_ids:
+        redis = getattr(request.app.state, "redis", None)
+        if redis:
+            try:
+                keys = [f"bridge:status:{iid}" for iid in mqtt_ids]
+                vals = await redis.mget(*keys)
+                for iid, val in zip(mqtt_ids, vals):
+                    bridge_statuses[iid] = val.decode() if val else "pending"
+            except Exception as e:
+                logger.warning("Failed to fetch bridge statuses: %s", e)
+
+    items = []
+    for i in integrations:
+        row = IntegrationResponse.model_validate(i, from_attributes=True)
+        row.config = _mask_config(dict(row.config), i.provider)
+        if i.provider == "chirpstack_mqtt":
+            row.bridge_status = bridge_statuses.get(str(i.id), "pending")
+        items.append(row)
+
+    return SuccessResponse(data=items)
 
 
 # ---------------------------------------------------------------------------
@@ -156,10 +252,11 @@ async def list_integrations(
 async def get_integration(
     tenant_id: UUID,
     integration_id: UUID,
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     current_user: Annotated[tuple[UUID, UUID], Depends(get_current_user)],
 ):
-    """Get a single integration including setup instructions."""
+    """Get a single integration. Webhook integrations include setup instructions."""
     await _validate_tenant(tenant_id, current_user)
     current_tenant_id, current_user_id = current_user
     await session.set_tenant_context(current_tenant_id, current_user_id)
@@ -174,12 +271,18 @@ async def get_integration(
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
 
-    webhook_url = _connection_endpoint(integration.provider)
-    instructions = build_setup_instructions(integration.provider, webhook_url, integration.key_prefix)
-
     response_data = IntegrationResponse.model_validate(integration, from_attributes=True).model_dump()
-    response_data["webhook_url"] = webhook_url
-    response_data["setup_instructions"] = instructions.model_dump()
+    response_data["config"] = _mask_config(dict(response_data["config"]), integration.provider)
+
+    if integration.provider == "chirpstack_mqtt":
+        response_data["bridge_status"] = await _get_bridge_status(request, str(integration_id))
+    else:
+        webhook_url = _connection_endpoint(integration.provider)
+        instructions = build_setup_instructions(
+            integration.provider, webhook_url, integration.key_prefix or ""
+        )
+        response_data["webhook_url"] = webhook_url
+        response_data["setup_instructions"] = instructions.model_dump()
 
     return SuccessResponse(data=response_data)
 
@@ -193,6 +296,7 @@ async def update_integration(
     tenant_id: UUID,
     integration_id: UUID,
     body: IntegrationUpdate,
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     current_user: Annotated[tuple[UUID, UUID], Depends(get_current_user)],
 ):
@@ -222,7 +326,12 @@ async def update_integration(
     await session.commit()
     await session.refresh(integration)
 
-    return SuccessResponse(data=IntegrationResponse.model_validate(integration, from_attributes=True))
+    if integration.provider == "chirpstack_mqtt":
+        await _notify_bridge_manager(request, "updated", str(integration_id))
+
+    row = IntegrationResponse.model_validate(integration, from_attributes=True)
+    row.config = _mask_config(dict(row.config), integration.provider)
+    return SuccessResponse(data=row)
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +342,7 @@ async def update_integration(
 async def delete_integration(
     tenant_id: UUID,
     integration_id: UUID,
+    request: Request,
     session: Annotated[RLSSession, Depends(get_session)],
     current_user: Annotated[tuple[UUID, UUID], Depends(get_current_user)],
 ):
@@ -251,8 +361,12 @@ async def delete_integration(
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
 
+    provider = integration.provider
     await session.delete(integration)
     await session.commit()
+
+    if provider == "chirpstack_mqtt":
+        await _notify_bridge_manager(request, "deleted", str(integration_id))
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +394,12 @@ async def rotate_key(
     integration = result.scalar_one_or_none()
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+
+    if integration.provider == "chirpstack_mqtt":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MQTT bridge integrations do not use bearer keys",
+        )
 
     raw_key, key_hash, key_prefix = _generate_key()
     integration.key_hash = key_hash
