@@ -319,8 +319,10 @@ async def update_integration(
         integration.name = body.name
     if body.config is not None:
         if integration.provider == "chirpstack_mqtt":
-            MqttConfigValidator(**body.config)  # validate — raises 422 on invalid
-        integration.config = body.config
+            mqtt_conf = MqttConfigValidator(**body.config)
+            integration.config = mqtt_conf.model_dump(exclude_none=True)
+        else:
+            integration.config = body.config
     if body.is_active is not None:
         integration.is_active = body.is_active
 
