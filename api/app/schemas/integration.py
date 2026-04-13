@@ -79,6 +79,11 @@ PROVIDER_DOCS = {
             'Payload must be JSON with: { "dev_eui": "...", "metrics": { ... } }',
         ],
     },
+    "chirpstack_mqtt": {
+        "name": "ChirpStack MQTT",
+        "docs_url": "https://www.chirpstack.io/docs/chirpstack/integrations/mqtt.html",
+        "steps": [],  # No setup steps — Gito connects outbound
+    },
 }
 
 
@@ -90,12 +95,23 @@ class ProviderEnum(str, Enum):
     mqtt = "mqtt"
     http = "http"
     custom = "custom"
+    chirpstack_mqtt = "chirpstack_mqtt"
 
 
 class IntegrationCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100, description="Human-readable name")
     provider: ProviderEnum = Field(description="LoRaWAN network server provider")
     config: dict[str, Any] = Field(default_factory=dict, description="Provider-specific config")
+
+
+class MqttConfigValidator(BaseModel):
+    """Validates config for chirpstack_mqtt integrations."""
+    broker_url: str = Field(min_length=1, description="ChirpStack MQTT broker hostname or IP")
+    port: int = Field(default=1883, ge=1, le=65535)
+    username: Optional[str] = None
+    password: Optional[str] = None
+    tls: bool = False
+    ca_cert: Optional[str] = None
 
 
 class IntegrationUpdate(BaseModel):
@@ -124,19 +140,33 @@ class IntegrationCreatedResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MqttIntegrationCreatedResponse(BaseModel):
+    """Returned on create of a chirpstack_mqtt integration."""
+    id: UUID
+    name: str
+    provider: ProviderEnum
+    broker_url: str
+    port: int
+    bridge_status: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class IntegrationResponse(BaseModel):
     """Safe response — never includes the raw key."""
     id: UUID
     tenant_id: UUID
     name: str
     provider: ProviderEnum
-    key_prefix: str
+    key_prefix: Optional[str] = None
     config: dict[str, Any]
     is_active: bool
     last_used_at: Optional[datetime] = None
     message_count: int
     created_at: datetime
     updated_at: datetime
+    bridge_status: Optional[str] = None  # set for chirpstack_mqtt integrations
 
     model_config = ConfigDict(from_attributes=True)
 
