@@ -25,7 +25,7 @@ import logging
 import os
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
