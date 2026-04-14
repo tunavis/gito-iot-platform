@@ -167,8 +167,19 @@ class IntegrationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     bridge_status: Optional[str] = None  # set for chirpstack_mqtt integrations
+    unknown_device_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UnknownDeviceEntry(BaseModel):
+    dev_eui: str
+    first_seen: str  # ISO-8601
+
+
+class UnknownDevicesResponse(BaseModel):
+    integration_id: UUID
+    unknown_devices: list[UnknownDeviceEntry]
 
 
 def build_setup_instructions(

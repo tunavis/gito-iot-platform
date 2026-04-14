@@ -221,17 +221,26 @@ async def list_integrations(
 
     # Batch-fetch bridge statuses for all chirpstack_mqtt integrations
     mqtt_ids = [str(i.id) for i in integrations if i.provider == "chirpstack_mqtt"]
+    redis = getattr(request.app.state, "redis", None)
     bridge_statuses: dict[str, str] = {}
-    if mqtt_ids:
-        redis = getattr(request.app.state, "redis", None)
-        if redis:
-            try:
-                keys = [f"bridge:status:{iid}" for iid in mqtt_ids]
-                vals = await redis.mget(*keys)
-                for iid, val in zip(mqtt_ids, vals):
-                    bridge_statuses[iid] = (val.decode() if isinstance(val, bytes) else val) if val else "pending"
-            except Exception as e:
-                logger.warning("Failed to fetch bridge statuses: %s", e)
+    if mqtt_ids and redis:
+        try:
+            keys = [f"bridge:status:{iid}" for iid in mqtt_ids]
+            vals = await redis.mget(*keys)
+            for iid, val in zip(mqtt_ids, vals):
+                bridge_statuses[iid] = (val.decode() if isinstance(val, bytes) else val) if val else "pending"
+        except Exception as e:
+            logger.warning("Failed to fetch bridge statuses: %s", e)
+
+    # Batch-fetch unknown device counts for chirpstack_mqtt integrations
+    unknown_counts: dict[str, int] = {}
+    if mqtt_ids and redis:
+        try:
+            for iid in mqtt_ids:
+                count = await redis.hlen(f"bridge:unknown:{iid}")
+                unknown_counts[iid] = count
+        except Exception as e:
+            logger.warning("Failed to fetch unknown device counts: %s", e)
 
     items = []
     for i in integrations:
@@ -239,6 +248,7 @@ async def list_integrations(
         row.config = _mask_config(dict(row.config), i.provider)
         if i.provider == "chirpstack_mqtt":
             row.bridge_status = bridge_statuses.get(str(i.id), "pending")
+            row.unknown_device_count = unknown_counts.get(str(i.id), 0)
         items.append(row)
 
     return SuccessResponse(data=items)
@@ -285,6 +295,53 @@ async def get_integration(
         response_data["setup_instructions"] = instructions.model_dump()
 
     return SuccessResponse(data=response_data)
+
+
+# ---------------------------------------------------------------------------
+# Unknown devices
+# ---------------------------------------------------------------------------
+
+@router.get("/{integration_id}/unknown-devices")
+async def list_unknown_devices(
+    tenant_id: UUID,
+    integration_id: UUID,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_user: Annotated[tuple[UUID, UUID], Depends(get_current_user)],
+):
+    """Return dev_euis seen by a bridge but not registered in Gito."""
+    await _validate_tenant(tenant_id, current_user)
+    current_tenant_id, current_user_id = current_user
+    await session.set_tenant_context(current_tenant_id, current_user_id)
+
+    result = await session.execute(
+        select(Integration).where(
+            Integration.id == integration_id,
+            Integration.tenant_id == tenant_id,
+        )
+    )
+    integration = result.scalar_one_or_none()
+    if not integration:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+    if integration.provider != "chirpstack_mqtt":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only MQTT bridge integrations track unknown devices",
+        )
+
+    redis = getattr(request.app.state, "redis", None)
+    entries: list[dict] = []
+    if redis:
+        try:
+            raw = await redis.hgetall(f"bridge:unknown:{integration_id}")
+            for dev_eui_raw, ts_raw in raw.items():
+                dev_eui = dev_eui_raw.decode() if isinstance(dev_eui_raw, bytes) else dev_eui_raw
+                ts = ts_raw.decode() if isinstance(ts_raw, bytes) else ts_raw
+                entries.append({"dev_eui": dev_eui, "first_seen": ts})
+        except Exception as e:
+            logger.warning("Failed to fetch unknown devices: %s", e)
+
+    return SuccessResponse(data={"integration_id": str(integration_id), "unknown_devices": entries})
 
 
 # ---------------------------------------------------------------------------
