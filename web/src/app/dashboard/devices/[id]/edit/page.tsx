@@ -60,7 +60,7 @@ interface Device {
   attributes: Record<string, any>;
   firmware_version?: string | null;
   hardware_version?: string | null;
-  lorawan_dev_eui?: string | null;
+  dev_eui?: string | null;
   chirpstack_app_id?: string | null;
   device_profile_id?: string | null;
   organization_id: string;
@@ -106,7 +106,7 @@ export default function EditDevicePage() {
     serial_number: '',
     tags: [] as string[],
     newTag: '',
-    lorawan_dev_eui: '',
+    dev_eui: '',
     chirpstack_app_id: '',
     device_profile_id: '',
     organization_id: '',
@@ -172,7 +172,7 @@ export default function EditDevicePage() {
         serial_number: deviceData.attributes?.serial_number || '',
         tags: deviceData.attributes?.tags || [],
         newTag: '',
-        lorawan_dev_eui: deviceData.lorawan_dev_eui || '',
+        dev_eui: deviceData.dev_eui || '',
         chirpstack_app_id: deviceData.chirpstack_app_id || '',
         device_profile_id: deviceData.device_profile_id || '',
         organization_id: deviceData.organization_id || '',
@@ -263,7 +263,7 @@ export default function EditDevicePage() {
       };
 
       // LoRaWAN fields
-      if (form.lorawan_dev_eui) body.lorawan_dev_eui = form.lorawan_dev_eui;
+      if (form.dev_eui) body.dev_eui = form.dev_eui;
       if (form.chirpstack_app_id) body.chirpstack_app_id = form.chirpstack_app_id;
       if (form.device_profile_id) body.device_profile_id = form.device_profile_id;
 
@@ -471,8 +471,8 @@ export default function EditDevicePage() {
                 <label className="block text-sm font-medium text-th-primary mb-1">Device EUI (DevEUI)</label>
                 <input
                   type="text"
-                  value={form.lorawan_dev_eui}
-                  onChange={e => setForm(prev => ({ ...prev, lorawan_dev_eui: e.target.value }))}
+                  value={form.dev_eui}
+                  onChange={e => setForm(prev => ({ ...prev, dev_eui: e.target.value }))}
                   placeholder="70B3D57ED005XXXX"
                   className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
