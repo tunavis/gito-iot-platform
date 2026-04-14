@@ -82,6 +82,7 @@ BRIDGE_BACKOFF_BASE_S   = 1.0   # initial reconnect backoff
 BRIDGE_BACKOFF_MAX_S    = 60.0  # max reconnect backoff
 BRIDGE_AUTH_FAIL_MAX    = 5     # stop retrying after N consecutive auth failures
 BRIDGE_COUNT_FLUSH_S    = 30    # flush message_count to DB every N seconds
+BRIDGE_UNKNOWN_DEV_TTL_S = 7 * 24 * 3600  # 7 days
 
 # KeyDB Streams config
 STREAM_KEY       = 'telemetry:ingest'
@@ -977,6 +978,10 @@ class BridgeWorker:
                         and topic_parts[5] == "up"
                     ):
                         dev_eui = topic_parts[3]
+                        resolved = await self.db_service.resolve_dev_eui(dev_eui)
+                        if resolved is None:
+                            await self._track_unknown_device(dev_eui)
+                            continue
                         await self._process_uplink(dev_eui, message.payload)
                         self._pending_count += 1
             finally:
@@ -1017,6 +1022,18 @@ class BridgeWorker:
         except Exception as e:
             logger.warning("Failed to flush bridge message_count for %s: %s", self.integration_id, e)
             self._pending_count += count  # put it back
+
+    async def _track_unknown_device(self, dev_eui: str) -> None:
+        """Record a dev_eui seen on the bridge but not registered in Gito."""
+        key = f"bridge:unknown:{self.integration_id}"
+        try:
+            existing = await self.redis_service.redis.hget(key, dev_eui)
+            if not existing:
+                timestamp = datetime.now(timezone.utc).isoformat()
+                await self.redis_service.redis.hset(key, dev_eui, timestamp)
+            await self.redis_service.redis.expire(key, BRIDGE_UNKNOWN_DEV_TTL_S)
+        except Exception as e:
+            logger.warning("Failed to track unknown dev_eui %s: %s", dev_eui, e)
 
 
 class ChirpStackBridgeManager:
