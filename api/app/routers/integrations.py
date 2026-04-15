@@ -32,6 +32,8 @@ from app.schemas.integration import (
     IntegrationUpdate,
     MqttConfigValidator,
     MqttIntegrationCreatedResponse,
+    UnknownDeviceEntry,
+    UnknownDevicesResponse,
     ProviderEnum,
     build_setup_instructions,
 )
@@ -330,18 +332,21 @@ async def list_unknown_devices(
         )
 
     redis = getattr(request.app.state, "redis", None)
-    entries: list[dict] = []
+    entries: list[UnknownDeviceEntry] = []
     if redis:
         try:
             raw = await redis.hgetall(f"bridge:unknown:{integration_id}")
             for dev_eui_raw, ts_raw in raw.items():
                 dev_eui = dev_eui_raw.decode() if isinstance(dev_eui_raw, bytes) else dev_eui_raw
                 ts = ts_raw.decode() if isinstance(ts_raw, bytes) else ts_raw
-                entries.append({"dev_eui": dev_eui, "first_seen": ts})
+                entries.append(UnknownDeviceEntry(dev_eui=dev_eui, first_seen=ts))
         except Exception as e:
             logger.warning("Failed to fetch unknown devices: %s", e)
 
-    return SuccessResponse(data={"integration_id": str(integration_id), "unknown_devices": entries})
+    return SuccessResponse(data=UnknownDevicesResponse(
+        integration_id=integration_id,
+        unknown_devices=entries,
+    ))
 
 
 # ---------------------------------------------------------------------------
