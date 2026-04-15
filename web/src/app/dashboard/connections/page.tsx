@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import React from 'react';
 import PageShell from '@/components/ui/PageShell';
 import {
   Link2, Plus, RefreshCw, Trash2, CheckCircle, XCircle,
@@ -23,6 +25,7 @@ interface Integration {
   is_active: boolean;
   last_used_at: string | null;
   message_count: number;
+  unknown_device_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -165,21 +168,83 @@ function BridgeStatusDot({ status }: { status: string }) {
   );
 }
 
+// ── UnknownDevicesPanel ────────────────────────────────────────────────────────
+
+interface UnknownDevice {
+  dev_eui: string;
+  first_seen: string;
+}
+
+function UnknownDevicesPanel({
+  integrationId,
+  tenantId,
+}: {
+  integrationId: string;
+  tenantId: string;
+}) {
+  const router = useRouter();
+  const [devices, setDevices] = React.useState<UnknownDevice[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    fetch(`/api/v1/tenants/${tenantId}/integrations/${integrationId}/unknown-devices`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((result) => {
+        const data = result.data ?? result;
+        setDevices(data.unknown_devices ?? []);
+      })
+      .catch(() => setDevices([]))
+      .finally(() => setLoading(false));
+  }, [integrationId, tenantId]);
+
+  if (loading) return <p className="text-xs text-slate-400 py-2">Loading...</p>;
+  if (devices.length === 0) return <p className="text-xs text-slate-400 py-2">No unregistered devices.</p>;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {devices.map((d) => (
+        <div key={d.dev_eui} className="flex items-center justify-between bg-slate-800 rounded px-3 py-2">
+          <div>
+            <p className="text-xs font-mono text-slate-200">{d.dev_eui}</p>
+            <p className="text-xs text-slate-500">
+              First seen {new Date(d.first_seen).toLocaleString()}
+            </p>
+          </div>
+          <button
+            onClick={() =>
+              router.push(`/dashboard/devices/new?dev_eui=${encodeURIComponent(d.dev_eui)}&source=bridge`)
+            }
+            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded"
+          >
+            Register device
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── ConnectionCard ─────────────────────────────────────────────────────────────
 
 function ConnectionCard({
   integration,
+  tenantId,
   onToggle,
   onDelete,
   onRotate,
 }: {
   integration: Integration;
+  tenantId: string;
   onToggle: (id: string, active: boolean) => void;
   onDelete: (id: string) => void;
   onRotate: (id: string) => void;
 }) {
   const meta = PROVIDERS[integration.provider] ?? PROVIDERS.custom;
   const [expanded, setExpanded] = useState(false);
+  const [showUnknown, setShowUnknown] = useState(false);
 
   return (
     <div className={`gito-card rounded-xl overflow-hidden border transition-colors ${
@@ -204,6 +269,15 @@ function ConnectionCard({
           {integration.provider === 'chirpstack_mqtt' && integration.bridge_status && (
             <BridgeStatusDot status={integration.bridge_status} />
           )}
+          {integration.provider === 'chirpstack_mqtt' && (integration.unknown_device_count ?? 0) > 0 && (
+            <button
+              onClick={() => setShowUnknown((v) => !v)}
+              className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300"
+            >
+              <AlertCircle className="w-3 h-3" />
+              {integration.unknown_device_count} unregistered device{integration.unknown_device_count !== 1 ? 's' : ''}
+            </button>
+          )}
           <span className="text-xs text-[var(--color-text-secondary)] pl-2 border-l border-[var(--color-border)]">
             {integration.message_count.toLocaleString()} msgs
           </span>
@@ -215,6 +289,14 @@ function ConnectionCard({
           </button>
         </div>
       </div>
+
+      {/* Unknown devices panel */}
+      {showUnknown && integration.provider === 'chirpstack_mqtt' && (
+        <div className="border-t border-[var(--color-border)] px-4 py-3 bg-white/2">
+          <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1">Unregistered devices</p>
+          <UnknownDevicesPanel integrationId={integration.id} tenantId={tenantId} />
+        </div>
+      )}
 
       {/* Expanded detail */}
       {expanded && (
@@ -696,10 +778,12 @@ export default function ConnectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState<string>('');
 
   const fetchIntegrations = useCallback(async () => {
     const auth = getAuth();
     if (!auth) return;
+    setTenantId(auth.tenantId);
     try {
       const res = await fetch(`/api/v1/tenants/${auth.tenantId}/integrations`, {
         headers: { Authorization: `Bearer ${auth.token}` },
@@ -806,6 +890,7 @@ export default function ConnectionsPage() {
               <ConnectionCard
                 key={integration.id}
                 integration={integration}
+                tenantId={tenantId}
                 onToggle={handleToggle}
                 onDelete={id => {
                   if (confirm(`Delete connection "${integration.name}"? This cannot be undone.`)) {
