@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import React from 'react';
 import PageShell from '@/components/ui/PageShell';
 import {
   Link2, Plus, RefreshCw, Trash2, CheckCircle, XCircle,
@@ -183,10 +182,11 @@ function UnknownDevicesPanel({
   tenantId: string;
 }) {
   const router = useRouter();
-  const [devices, setDevices] = React.useState<UnknownDevice[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [devices, setDevices] = useState<UnknownDevice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const token = localStorage.getItem('auth_token');
     fetch(`/api/v1/tenants/${tenantId}/integrations/${integrationId}/unknown-devices`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -196,11 +196,15 @@ function UnknownDevicesPanel({
         const data = result.data ?? result;
         setDevices(data.unknown_devices ?? []);
       })
-      .catch(() => setDevices([]))
+      .catch(() => {
+        setError('Failed to load');
+        setDevices([]);
+      })
       .finally(() => setLoading(false));
   }, [integrationId, tenantId]);
 
   if (loading) return <p className="text-xs text-slate-400 py-2">Loading...</p>;
+  if (error) return <p className="text-xs text-red-400 py-2">Could not load devices.</p>;
   if (devices.length === 0) return <p className="text-xs text-slate-400 py-2">No unregistered devices.</p>;
 
   return (
@@ -773,17 +777,18 @@ function RotateKeyModal({
 // ── ConnectionsPage ────────────────────────────────────────────────────────────
 
 export default function ConnectionsPage() {
+  const auth = getAuth();
+  const tenantId = auth?.tenantId ?? '';
+
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
-  const [tenantId, setTenantId] = useState<string>('');
 
   const fetchIntegrations = useCallback(async () => {
     const auth = getAuth();
     if (!auth) return;
-    setTenantId(auth.tenantId);
     try {
       const res = await fetch(`/api/v1/tenants/${auth.tenantId}/integrations`, {
         headers: { Authorization: `Bearer ${auth.token}` },
