@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import {
   ArrowLeft, Plus, Cpu, Thermometer, Radio, ToggleRight, MapPin, Zap,
@@ -153,8 +153,11 @@ function StepBar({ steps, currentId }: { steps: { id: StepId; label: string }[];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function NewDevicePage() {
-  const router = useRouter();
+function NewDeviceForm() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const prefillDevEui = searchParams.get('dev_eui') ?? '';
+  const fromBridge    = searchParams.get('source') === 'bridge';
 
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -171,7 +174,7 @@ export default function NewDevicePage() {
     name: '', serial_number: '', description: '', tags: [] as string[], newTag: '',
   });
   const [network, setNetwork] = useState({
-    dev_eui: '', app_key: '', ttn_app_id: '', mqtt_client_id: '',
+    dev_eui: prefillDevEui, app_key: '', ttn_app_id: '', mqtt_client_id: '',
   });
   const [placement, setPlacement] = useState({
     site_id: '', device_group_id: '', latitude: '', longitude: '',
@@ -329,6 +332,16 @@ export default function NewDevicePage() {
 
         {/* Content */}
         <div className="px-8 py-8 max-w-3xl space-y-6">
+
+          {fromBridge && prefillDevEui && (
+            <div className="flex items-start gap-2 bg-indigo-950 border border-indigo-700 rounded-lg px-4 py-3 mb-4">
+              <Info className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-indigo-300">
+                Registering a device seen by your ChirpStack MQTT bridge.
+                The LoRaWAN Dev EUI has been pre-filled from the bridge uplink.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -687,5 +700,13 @@ export default function NewDevicePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function NewDevicePage() {
+  return (
+    <Suspense>
+      <NewDeviceForm />
+    </Suspense>
   );
 }
