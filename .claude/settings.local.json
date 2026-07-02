@@ -22,7 +22,50 @@
       "Bash(ls:*)",
       "mcp__postgres_Gito_IOT__analyze_db_health",
       "Bash(curl:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cat /c/Users/mmarais/Documents/Personal/project/IOT/web/src/app/dashboard/devices/[id]/page.tsx)",
+      "Bash(grep -l \"get_current_tenant\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/routers/*.py)",
+      "Bash(xargs grep:*)",
+      "Bash(git commit:*)",
+      "Bash(find /c/Users/mmarais/Documents/Personal/project/IOT/api/tests -type f -name *.py)",
+      "Bash(find /c/Users/mmarais/Documents/Personal/project/IOT -maxdepth 3 -name test_*.py -o -name *_test.py)",
+      "Bash(find /c/Users/mmarais/Documents/Personal/project/IOT/api/app -name *solution* -o -name *template*)",
+      "Bash(grep \"\\\\.py$\")",
+      "Bash(grep -rn \"solution_template\\\\|SolutionTemplate\\\\|solution-template\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app --include=*.py -l)",
+      "Bash(find /c/Users/mmarais/Documents/Personal/project/IOT/api/app -name *.py)",
+      "Bash(grep -n \"class Dashboard\\\\|class DashboardWidget\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/models/*.py)",
+      "Bash(grep -n 'class DeviceType' /c/Users/mmarais/Documents/Personal/project/IOT/api/app/models/*.py)",
+      "Bash(grep -n \"class DashboardResponse\\\\|DashboardResponse\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/schemas/*.py)",
+      "Bash(grep -rn \"class Alert\\\\|alert_rules.*tenant_id\\\\|ON CONFLICT\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/models/*.py)",
+      "Bash(grep -n \"class UnifiedAlertRule\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/models/*.py)",
+      "Bash(head -10 grep -n \"class Device\\\\|__tablename__.*device\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/models/base.py)",
+      "Bash(head -5 grep -n \"get_current_tenant\\\\|decode_token\\\\|Header\" /c/Users/mmarais/Documents/Personal/project/IOT/api/app/routers/device_ingest.py)",
+      "Bash(git checkout:*)",
+      "Bash(npm run:*)",
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python310/python -c \"from app.limiter import limiter; print\\(''Limiter OK:'', limiter\\)\")",
+      "Bash(pip3 show:*)",
+      "Bash(python3 -c \"import slowapi; print\\(slowapi.__version__\\)\")",
+      "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python312/python -c \"from app.limiter import limiter; print\\(''Limiter OK:'', limiter\\)\")",
+      "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python312/python -m pip install starlette fastapi)",
+      "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python310/python -c \":*)",
+      "Bash(python3)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Update the Gito IoT Platform project status memory. Steps:\n1. Run `git log --oneline -20` to see recent commits\n2. Read `C:\\Users\\mmarais\\.claude\\projects\\c--Users-mmarais-Documents-Personal-project-IOT\\memory\\feature_status.md`\n3. If the most recent commit in git log is NOT already in the 'Most Recently Completed' section, update the file to reflect it\n4. Update the date at the top to today if changed\n5. Only write the file if something actually changed - skip if already up to date\nKeep it brief and accurate. Do not touch any other files.",
+            "timeout": 60,
+            "model": "claude-haiku-4-5-20251001",
+            "statusMessage": "Updating project status memory..."
+          }
+        ]
+      }
     ]
   }
 }
