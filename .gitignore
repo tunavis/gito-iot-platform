@@ -118,3 +118,4 @@ mobile/
 
 # Next.js build info (generated file)
 web/tsconfig.tsbuildinfo
+.playwright-mcp/
