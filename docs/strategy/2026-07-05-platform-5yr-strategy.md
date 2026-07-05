@@ -266,9 +266,16 @@ These are falsifiable gates, not vibes; wrong numbers get corrected by contact w
 
 ## 10. Five-Year Roadmap (halved, serialized, gated)
 
-**Rule (review-forced):** max 3 concurrent workstreams; 25–30% of capacity reserved for run/maintain
-(the shipped surface already demands it: bridge follow-ups, alert-preview TODO, Flutter app debt).
-If capacity stays at demonstrated part-time cadence, stretch every phase ×2 — or hire.
+**Capacity (decided 2026-07-06):** founder at ~2 hours/day (~10 h/week) + heavy AI-agent leverage, with a
+second person joining later. Consequences, applied throughout:
+- **One workstream at a time** (not three) — at 2 h/day, context-switching kills throughput; AI agents
+  parallelize the typing, but review is single-threaded and review is the ceiling.
+- **Phases are effort-based, not calendar-based:** "Y1-H1" below reads as **Phase 1 ≈ 9–12 calendar
+  months** at this cadence. When person #2 lands, phases compress — recalibrate dates then, not before.
+- 25–30% of the 2 h/day still goes to run/maintain (bridge follow-ups, alert-preview TODO, Flutter debt).
+- The 12–18-month competitive window (§13) is the cost of this choice: acceptable only because the wedge
+  is regional and relationship-driven — a hyperscaler feature launch doesn't close a Rustenburg mine.
+  If a funded competitor shows up in the wedge, this decision gets revisited, not the plan.
 
 **Y1-H1 — "One honest wedge" (serial critical path):**
 1. Unify alarm engine (F0) → 2. Asset registry *additive* → 3. MCP server (F1) + F4-lite statistical
@@ -335,7 +342,7 @@ incumbents), "per-asset pricing as disruption" (segment norm — repackaged as s
 
 | Risk | Mitigation |
 |---|---|
-| **Capacity is 1 part-time founder, not 2 FTE** (repo evidence: 10 dark weeks) | Roadmap sized to it (§10 rule); explicit fork: commit hours / hire one engineer / stretch phases ×2. This is the #1 decision the founder must make |
+| Capacity: founder ~2 h/day, second person joins later (**decided 2026-07-06**) | Roadmap re-based to effort-phases (§10); one workstream at a time; onboarding pack ready so person #2 is productive week 1 (this doc + repo skills + CLAUDE.md are that pack) |
 | Incumbent AI ships faster than our wedge closes (AVEVA/AWS assistants improve quarterly) | 12–18mo window: H1/H2 dates are the strategy; every slip burns moat |
 | ThingsBoard/IoT.nxt price pressure at the low end | never compete on price with free; compete on assembled product + compliance + cited intelligence |
 | Lighthouse procurement stalls the plan (6–18mo mining cycles) | signed LOI precondition; POC-funded runway; H2 gate decoupled from deployment *count* |
