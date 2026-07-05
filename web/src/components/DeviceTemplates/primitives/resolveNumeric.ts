@@ -8,6 +8,8 @@ export const PRESSURE_KEYS = ['pressure', 'psi', 'bar', 'inlet_pressure', 'outle
 export const MOISTURE_KEYS = ['moisture', 'soil_moisture', 'volumetric_water_content', 'vwc'];
 export const POSITION_KEYS = ['position', 'valve_position', 'opening', 'percent_open'];
 export const IRRADIANCE_KEYS = ['irradiance', 'solar_irradiance', 'ghi', 'radiation'];
+export const CURRENT_KEYS = ['current', 'amps', 'amperage', 'motor_current', 'phase_current', 'current_a'];
+export const VIBRATION_KEYS = ['vibration', 'vibration_rms', 'vibration_velocity', 'vib_rms'];
 
 /**
  * Search telemetry for the first matching key from candidates.

@@ -23,6 +23,8 @@ const CATEGORY_MAP: Array<{ keywords: string[]; template: TemplateConfig['templa
   { keywords: ['generator', 'genset', 'ups', 'diesel', 'alternator'],                template: 'generator'    },
   { keywords: ['solar', 'pv', 'photovoltaic', 'renewable', 'inverter'],              template: 'solar_system' },
   { keywords: ['hvac', 'ahu', 'chiller', 'heat_pump', 'aircon', 'cooling', 'heating', 'ventilation'], template: 'hvac_unit' },
+  { keywords: ['valve', 'actuator', 'solenoid'],                                     template: 'valve'        },
+  { keywords: ['motor', 'vfd', 'drive', 'electric_motor'],                           template: 'motor'        },
 ];
 
 function matchCategory(category: string): TemplateConfig['template'] | null {
@@ -102,6 +104,20 @@ const BUILDER_SPECS: Record<TemplateConfig['template'], BuilderSpec> = {
       load: ['compressor_load', 'load', 'capacity', 'duty_cycle', 'compressor'],
     },
     status: { keys: ['cooling_active', 'heating_active', 'running', 'status', 'mode', 'active'], trueLabel: 'Cooling', falseLabel: 'Idle' },
+  },
+  valve: {
+    slots: {
+      position: ['valve_position', 'position', 'opening', 'percent_open', 'travel'],
+      p_up:     ['upstream_pressure', 'inlet_pressure', 'pressure_upstream', 'p1'],
+      p_down:   ['downstream_pressure', 'outlet_pressure', 'pressure_downstream', 'p2'],
+    },
+  },
+  motor: {
+    slots: {
+      speed:   ['speed_rpm', 'rpm', 'motor_speed', 'speed'],
+      current: ['motor_current', 'current', 'amps', 'current_a'],
+    },
+    status: { keys: ['running', 'status', 'active', 'on', 'enabled'], trueLabel: 'Running', falseLabel: 'Stopped' },
   },
 };
 

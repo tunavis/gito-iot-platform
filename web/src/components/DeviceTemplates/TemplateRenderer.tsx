@@ -26,6 +26,8 @@ import { PumpTemplate,       slots as pumpSlots }       from './templates/PumpTe
 import { GeneratorTemplate,  slots as generatorSlots }  from './templates/GeneratorTemplate';
 import { SolarTemplate,      slots as solarSlots }      from './templates/SolarTemplate';
 import { HvacTemplate,       slots as hvacSlots }       from './templates/HvacTemplate';
+import { ValveTemplate,      slots as valveSlots }      from './templates/ValveTemplate';
+import { MotorTemplate,      slots as motorSlots }      from './templates/MotorTemplate';
 
 /** Template props — telemetry drives all motion; templates render artwork only */
 export interface TemplateProps {
@@ -45,6 +47,8 @@ const TEMPLATE_MAP: Record<TemplateConfig['template'], {
   generator:    { Component: GeneratorTemplate,  slots: generatorSlots },
   solar_system: { Component: SolarTemplate,      slots: solarSlots },
   hvac_unit:    { Component: HvacTemplate,       slots: hvacSlots },
+  valve:        { Component: ValveTemplate,      slots: valveSlots },
+  motor:        { Component: MotorTemplate,      slots: motorSlots },
 };
 
 /** Crops remove empty vertical padding from the 500×400 viewBox. */
@@ -57,6 +61,8 @@ const TEMPLATE_CROPS: Record<TemplateConfig['template'], ViewBoxCrop> = {
   generator:    { y: 45,  h: 270 },
   solar_system: { y: 30,  h: 310 },
   hvac_unit:    { y: 60,  h: 325 },
+  valve:        { y: 58,  h: 222 },
+  motor:        { y: 96,  h: 230 },
 };
 
 function formatValue(val: number | string): string {

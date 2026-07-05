@@ -105,9 +105,11 @@ export function PumpTemplate({ width, height, telemetry, deviceStatus }: Templat
       <Spinner cx={250} cy={235} intensity={rpmIntensity} paused={paused}>
         {[0, 72, 144, 216, 288].map((deg) => {
           const a = (deg * Math.PI) / 180;
-          const p0x = 250 + 13 * Math.cos(a),        p0y = 235 + 13 * Math.sin(a);
-          const cx  = 250 + 28 * Math.cos(a + 0.45), cy  = 235 + 28 * Math.sin(a + 0.45);
-          const p1x = 250 + 38 * Math.cos(a + 0.85), p1y = 235 + 38 * Math.sin(a + 0.85);
+          // toFixed keeps SSR/client path strings identical (avoids hydration mismatch)
+          const f = (n: number) => n.toFixed(2);
+          const p0x = f(250 + 13 * Math.cos(a)),        p0y = f(235 + 13 * Math.sin(a));
+          const cx  = f(250 + 28 * Math.cos(a + 0.45)), cy  = f(235 + 28 * Math.sin(a + 0.45));
+          const p1x = f(250 + 38 * Math.cos(a + 0.85)), p1y = f(235 + 38 * Math.sin(a + 0.85));
           return (
             <path key={deg} d={`M ${p0x} ${p0y} Q ${cx} ${cy} ${p1x} ${p1y}`}
               fill="none" stroke={bladeColor} strokeWidth="5" strokeLinecap="round"

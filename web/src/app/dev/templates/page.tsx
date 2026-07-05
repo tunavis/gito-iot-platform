@@ -91,6 +91,29 @@ const FIXTURES: Fixture[] = [
     },
     telemetry: { supply_temp: 12.4, return_temp: 23.8, air_flow: 3400, compressor_load: 64, cooling_active: 1 },
   },
+  {
+    title: 'Control Valve',
+    category: 'valve',
+    schema: {
+      valve_position:      { type: 'number', unit: '%',    min: 0, max: 100 },
+      flow_rate:           { type: 'number', unit: 'm³/h', min: 0, max: 100 },
+      upstream_pressure:   { type: 'number', unit: 'bar' },
+      downstream_pressure: { type: 'number', unit: 'bar' },
+    },
+    telemetry: { valve_position: 62, flow_rate: 38.4, upstream_pressure: 6.2, downstream_pressure: 4.1 },
+  },
+  {
+    title: 'Electric Motor',
+    category: 'motor',
+    schema: {
+      running:       { type: 'boolean' },
+      speed_rpm:     { type: 'number', unit: 'RPM',  min: 0, max: 3000 },
+      motor_current: { type: 'number', unit: 'A',    min: 0, max: 100 },
+      winding_temp:  { type: 'number', unit: '°C' },
+      vibration:     { type: 'number', unit: 'mm/s' },
+    },
+    telemetry: { running: 1, speed_rpm: 1480, motor_current: 36.2, winding_temp: 74, vibration: 2.8 },
+  },
 ];
 
 export default function TemplateBench() {

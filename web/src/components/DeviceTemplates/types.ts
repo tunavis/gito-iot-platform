@@ -21,7 +21,9 @@ export type TemplateName =
   | 'pump'
   | 'generator'
   | 'solar_system'
-  | 'hvac_unit';
+  | 'hvac_unit'
+  | 'valve'
+  | 'motor';
 
 /**
  * A display region designed into the template artwork.
