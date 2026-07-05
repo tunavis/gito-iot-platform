@@ -928,7 +928,10 @@ class BridgeWorker:
                     logger.warning("ChirpStack bridge %s disconnected: %s — retrying in %.0fs", self.integration_id, e, backoff)
             except asyncio.CancelledError:
                 logger.info("ChirpStack bridge %s cancelled — disconnecting", self.integration_id)
+                # Release both keys — we hold the lock here, and leaving it to TTL-expire
+                # stalls the replacement worker for up to BRIDGE_LOCK_TTL_S after a config change.
                 await redis.delete(status_key)
+                await redis.delete(lock_key)
                 raise
             except Exception as e:
                 logger.error("ChirpStack bridge %s unexpected error: %s", self.integration_id, e, exc_info=True)

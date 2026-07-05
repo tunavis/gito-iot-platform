@@ -259,8 +259,10 @@ function NewDeviceForm() {
         ...(placement.longitude       && { longitude: parseFloat(placement.longitude) }),
       };
 
+      // dev_eui is sent regardless of protocol — bridge-seen devices (source=bridge)
+      // can be registered under any device type and still need EUI resolution.
+      if (network.dev_eui)      body.dev_eui    = network.dev_eui;
       if (protocol === 'lorawan') {
-        if (network.dev_eui)    body.dev_eui    = network.dev_eui;
         if (network.app_key)    body.app_key    = network.app_key;
         if (network.ttn_app_id) body.ttn_app_id = network.ttn_app_id;
       } else if (network.mqtt_client_id) {

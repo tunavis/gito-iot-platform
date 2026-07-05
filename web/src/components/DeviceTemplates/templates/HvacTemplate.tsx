@@ -1,142 +1,124 @@
+'use client';
 import React from 'react';
+import type { TemplateProps } from '../TemplateRenderer';
+import {
+  useMaterials, MetalBody, GlassFace, AOShadow,
+  DashFlow, Spinner, ArcSweep, Blink,
+  resolveNumeric, FLOW_KEYS, RPM_KEYS, POWER_KEYS,
+} from '../primitives';
 
-const BD  = 'var(--color-border)';
-const PNL = 'var(--color-panel)';
-// Return air (warm, unconditioned) — amber
-const RET  = '#f97316';
-const RETL = '#fed7aa';
-// Supply air (cool, conditioned) — cyan/air color (matches air FlowLine effect)
-const SUP  = '#22d3ee';
-const SUPL = '#a5f3fc';
-// Refrigerant — cyan
-const REF = '#22d3ee';
-// Coil fins — blue
-const COIL = '#3b82f6';
+const BD = 'var(--color-border)';
+const MUT = 'var(--color-text-muted)';
+// Accent — teal (conditioned air / active systems)
+const AC = '#2dd4bf';
+const ACD = '#0f766e';
+const ACL = '#99f6e4';
 
-export function HvacTemplate({ width, height }: { width: number; height: number; telemetry?: Record<string, number | string | null> }) {
+/** Display slots — the compressor instrument strip (180-320 × 246-286) */
+export const slots = {
+  load: { x: 258, y: 271, width: 68, fontSize: 13, glow: AC },
+} as const;
+
+export function HvacTemplate({ width, height, telemetry, deviceStatus }: TemplateProps) {
+  const m = useMaterials();
+  const paused = deviceStatus === 'offline';
+  const flow = resolveNumeric(telemetry, FLOW_KEYS);
+  const rpm = resolveNumeric(telemetry, RPM_KEYS);
+  const airIntensity = Math.min(Math.max(flow / 100, rpm / 3000), 1);
+  const load = resolveNumeric(telemetry, POWER_KEYS);
+  const loadIntensity = Math.min(load / 100, 1);
+
   return (
     <g>
+      {m.defs}
 
-      {/* ── Return duct (left → AHU) — warm/orange ─────────────────────── */}
-      {/* Duct interior fill */}
-      <rect x="30" y="188" width="85" height="24" fill={RET} fillOpacity="0.15" />
-      {/* Duct walls */}
-      <line x1="30"  y1="188" x2="115" y2="188" strokeWidth="2" stroke={RET} strokeOpacity="0.6" />
-      <line x1="30"  y1="212" x2="115" y2="212" strokeWidth="2" stroke={RET} strokeOpacity="0.6" />
-      {/* Duct centerline fill (shows airflow mass) */}
-      <line x1="30"  y1="200" x2="115" y2="200" strokeWidth="20" strokeLinecap="butt"
-        stroke={RET} strokeOpacity="0.12" />
-      {/* Return flow arrows */}
-      <polyline points="58,193 73,200 58,207" strokeWidth="2" strokeLinejoin="round"
-        stroke={RETL} fill="none" strokeOpacity="0.9" />
+      {/* ── Ground shadow + roof stand feet ─────────────────────────────── */}
+      <AOShadow cx={250} cy={352} rx={175} ry={8} soft={m.soft} />
+      <MetalBody x={140} y={328} width={30} height={20} rx={2} m={m} />
+      <MetalBody x={330} y={328} width={30} height={20} rx={2} m={m} />
 
-      {/* ── Supply duct (AHU → right) — cool/cyan ──────────────────────── */}
-      <rect x="385" y="188" width="85" height="24" fill={SUP} fillOpacity="0.15" />
-      <line x1="385" y1="188" x2="470" y2="188" strokeWidth="2" stroke={SUP} strokeOpacity="0.6" />
-      <line x1="385" y1="212" x2="470" y2="212" strokeWidth="2" stroke={SUP} strokeOpacity="0.6" />
-      <line x1="385" y1="200" x2="470" y2="200" strokeWidth="20" strokeLinecap="butt"
-        stroke={SUP} strokeOpacity="0.12" />
-      {/* Supply flow arrows */}
-      <polyline points="418,193 433,200 418,207" strokeWidth="2" strokeLinejoin="round"
-        stroke={SUPL} fill="none" strokeOpacity="0.9" />
-
-      {/* ── AHU housing ────────────────────────────────────────────────── */}
-      <rect x="115" y="80" width="270" height="240" rx="10" strokeWidth="3" fill={PNL} stroke={BD} />
-      <rect x="119" y="84" width="5" height="232" rx="2.5" fill="white" fillOpacity="0.05" />
-
-      {/* ── Filter section (left) ───────────────────────────────────────── */}
-      <rect x="128" y="95" width="48" height="210" rx="4" strokeWidth="2"
-        style={{ fill: 'var(--color-page)', stroke: BD }} />
-      {/* Filter mesh — horizontal */}
-      {[108, 124, 140, 156, 172, 188, 204, 220, 236, 252, 268, 284].map((y) => (
-        <line key={`fh${y}`} x1="128" y1={y} x2="176" y2={y} strokeWidth="0.8"
-          stroke={BD} strokeOpacity="0.5" />
+      {/* ── Exhaust cowl on the roof ────────────────────────────────────── */}
+      <MetalBody x={292} y={72} width={68} height={26} rx={4} m={m} />
+      {[304, 318, 332, 346].map((x) => (
+        <line key={x} x1={x} y1={79} x2={x} y2={91} stroke={BD} strokeWidth="1.5" strokeOpacity="0.8" />
       ))}
-      {/* Filter mesh — vertical */}
-      {[140, 156, 172].map((x) => (
-        <line key={`fv${x}`} x1={x} y1="95" x2={x} y2="305" strokeWidth="0.8"
-          stroke={BD} strokeOpacity="0.5" />
+
+      {/* ── Return & supply ducts (chips land on their faces) ──────────── */}
+      <MetalBody x={30} y={120} width={84} height={112} rx={4} m={m} />
+      <MetalBody x={386} y={120} width={84} height={112} rx={4} m={m} />
+      {/* flange bolts at the cabinet joints */}
+      {[[104, 130], [104, 222], [396, 130], [396, 222]].map(([x, y]) => (
+        <circle key={`${x}-${y}`} cx={x} cy={y} r={1.8} fill={MUT} fillOpacity="0.6" />
       ))}
-      <text x="152" y="316" textAnchor="middle"
-        style={{ fill: 'var(--color-text-muted)', fontSize: 9, fontFamily: 'system-ui,sans-serif' }}>
-        FILTER
+      <text x="72" y="246" textAnchor="middle"
+        style={{ fill: MUT, fontSize: 9, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
+        RETURN
+      </text>
+      <text x="428" y="246" textAnchor="middle"
+        style={{ fill: MUT, fontSize: 9, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.06em' }}>
+        SUPPLY
       </text>
 
-      {/* ── Coil section (center) ──────────────────────────────────────── */}
-      <rect x="190" y="95" width="60" height="210" rx="4" strokeWidth="1.5"
-        style={{ fill: 'var(--color-page)', stroke: BD }} />
-      {/* Coil fins — blue */}
-      {[108, 122, 136, 150, 164, 178, 192, 206, 220, 234, 248, 262, 276, 290].map((y) => (
-        <line key={y} x1="193" y1={y} x2="247" y2={y} strokeWidth="1.5"
-          stroke={COIL} strokeOpacity="0.4" />
+      {/* ── Cabinet ─────────────────────────────────────────────────────── */}
+      <MetalBody x={110} y={95} width={280} height={235} rx={10} m={m} />
+      {/* panel seams */}
+      <line x1="200" y1="100" x2="200" y2="325" stroke={BD} strokeWidth="1" strokeOpacity="0.55" />
+      <line x1="300" y1="100" x2="300" y2="325" stroke={BD} strokeWidth="1" strokeOpacity="0.55" />
+      {/* corner rivets */}
+      {[[120, 105], [380, 105], [120, 320], [380, 320]].map(([x, y]) => (
+        <circle key={`rv-${x}-${y}`} cx={x} cy={y} r={1.6} fill={MUT} fillOpacity="0.55" />
       ))}
-      {/* Coil tube */}
-      <line x1="220" y1="95" x2="220" y2="305" strokeWidth="3"
-        stroke={COIL} strokeOpacity="0.55" />
-      {/* Refrigerant pipes — cyan */}
-      <line x1="220" y1="95"  x2="220" y2="68" strokeWidth="5" strokeLinecap="round"
-        stroke={REF} strokeOpacity="0.75" />
-      <line x1="218" y1="95"  x2="218" y2="68" strokeWidth="1.5" strokeLinecap="round"
-        stroke="white" strokeOpacity="0.25" />
-      <line x1="220" y1="305" x2="220" y2="332" strokeWidth="5" strokeLinecap="round"
-        stroke={REF} strokeOpacity="0.75" />
-      <line x1="218" y1="305" x2="218" y2="332" strokeWidth="1.5" strokeLinecap="round"
-        stroke="white" strokeOpacity="0.25" />
-      <text x="220" y="318" textAnchor="middle"
-        style={{ fill: 'var(--color-text-muted)', fontSize: 9, fontFamily: 'system-ui,sans-serif' }}>
-        COIL
+      {/* vent slots, top-left panel */}
+      {[110, 117, 124].map((y) => (
+        <line key={y} x1={128} y1={y} x2={166} y2={y} stroke={BD} strokeWidth="1.5" strokeOpacity="0.7" />
+      ))}
+      {/* etched model label */}
+      <text x="378" y="316" textAnchor="end"
+        style={{ fill: MUT, fontSize: 8, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.1em', opacity: 0.8 }}>
+        GITO AH-450
       </text>
 
-      {/* ── Fan section (right) ────────────────────────────────────────── */}
-      <rect x="264" y="95" width="108" height="210" rx="4" strokeWidth="1.5"
-        style={{ fill: 'var(--color-page)', stroke: BD }} />
-      {/* Fan housing */}
-      <circle cx="318" cy="200" r="52" strokeWidth="2"
-        style={{ fill: PNL, stroke: BD }} />
-      {/* Fan blades */}
-      {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-        const rad1 = (deg * Math.PI) / 180;
-        const rad2 = ((deg + 25) * Math.PI) / 180;
-        const x1   = 318 + 12 * Math.cos(rad1);
-        const y1   = 200 + 12 * Math.sin(rad1);
-        const x2   = 318 + 44 * Math.cos(rad2);
-        const y2   = 200 + 44 * Math.sin(rad2);
-        return (
-          <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2}
-            strokeWidth="4" strokeLinecap="round" stroke={BD} strokeOpacity="0.5" />
-        );
-      })}
-      {/* Fan hub */}
-      <circle cx="318" cy="200" r="11" strokeWidth="2" fill={PNL} stroke={BD} />
-      <circle cx="318" cy="200" r="4"  fill={BD} fillOpacity="0.5" />
-      <text x="318" y="316" textAnchor="middle"
-        style={{ fill: 'var(--color-text-muted)', fontSize: 9, fontFamily: 'system-ui,sans-serif' }}>
-        FAN
+      {/* ── Condenser coil (left section, behind the air stream) ───────── */}
+      <path d="M132 168 H188 V182 H132 V196 H188 V210 H132 V224 H188 V238 H132 V252 H188"
+        fill="none" stroke={MUT} strokeWidth="1.5" strokeOpacity="0.5" strokeLinejoin="round" />
+
+      {/* ── Fan cutaway window (hero motion) ────────────────────────────── */}
+      <circle cx={315} cy={200} r={42} fill={m.glass} />
+      <circle cx={315} cy={200} r={42} fill="none" stroke="#000" strokeOpacity="0.45" strokeWidth="2" />
+      <circle cx={315} cy={200} r={43.5} fill="none" stroke={BD} strokeWidth="2" />
+      <Spinner cx={315} cy={200} intensity={airIntensity} paused={paused}>
+        {[0, 72, 144, 216, 288].map((deg) => {
+          const a1 = (deg * Math.PI) / 180;
+          const a2 = ((deg + 30) * Math.PI) / 180;
+          return (
+            <line key={deg}
+              x1={315 + 10 * Math.cos(a1)} y1={200 + 10 * Math.sin(a1)}
+              x2={315 + 35 * Math.cos(a2)} y2={200 + 35 * Math.sin(a2)}
+              stroke="#94a3b8" strokeWidth="5.5" strokeLinecap="round" strokeOpacity="0.9" />
+          );
+        })}
+      </Spinner>
+      {/* protective grille rings + hub */}
+      <circle cx={315} cy={200} r={20} fill="none" stroke="#e2e8f0" strokeWidth="0.8" strokeOpacity="0.18" />
+      <circle cx={315} cy={200} r={32} fill="none" stroke="#e2e8f0" strokeWidth="0.8" strokeOpacity="0.18" />
+      <circle cx={315} cy={200} r={8} fill="#1f2937" stroke="#475569" strokeWidth="1.5" />
+
+      {/* ── Airflow through the machine (in front of coil + fan) ───────── */}
+      <DashFlow x1={50} y1={200} x2={450} y2={200} intensity={airIntensity} paused={paused}
+        color={AC} shadowColor={ACD} highlightColor={ACL} strokeWidth={10} />
+
+      {/* ── Compressor-load instrument strip ────────────────────────────── */}
+      <GlassFace x={180} y={246} width={140} height={40} rx={6} m={m} />
+      <ArcSweep cx={202} cy={268} r={14} intensity={loadIntensity} paused={paused}
+        color={AC} sweep={240} startAngle={150} strokeWidth={3} />
+      <text x="312" y="258" textAnchor="end"
+        style={{ fill: '#94a3b8', fontSize: 7, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.12em' }}>
+        COMP
       </text>
 
-      {/* ── Temperature sensors ────────────────────────────────────────── */}
-      {/* Return sensor */}
-      <circle cx="100" cy="200" r="8" strokeWidth="2" fill={PNL} stroke={RET} strokeOpacity="0.7" />
-      <line x1="100" y1="192" x2="100" y2="178" strokeWidth="2" strokeLinecap="round"
-        stroke={RET} strokeOpacity="0.6" />
-      {/* Supply sensor */}
-      <circle cx="400" cy="200" r="8" strokeWidth="2" fill={PNL} stroke={SUP} strokeOpacity="0.7" />
-      <line x1="400" y1="192" x2="400" y2="178" strokeWidth="2" strokeLinecap="round"
-        stroke={SUP} strokeOpacity="0.6" />
-
-      {/* ── Labels ────────────────────────────────────────────────────── */}
-      <text x="30"  y="176"
-        style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.04em' }}>
-        RETURN AIR
-      </text>
-      <text x="388" y="176"
-        style={{ fill: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.04em' }}>
-        SUPPLY AIR
-      </text>
-      <text x="250" y="368" textAnchor="middle"
-        style={{ fill: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'system-ui,sans-serif', letterSpacing: '0.08em' }}>
-        AIR HANDLING UNIT
-      </text>
+      {/* ── Status LED on top of the unit ───────────────────────────────── */}
+      <Blink cx={180} cy={111} r={4} intensity={paused ? 0 : Math.max(airIntensity, 0.3)}
+        paused={paused} color={AC} />
     </g>
   );
 }

@@ -78,20 +78,16 @@ export default function DeviceVisualization({
   // When no schema is declared, fall back to showing every non-null metric.
   const schemaKeys = useMemo(() => Object.keys(telemetrySchema), [telemetrySchema]);
 
-  // Metrics already rendered as overlays on the illustration — exclude from the grid.
-  // Only count overlays that actually have live data — empty overlays are hidden.
+  // Metrics rendered inside the illustration (display slots + status pill) —
+  // exclude from the grid. Everything else stays in the grid, so every metric
+  // is always visible somewhere and never floats over the artwork.
   const overlayMetricKeys = useMemo(
     () => new Set(
-      (templateConfig?.overlays ?? [])
-        .filter(o => latestValues[o.metric] !== null && latestValues[o.metric] !== undefined)
-        .map(o => o.metric)
+      (templateConfig?.boundMetrics ?? [])
+        .filter(k => latestValues[k] !== null && latestValues[k] !== undefined)
     ),
     [templateConfig, latestValues]
   );
-
-  // If template resolved but none of its overlays have data, don't show the illustration —
-  // fall back to the metric grid so orphan metrics render cleanly instead of next to an empty diagram.
-  const showTemplate = templateConfig !== null && overlayMetricKeys.size > 0;
 
   const resolvedMetrics = useMemo<Array<{ key: string; def: MetricDefinition }>>(() => {
     return Object.entries(latestValues)
@@ -105,6 +101,10 @@ export default function DeviceVisualization({
         def: schemaDefinitions[key] ?? inferMetricDefinition(key, val),
       }));
   }, [latestValues, schemaDefinitions, schemaKeys]);
+
+  // Show the illustration whenever the device has any live data — templates
+  // self-pause their animations at zero activity.
+  const showTemplate = templateConfig !== null && resolvedMetrics.length > 0;
 
   // When a template is active and has live overlays, only the metrics NOT already
   // shown as overlays appear in the right-hand grid — avoids showing the same value twice.

@@ -1,13 +1,18 @@
 /**
  * DeviceTemplates — Type System
  *
- * All overlay coordinates use SVG space (viewBox 0 0 500 400).
- * TemplateRenderer converts them to percentage-based positions for the DOM layer.
+ * Rendering contract (v2 — display slots):
+ *   - Templates own ALL artwork and motion (pipes, dials, liquid, LEDs).
+ *   - Live values render ONLY inside `ValueSlot` regions the template declares —
+ *     display areas designed into the artwork (a gauge face, a control panel).
+ *     They are SVG text, so they scale losslessly and can never cover artwork.
+ *   - One optional status pill renders in the container corner (reserved space).
+ *   - Every other metric falls through to the metric grid beside the illustration.
  *
  * Resolution order (in DeviceVisualization):
- *   1. deviceType.metadata?.visualization_config  → explicit DB config (future admin UI)
+ *   1. deviceType.metadata?.visualization_config  → explicit DB config
  *   2. resolveTemplate(category, schema)           → auto-detect by category + schema
- *   3. null                                        → fall back to metric grid
+ *   3. null                                        → metric grid only
  */
 
 export type TemplateName =
@@ -18,74 +23,49 @@ export type TemplateName =
   | 'solar_system'
   | 'hvac_unit';
 
-/** SVG coordinate (viewBox 0 0 500 400) */
-export interface Point { x: number; y: number; }
+/**
+ * A display region designed into the template artwork.
+ * Declared by each template module (`export const slots`) in SVG coordinates
+ * (viewBox 0 0 500 400). `x,y` is the CENTER of the value text.
+ */
+export interface ValueSlot {
+  x: number;
+  y: number;
+  /** Max text width in SVG units — the renderer shrinks the font to fit */
+  width: number;
+  fontSize?: number;
+  /** Value text color (default #f1f5f9 — light, for dark glass faces) */
+  color?: string;
+  /** Optional glow color behind the digits (accent tint) */
+  glow?: string;
+}
 
-interface BaseOverlay {
-  /** Key into the live telemetry record */
+/** Binds a telemetry metric to a named slot in the template's slot map */
+export interface SlotBinding {
+  slot: string;
   metric: string;
-  /** Optional display label override */
-  label?: string;
-}
-
-/** Numeric value + unit at a fixed SVG position */
-export interface ValueLabelOverlay extends BaseOverlay {
-  type: 'value';
-  position: Point;
   unit?: string;
 }
 
-/** Arc gauge for a bounded numeric metric */
-export interface GaugeOverlay extends BaseOverlay {
-  type: 'gauge';
-  position: Point;
-  min: number;
-  max: number;
-  unit?: string;
-  /** Diameter in px — scales with container (default 72) */
-  size?: number;
-}
-
-/** Animated FlowLine between two SVG points (reuses existing FlowLine component) */
-export interface FlowOverlay extends BaseOverlay {
-  type: 'flow';
-  start: Point;
-  end: Point;
-  max?: number;
-  unit?: string;
-}
-
-/** Vertical fill bar for level/battery/tank metrics */
-export interface LevelOverlay extends BaseOverlay {
-  type: 'level';
-  position: Point;
-  /** Absolute max value; if omitted the value is treated as 0–100 */
-  capacity?: number;
-  unit?: string;
-  /** Bar width in px (default 18) */
-  width?: number;
-  /** Bar height in px (default 72) */
-  height?: number;
-}
-
-/** Online/offline style status badge */
-export interface StatusOverlay extends BaseOverlay {
-  type: 'status';
-  position: Point;
+/** Boolean state metric rendered as a corner status pill */
+export interface StatusBinding {
+  metric: string;
   trueLabel?: string;
   falseLabel?: string;
 }
 
-export type Overlay =
-  | ValueLabelOverlay
-  | GaugeOverlay
-  | FlowOverlay
-  | LevelOverlay
-  | StatusOverlay;
-
 export interface TemplateConfig {
   template: TemplateName;
-  overlays: Overlay[];
+  /** Values rendered into the template's declared display slots */
+  bindings: SlotBinding[];
+  /** Optional corner status pill */
+  status?: StatusBinding;
+  /**
+   * All metrics consumed by the illustration (slot bindings + status).
+   * DeviceVisualization excludes these from the side metric grid; everything
+   * else stays in the grid so every metric is always visible somewhere.
+   */
+  boundMetrics: string[];
 }
 
 /** Schema shape passed in from device type */
