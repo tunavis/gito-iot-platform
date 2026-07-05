@@ -1,35 +1,49 @@
 # Gito Industrial Intelligence Platform — 5-Year Strategy (2026–2031)
 
-**Status:** Draft v1 (solo synthesis; pending multi-agent adversarial review)
+**Status:** v2 — revised after 6-agent adversarial review (68 findings, 33 high-severity, all web-verified or repo-verified)
 **Author:** Claude (with Mark Marais) — 2026-07-05
-**Scope:** Full platform architecture, module catalogue, AI agent ecosystem, roadmap, revenue model
+**Scope:** Platform architecture, module catalogue, AI agent ecosystem, roadmap, revenue model
+
+**v2 changelog (what the review reversed):** conversational AI over live OT data and MCP exposure are
+now *table stakes*, not differentiators (AWS SiteWise Assistant, AVEVA AI Assistant GA, Maximo watsonx,
+Litmus & ThingsBoard MCP servers all ship today); the competitive section is rewritten around the real
+regional competitors (IoT.nxt/Vodacom, ThingsBoard) instead of only enterprise giants; the processor's
+forked alarm engine is now a named P0 prerequisite; the asset-registry effort was re-scoped (additive-only
+in Y1); OPC-UA library switched to gopcua over LGPL asyncua; ISO 27001 now precedes SOC 2; IEC 62443-4-1
+practices start now (certification is not retrofittable); self-serve is dropped as a Y1 motion (SA mining/
+municipal procurement reality); Y1-H1 was halved and serialized; paid POCs/services/NRE/grants added as
+the actual Y1 revenue; capacity assumptions corrected to demonstrated cadence.
 
 ---
 
-## 1. Executive Summary — The Thesis
+## 1. Executive Summary — The Thesis (revised)
 
 Gito today is a working multi-tenant IoT monitoring SaaS (FastAPI + Next.js + PostgreSQL/TimescaleDB +
-Redis streams) with genuine differentiators already shipped: schema-driven device types, a live
-data-driven SVG digital-twin system, LoRaWAN/ChirpStack + MQTT ingestion, and an alarm engine.
+Redis streams) with real shipped substance: schema-driven device types, a data-driven SVG digital-twin
+system with a template-authoring pipeline, LoRaWAN/ChirpStack + MQTT ingestion, and an alarm engine.
 
-The 5-year bet: **AI agents become the primary interface to industrial operations software.**
-Dashboards become the fallback, not the front door. Incumbents (Siemens, AVEVA, PTC, IBM) carry
-20 years of UI/architecture debt and sell through 18-month enterprise sales cycles. A small,
-AI-native player wins by being *the platform an operations manager can talk to* — and by landing
-in a regional wedge (Southern African mining, water utilities, energy) that the giants serve badly
-and price out of reach.
+The macro bet stands: **AI agents become a primary interface to industrial operations software.** But the
+review killed the comfortable version of it — the incumbents are NOT asleep: AWS, AVEVA, IBM, Seeq and
+even open-source ThingsBoard already ship conversational assistants and/or MCP surfaces. Being "AI-first"
+is not the moat. The defensible position is narrower and must be executed precisely:
 
-Strategic sequence, one sentence: **own the data path (connectivity + edge) → make the data
-intelligible (twins + knowledge base) → make it conversational (agents) → make it autonomous
-(closed-loop automation) → sell it modularly (marketplace + white-label).**
+> **Answers grounded to the tag/alarm/timestamp level, over an edge-to-cloud data path we own, packaged
+> for mid-market Southern African mining/water/energy operators, at a price and deployment reality
+> (on-prem-capable, B-BBEE-compliant, integrator-friendly) that neither hyperscalers nor free
+> open-source-plus-integrator stacks actually deliver.**
 
-Three rules that govern everything below:
-1. **Modular monolith, not microservices.** A 2-dev + AI-agents team ships a modular monolith with
-   clean module boundaries; we extract services only when a hot path proves it (ingest first).
-2. **Every feature is also an API + MCP tool.** If an agent can't call it, it isn't done. The MCP
-   server is a first-class product surface, not an integration afterthought.
-3. **Buy/wrap before build** for anything that isn't the differentiator (drivers, CV models,
-   automation engine). The differentiator is the intelligence layer, not protocol parsing.
+Strategic sequence: **own the data path (edge + connectivity) → make it intelligible (twins + knowledge)
+→ make it conversational with citations (agents) → make it autonomous (graduated closed-loop) → package
+it modularly (industry packs, then marketplace).**
+
+Governing rules:
+1. **Modular monolith, not microservices** — but honestly: the module contract does not exist yet in code
+   and is budgeted as real Y1 work (§4), not assumed.
+2. **Every feature is also an API + MCP tool.** MCP is catch-up, not moat — Litmus ships an MCP server
+   today, Ignition's module is in Early Access, ThingsBoard has 120+ MCP tools. Our version competes on
+   *governance*: typed tools, tenant scoping, approval gates, full audit.
+3. **Buy/wrap before build** for non-differentiators. The differentiator is the grounded intelligence
+   layer + the wedge-market fit, not protocol parsing.
 
 ---
 
@@ -40,316 +54,299 @@ Three rules that govern everything below:
 | Multi-tenant SaaS (RLS isolation, JWT, RBAC roles) | ✅ Shipped |
 | Device types w/ telemetry schemas, KV telemetry store (Timescale) | ✅ Shipped |
 | LoRaWAN: ChirpStack MQTT bridge (multi-tenant workers), TTN webhook, universal webhook | ✅ Shipped |
-| MQTT ingest + processor (Redis streams, dedup, rate limits, digital-twin cache) | ✅ Shipped |
-| Alarms: threshold + composite rules, notifications (email) | ✅ Shipped |
+| MQTT ingest + processor (Redis streams, dedup, rate limits, twin cache) | ✅ Shipped |
+| Alarms: threshold + composite rules, email notifications | ⚠️ Shipped but **forked**: processor has its own threshold-only AlertEvaluator + copy-pasted EmailService, separate from the API's unified engine — alarm behavior diverges by ingest path (verified: processor/mqtt_processor.py:607, :452, :102) |
 | Dashboards + widgets, WebSocket live updates | ✅ Shipped |
-| Digital twins: 8 data-driven SVG assets w/ display-slot contract + authoring skill | ✅ Shipped |
+| Digital twins: 8 data-driven SVG assets, display-slot contract, authoring skill | ✅ Shipped |
 | Device RPC commands, firmware fields, solution templates | ✅ Shipped |
-| Mobile app (Flutter) | 🟡 Early |
-| OPC-UA / Modbus / S7 / EtherNet-IP / BACnet / DNP3 drivers | ❌ None |
-| Edge gateway product (offline buffering, fleet mgmt) | ❌ None |
-| AI features (any) | ❌ None |
-| Billing / licensing / marketplace | ❌ None |
-| SSO/SAML, MFA, SOC2/ISO/IEC-62443 posture | ❌ None |
+| Mobile app (Flutter) | 🟡 Early, unmaintained |
+| OPC-UA / Modbus / S7 / BACnet / DNP3 drivers; edge gateway; AI features; billing; SSO/MFA; compliance posture | ❌ None |
 
-**Asset to protect:** the ingest→twin→alarm pipeline works end-to-end today and is architecturally
-clean. **Debt to respect:** single-region, single Postgres, no billing — fine for now, planned for below.
+**Capacity honesty (review finding):** repo history shows a 10-week commit gap (Apr→Jul 2026); demonstrated
+cadence is one founder, part-time, with heavy AI-agent leverage. Every plan below is sized to that reality
+— the plan states explicitly where hiring or committed hours would change it.
 
 ---
 
-## 3. Competitive Landscape & Our Wedge
+## 3. Competitive Landscape & Our Wedge (rewritten)
 
-*(Qualitative from training knowledge — verify volatile specifics in review pass.)*
+### 3a. Who the wedge customer actually cross-shops (the fight that matters)
 
-| Player | Strength | Exploitable weakness |
+| Competitor | Reality | How we beat them |
 |---|---|---|
-| Ignition (Inductive) | Beloved unlimited-license model, SCADA-grade, huge integrator network | On-prem-first DNA; SaaS/AI bolted on; UI is engineer-only |
-| Siemens Industrial Edge | Hardware reach, brand trust | Ecosystem lock-in, glacial, expensive |
-| PTC ThingWorx | Enterprise features, twin pedigree | Notoriously heavy, costly, consultant-driven |
-| AVEVA (PI) | The historian incumbent; data gravity | Pricing hostility is legendary; innovation slow |
-| AWS IoT / Azure IoT Ops | Infinite scale primitives | Not products — toolkits; need an integrator; no domain UX |
-| Litmus | Strong edge/driver story | Thin above the edge: analytics/UX shallow |
-| C3 AI / Seeq | Analytics/AI narrative | Enterprise price floor ($M), services-heavy, no SMB motion |
-| IBM Maximo | EAM/CMMS install base | Legacy weight; AI = add-on marketing |
-| Tulip | Frontline apps UX | Manufacturing-only niche |
+| **IoT.nxt (Vodacom)** | Pretoria-based, mining-focused, Raptor edge + platform, bundled with Vodacom connectivity | They sell telco bundles; we sell operational intelligence — grounded AI answers, twins, domain packs. Win on product depth + speed + not being locked to one carrier |
+| **ThingsBoard** | Open-source; cloud from ~$49/mo; what price-sensitive SA integrators actually deploy; even ships an MCP server | "Free" costs integrator hours forever. We win on: industry packs that work day-1, twins without custom dev, cited AI answers, edge fleet management, local compliance/support. We must be *better assembled*, not cheaper than free |
+| **Cumulocity / telco offerings** | Named in our own CLAUDE.md as competition | Same as above — generic platform vs assembled domain product |
+| **Adroit / local SCADA + integrators** | Incumbent brownfield mindshare | Coexist: we ride Sparkplug/OPC-UA alongside SCADA, add the intelligence layer SCADA lacks |
+| **TPG-owned ThingWorx + Kepware** | PTC divested both to TPG (completed 2026-03-16) — may re-emerge leaner and mid-market-focused, with Kepware's driver arsenal | Watch closely; their driver portfolio is the §7 moat we don't have yet. Speed + regional fit are the answer |
 
-**Gaps nobody fills well:** (a) affordable, self-serve, AI-first platform for mid-market industrial
-operators; (b) conversational operations over *live* OT data with citations back to tags/alarms;
-(c) mining-specific SaaS (tailings, ventilation, dust, diesel) at non-enterprise pricing;
-(d) genuinely good digital twins without a 3D/consulting project.
+### 3b. Enterprise reference points (what "good" looks like, not who we out-price)
 
-**Wedge:** Southern Africa mining + water + energy mid-market, priced per-asset (not per-tag),
-self-serve onboarding, agents that speak the operation's language. Expand outward from reference
-sites → white-label resellers (system integrators) → international mid-market.
+- **AWS IoT SiteWise Assistant** (GA Nov 2024): chat over live asset data + manuals in dashboards.
+- **AVEVA Industrial AI Assistant** (GA Jul 2025, all CONNECT users): RAG over live streams/assets/MES.
+- **IBM Maximo 9.1 watsonx assistant**: NL queries over live EAM data. **C3 AI**: citations-to-source is
+  their headline claim. **Seeq**: mid-market pricing (~$1.2k/yr entry, AWS Marketplace self-serve) with
+  bundled AI assistants — a real mid-market AI-analytics competitor, not enterprise-only.
+- **Ignition**: unlimited-license SCADA king, now with Cloud Edition and an MCP module in EA.
 
-**Packaging pattern to steal:** Ignition proved unlimited-tags licensing wins hearts. Our analog:
-**unlimited metrics/users per asset** — price on monitored assets + AI tier, never per-tag, never per-seat.
+**Consequence (review-forced):** "conversational operations" and "MCP-native" are NOT differentiators.
+What remains defensible: (a) **citation granularity** — answers grounded to specific tags/alarms/timestamps
+(enterprise assistants cite documents and asset summaries; none cite to the tag level at mid-market price);
+(b) **the assembled wedge product** — edge + packs + twins + agents + compliance, sold as one thing a mine
+can deploy without an integrator army; (c) **speed** — a 12–18 month feature lead is real but perishable;
+every quarter of delay burns it.
 
----
-
-## 4. Target Architecture — Modular Monolith → Platform
-
-```
-┌────────────────────────────  CLIENTS  ────────────────────────────┐
-│  Next.js web · Flutter mobile · AI Chat/Voice · 3rd-party via API │
-└──────────────────────────────┬────────────────────────────────────┘
-                               │  REST / GraphQL(read) / WS / MCP
-┌──────────────────────────────▼────────────────────────────────────┐
-│                    GITO CORE (modular monolith)                    │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌────────────┐  │
-│  │ Assets/ │ │ Telemetry│ │ Alarms/ │ │ AI Layer │ │ Billing/   │  │
-│  │ Devices │ │ + Twins  │ │ Automa- │ │ (agents, │ │ Licensing/ │  │
-│  │ /Fleet  │ │          │ │ tion    │ │ RAG, NLQ)│ │ Marketplace│  │
-│  └─────────┘ └─────────┘ └─────────┘ └──────────┘ └────────────┘  │
-│   Module contract: each = router + service + models + events +    │
-│   MCP tools + (optional) UI package. In-process event bus now;    │
-│   same events mirrored to Redis streams for external consumers.   │
-└───────┬──────────────────────────────────────────────┬───────────┘
-        │                                              │
-┌───────▼───────────┐                        ┌─────────▼─────────┐
-│ INGEST PLANE       │                        │ DATA PLANE        │
-│ processor(s):      │                        │ Postgres (OLTP +  │
-│ MQTT · ChirpStack  │                        │ RLS) · Timescale  │
-│ bridges · webhooks │                        │ (telemetry) ·     │
-│ · Sparkplug B ·    │                        │ pgvector (KB) ·   │
-│ camera events      │                        │ Redis (streams,   │
-└───────▲───────────┘                        │ cache, pubsub)    │
-        │ store-and-forward                   └───────────────────┘
-┌───────┴───────────────────────────────────────────────────────────┐
-│ GITO EDGE (new product): drivers (Modbus/OPC-UA/S7/…) · local     │
-│ rules · buffer · local twin cache · optional edge AI · fleet-     │
-│ managed from cloud · same event schema as cloud ingest            │
-└───────────────────────────────────────────────────────────────────┘
-```
-
-**Why monolith-first matters:** microservices would consume the whole team in plumbing. The module
-contract (each module = router + service + event emissions + MCP tools) gives us extraction seams
-for later without paying the distributed-systems tax now. The **first and only early extraction**
-is the ingest plane (already a separate `processor` container — correct instinct, keep it).
-
-**Asset Registry (P0 spine):** everything below hangs off a proper hierarchy —
-`Tenant → Site → Area → Asset → Device → Metric`. We have sites/hierarchy + devices today; the gap
-is formalizing **Asset** as the unit customers think in (a conveyor, a pump station) with devices
-attached to assets, twins attached to assets, alarms/reports/agents scoped to assets. Effort: M.
-This single refactor multiplies the value of every module after it.
+**Market signal to respect:** PTC *exiting* horizontal IIoT platforms says undifferentiated platforms are
+a bad business. We are not building a platform; we are building an assembled product for a wedge, on a
+platform.
 
 ---
 
-## 5. Module Catalogue
+## 4. Target Architecture — Modular Monolith → Platform (corrected)
 
-**What an industry module IS technically** (this makes the marketplace real): a versioned pack of
-`device-type definitions + twin templates + alarm-rule packs + report templates + dashboard layouts +
-agent knowledge (domain prompts/playbooks) + optional drivers`. The solution-template system that
-exists today is the seed of exactly this. Modules install per-tenant; licensing gates activation.
+Architecture diagram unchanged from v1 in shape (clients → modular core → ingest plane → data plane →
+edge), with three review-forced corrections:
 
-| Module | Contents (beyond core) | Priority | Effort | Why this order |
-|---|---|---|---|---|
-| **Core Platform** | asset registry, fleet, RBAC+, audit, API mgmt, billing | P0 | L | Everything depends on it |
-| **Connectivity** | Modbus TCP→RTU, OPC-UA, S7, Sparkplug B, BACnet, DNP3 (sequenced) | P0 | XL (phased) | Data is the moat |
-| **Mining Ops** | conveyor (belt slip via speed/current correlation), crusher, ventilation, pumps, tailings dam (piezometer/level/rainfall packs), dust, diesel/fuel, personnel/equipment tracking (LoRa tags) | P0 (wedge) | L | Regional differentiator; references exist |
-| **Water Utilities** | reservoir, pump stations, quality (pH/turbidity/chlorine), pressure zones, leak detection (night-flow analysis) | P1 | M | Builds directly on shipped water twins |
-| **Energy** | smart metering, solar (leverages existing solar twin), gensets, batteries/UPS, load forecasting (AI tie-in) | P1 | M | Existing demo depth |
-| **Manufacturing** | OEE, downtime (Pareto), machine health, shift reports | P2 | M | Bigger market, harder sales; after references |
-| **Agriculture** | irrigation, soil moisture, cold chain | P3 | S-M | Opportunistic; LoRa strength applies |
-| **Smart Buildings** | HVAC (existing twin), energy, occupancy | P3 | S-M | Via reseller channel, not direct |
-| **Camera/CV** | PPE, smoke/fire, intrusion, vehicle counting — wrap off-the-shelf models, events→alarm engine | P2 | M | Buy/wrap, never train from scratch |
+**4a. P0 prerequisite — unify the alarm engine (NEW, before anything else).** The processor contains a
+forked, threshold-only alarm evaluator with its own SQL and a copy-pasted email service; composite rules
+live only API-side. Every future alarm feature (asset scoping, hysteresis, insight events) would be built
+twice or silently diverge. Fix: single alarm-evaluation service consumed by both paths (in-process lib or
+API-side evaluation triggered off the stream). Effort M. **This precedes the asset registry** — it is the
+real "clean seam" work.
+
+**4b. Asset Registry — additive-only in Y1 (re-scoped).** v1 called this "Effort M"; verified fan-out says
+otherwise: 231 device_id references across 16 routers, two alarm engines, strictly per-device twins.
+Y1 scope: `assets` table + hierarchy + device→asset attachment + asset-scoped *reads* (grouping, rollups,
+MCP tools). Alarms/twins stay device-scoped through Y1; re-keying them is Y2 work, scheduled, not smuggled.
+Multi-device asset twins (a conveyor = drives + idlers + belt) are therefore Y2 — which moves the conveyor
+pack to H2+ (§5).
+
+**4c. Module contract — build it, don't assume it (corrected).** Verified: no event bus exists in code;
+29 routers with a partial service layer. Y1 work item ("module contract enforcement", effort M): in-process
+domain events (typed, versioned) mirrored to Redis streams; data-ownership rules per module; import-boundary
+lint. Without this the "extraction seams" claim is fiction.
 
 ---
 
-## 6. The AI Platform — the Centerpiece
+## 5. Module Catalogue (sequencing corrected)
 
-**Architecture principle:** agents are thin; the platform is thick. Every agent = system prompt +
-scoped MCP toolset + event triggers. All heavy lifting (queries, alarms, reports) lives in platform
-APIs that humans and agents share. Frontier-hosted LLMs (Claude API) first; self-hosting only when
-unit economics or air-gap demands it. Per-tenant token metering from day one (billing tie-in).
+A module = versioned pack of `device types + twin templates + alarm-rule packs + report templates +
+dashboards + agent playbooks (+ optional drivers)`, installed per-tenant, gated by licensing. The shipped
+solution-template system is the seed.
 
-### 6.1 Foundations (build in this order)
+| Module | Y1 reality check | Priority |
+|---|---|---|
+| Core Platform (alarm unification, asset registry additive, module contract, audit) | The actual Y1-H1 backbone | P0 |
+| Connectivity + Edge | Modbus TCP first; OPC-UA H2 (gopcua); Sparkplug B H2 as *boundary interop only* | P0 |
+| **Mining Ops** | **H1 = pump-station pack only** (reuses shipped Pump/WaterTank twins + existing alarm engine). Conveyor pack needs multi-device twins (Y2) AND cross-metric correlation (F4) — belt-slip in H1 was fiction. Dust/ventilation/tailings: H2+ with domain-expert validation; tailings monitoring is regulated (GISTM) — partner, don't improvise | P0 wedge |
+| Water Utilities | H2: reservoir/pump-station/pressure packs on shipped twins; night-flow leak detection needs F4 | P1 |
+| Energy | Y2: metering, solar (shipped twin), gensets; load forecasting after F4 | P1 |
+| Manufacturing OEE | Y2-Y3, after references | P2 |
+| Camera/CV (wrap models) | Y2+ | P2 |
+| Agriculture / Smart Buildings | opportunistic, reseller-pulled | P3 |
 
-| # | Foundation | What | Effort | Priority |
-|---|---|---|---|---|
-| F1 | **Gito MCP Server** | Expose existing REST surface as typed MCP tools (list assets, query telemetry, alarms, acknowledge, command devices w/ approval gates). Instantly makes Gito usable from Claude/any agent client — a product in itself for engineer customers. | M | P0 |
-| F2 | **NL Telemetry Query (NLQ)** | Text→guarded SQL over Timescale (templated query plans, tenant-scoped, cited). "Show pump 3 flow vs pressure last week" → chart + data. | M | P0 |
-| F3 | **Knowledge Base (RAG)** | pgvector over uploaded manuals/schematics/SOPs + auto-ingested alarm history and maintenance notes. Citations mandatory. No external vector DB until pgvector hurts. | M | P0 |
-| F4 | **Insight/anomaly pipeline** | Statistical first (EWMA, seasonal decomposition, rate-of-change, flatline/stuck-sensor detection) running in the processor; learned models (per-metric baselines) later. Emits `insight` events into the alarm/notification flow. | M→L | P1 |
-| F5 | **Agent runtime** | Server-side agent loop (Claude Agent SDK) with: shared memory (Postgres), event subscriptions (Redis streams), tool allow-lists per role, human-approval gates for any actuation, full audit of every tool call. | L | P1 |
+---
 
-### 6.2 The agents (ruthless sequencing)
+## 6. The AI Platform (revised)
 
-**Ship ONE agent first and make it undeniable: the Operations Assistant** — chat (web+mobile+voice)
-that answers "why did production drop yesterday?", "which site consumed the most diesel?", "show me
-abnormal pump behaviour" using F1–F4, with citations to tags/alarms/history. It wows in demos,
-touches every module, and forces the foundations to be real. Everything else derives from it:
+Agents are thin; the platform is thick. Frontier-hosted LLMs first. Per-tenant token metering from day one.
 
-| Agent | Trigger | Adds on top of foundations | Priority |
-|---|---|---|---|
-| Operations Assistant | user chat/voice | — (the foundation proof) | **P0** |
-| Reporting Agent | schedule/event/user | report templates (exec/shift/weekly/ESG), branded PDF/email delivery | P1 (fast follow — near-pure LLM + existing data) |
-| Maintenance Engineer | insight events | RUL estimates (start simple: runtime-hours + vibration/temp trends), work-order objects + CMMS webhooks, repair recommendations from KB | P1 |
-| Data Analyst | schedule/user | correlation mining across metrics, trend narratives, "what changed" diffs | P2 |
-| Safety/Environmental | threshold+CV events | dust/gas/PPE playbooks, incident timelines, compliance evidence packs | P2 (sells in mining) |
-| Reliability Agent | continuous | fleet-wide asset health scoring, maintenance prioritization | P2 |
-| Compliance Agent | schedule | ESG/regulatory report automation (mining: water use, dust, energy) | P3 |
-| PLC Engineer | user | tag dictionary understanding, logic explanation from uploaded programs, value sanity checks. **Read-only forever by default; ladder generation stays advisory.** | P3 (credibility risk if rushed) |
-| SCADA Assistant / Customer Success | user/telemetry | migration helpers; usage-based onboarding nudges | P3 |
+**Agent-runtime decision (review-forced):** Claude Agent SDK has the deepest MCP support but owns the loop
+and is Anthropic-tuned — that conflicts with the Y3 air-gapped commitment. Resolution: agent loop goes
+behind **our own thin runtime interface from day one** (trigger → context assembly → tool loop → artifact
+output). Claude SDK is the first implementation; an air-gapped/self-hosted implementation can replace it
+per-deployment without rewriting agents. Accepted trade-off: cloud agents are better for years; air-gapped
+customers get a reduced agent set when SLM quality allows.
 
-**Collaboration model:** agents don't chat with each other free-form. They communicate through
-platform artifacts — one agent's output (insight, work order, report) is an event another agent's
-trigger consumes. Deterministic, auditable, debuggable. MCP shared toolset + Postgres shared memory
-+ Redis event bus. No agent-to-agent improv until there's a proven need.
+### 6.1 Foundations (re-sequenced)
+
+| # | Foundation | Change from v1 |
+|---|---|---|
+| F0 | **Unified alarm engine** | NEW — prerequisite (see §4a) |
+| F1 | **Gito MCP Server** — typed tools, tenant-scoped, approval-gated, audited; pin MCP spec version, track Linux-Foundation evolution | Reframed: table stakes executed better, not "a product in itself" — ThingsBoard gives its MCP away free |
+| F2 | **NLQ** (templated text→SQL plans, cited) | Confirmed by review as right approach; moves to H2 |
+| F3 | **Knowledge Base** (pgvector RAG, citations mandatory) | Confirmed; H2 |
+| F4-lite | **Statistical insights** — flatline/stuck-sensor, rate-of-change, EWMA bands | Pulled INTO H1 (cheap, runs in unified alarm engine) so the first assistant can honestly answer "abnormal behaviour" questions |
+| F4 | Seasonal decomposition, learned per-metric baselines, correlation mining | H2-Y2 |
+| F5 | **Agent runtime** (own interface; Claude SDK impl; artifact-based collaboration; full tool-call audit — audit ships WITH the first agent, not later) | Y1-H2 |
+
+### 6.2 Agents (sequencing corrected)
+
+**H1 ships an internal-facing MCP demo, not a public assistant beta.** The public Operations Assistant
+ships H2 on F1+F2+F4-lite and is scoped honestly: lookups, charts, alarm summaries, anomaly *flags* —
+causal "why did production drop" answers arrive with F3/F4 in Y2. Never demo what the foundations can't
+ground; a wrong cited answer at a mine is the trust incident §13 warns about.
+
+Sequence after that (unchanged in order, shifted right ~6 months): Reporting Agent → Maintenance Engineer
+(RUL claims stay modest: runtime-hours + trend heuristics are maintenance *prioritization*, not "RUL" —
+marketing must match math) → Data Analyst → Safety/Environmental → Reliability → Compliance → PLC Engineer
+(read-only forever by default).
 
 ### 6.3 AI Digital Twin
+Predicted-state rendering (ghost needle + forecast scrub) on the shipped slot system. Review verdict:
+differentiation *uncertain but plausible* — no verified competitor does lightweight web twins with
+predicted state at mid-market; treat as strong feature, not guaranteed moat. Y2.
 
-Extend the shipped SVG twin system (display slots, smoothed values) with: **predicted-state
-rendering** (ghost needle showing where the value is heading; time-scrub slider over history and
-forecast), health halo (green→amber→red from asset health score), and "explain this asset" — click
-any twin → Operations Assistant seeded with that asset's context. Effort: M. Differentiator: no
-competitor renders live *and predicted* state in a lightweight web twin without a 3D consulting project.
-
-### 6.4 Edge AI (kept honest)
-
-Local anomaly scoring (statistical + small ONNX models) in the edge gateway: yes, early. Local LLM
-on gateways: not before Y3 — small-model quality/cost curve will decide; design the agent runtime so
-the model endpoint is swappable. Offline mode = local rules + buffering + local twin cache, not
-offline chat.
+### 6.4 Edge AI (date corrected)
+Review: scoped SLM inference is viable NOW (Phi-4-mini/Gemma-3-4B class; Pi AI HAT+ 2, $130, 40 TOPS).
+Revised: **Y2, not Y3** — scoped edge tasks first (alarm summarization, NLQ intent parsing, offline shift
+briefs) behind the same runtime interface. Full conversational edge agents remain later. This matters
+because offline-AI in air-gapped mining is our own wedge story — conceding it to 2029 was self-harm.
 
 ---
 
-## 7. Connectivity & Edge Strategy
+## 7. Connectivity & Edge (corrections applied)
 
-**Gito Edge Gateway (the second product).** Python/Go services in Docker on industrial Linux
-(Pi CM4/5, OnLogic, Moxa, Teltonika): driver host + local rule engine + store-and-forward buffer
-(SQLite WAL) + fleet agent (config pull, OTA via container tags, health heartbeat). Speaks the SAME
-event schema as cloud ingest — a device behind a gateway is indistinguishable from a cloud-direct one.
-Provisioning: X.509 per-gateway certs, claim-code onboarding UX (type code from sticker → tenant-bound).
-Effort: L. Priority: **P0 — this is the moat.**
+**Gito Edge Gateway** stays the second product and the moat-builder: driver host + local rules +
+store-and-forward (SQLite WAL) + fleet agent + claim-code onboarding + X.509 mTLS. H1 alpha = **Modbus TCP
+only**, one real site. OTA strategy needs A/B partition or supervised rollback, not bare container-tag
+pulls (review: bricked remote mining gateways are a truck roll).
 
-**Driver sequence (wedge-market demand order):**
-1. **Modbus TCP** (wrap `pymodbus`) — ubiquitous in water/energy. Effort S-M.
-2. **OPC-UA client** (wrap `asyncua`) — the mining/manufacturing door-opener. Effort M.
-3. **Sparkplug B** (consume + publish) — instant compatibility with Ignition-centric plants; also our
-   internal normalization layer. Effort M.
-4. **Modbus RTU/serial** (gateway-side) — brownfield reality. Effort S.
-5. **Siemens S7** (wrap `python-snap7`, licensing check) — manufacturing expansion. Effort M.
-6. **BACnet** (buildings, via reseller pull), **DNP3/IEC-61850** (utilities — partner/buy; certification
-   burden makes these Y3+ unless a lighthouse customer funds it). EtherNet/IP via third-party lib when pulled.
+**Driver sequence with licensing verified:**
+1. **Modbus TCP** — pymodbus (BSD-3 ✅). H1.
+2. **OPC-UA** — **gopcua (MIT, Go)**, NOT asyncua: asyncua is LGPL-3.0 whose anti-tivoization terms
+   conflict with signed/locked gateway images. H2.
+3. **Sparkplug B** — *boundary interop driver only* (consume/publish for Ignition-centric plants).
+   v1's "internal normalization layer" claim was wrong: SpB is MQTT-only, flat-model, stateful-alias,
+   4-level-topic — it cannot express our hierarchy. **The Gito event schema is the normalization layer.** H2.
+4. **Modbus RTU/serial** — H2/Y2. 5. **Siemens S7** — python-snap7 is MIT and pure-Python since v3.0
+   (v1's "licensing check" was moot); can move earlier if a customer pulls it. 6. BACnet/DNP3/IEC-61850 —
+   partner/customer-funded only.
 
-**Scaling the ingest path:** current Redis streams + Timescale hold to ~10–50k msg/s with partitioned
-consumers — that is YEARS of runway in the wedge. Triggers for change, pre-agreed: sustained >50k msg/s
-or multi-region → Kafka/Redpanda + Timescale partitioning per-tenant-shard. Written down so nobody
-"preemptively Kafkas" the stack.
+**Ingest scaling:** v1's "10–50k msg/s, years of runway" was unverified folklore. Replace with: benchmark
+the real pipeline at 10× current load in H2 (one day of work), publish the number internally, and key the
+Kafka/partitioning trigger to *measured* headroom, not vibes.
 
 ---
 
-## 8. Security & Compliance Path
+## 8. Security & Compliance (resequenced for the wedge)
 
-| Step | What | When | Effort |
-|---|---|---|---|
-| MFA (TOTP) + session hardening | table stakes | Y1-H1 | S |
-| SSO: OIDC first, SAML second | enterprise door-opener | Y1-H2 | M |
-| Secrets mgr + cert lifecycle (edge PKI, rotation) | with Edge GA | Y1-H2 | M |
-| Audit completeness (every mutation + agent tool call) | with agent runtime | Y1 | S (extend existing) |
-| SOC 2 Type I → II | SaaS credibility; start evidence automation early | Y2 | M + $ |
-| ISO 27001 | when enterprise deals demand; ~Y3 | Y3 | M + $$ |
-| IEC 62443 alignment | design edge to 62443-4-2 SL1→SL2 expectations (zones/conduits respected: gateway = conduit, no inbound ports, outbound-only mTLS); formal cert only if a customer pays for it | design now, cert later | M |
-| Deployment models | SaaS (now) → single-tenant VPC (Y2, same compose/helm) → on-prem/air-gapped lite (Y3 — mining reality; edge-heavy + local core subset, no agent cloud dependency) | phased | L |
-
-Zero-trust posture: mTLS edge↔cloud, per-tenant token metering, RLS stays the bedrock (it has
-already proven itself), agent actuation always behind human approval gates + typed allow-lists.
-
----
-
-## 9. Revenue Architecture
-
-| Stream | Model | Notes |
+| Step | When | Correction |
 |---|---|---|
-| Platform subscription | per-monitored-asset/month, tiered (Starter/Pro/Enterprise); unlimited users, metrics & dashboards | anti-per-tag positioning vs AVEVA/PTC |
-| AI tier | per-tenant add-on: assistant + reports + insights, metered fair-use tokens | maps directly to LLM COGS |
-| Industry modules | per-module activation fee or bundle tiers | marketplace mechanics from day one, even when all modules are first-party |
-| Edge gateways | hardware margin + per-gateway fleet fee | recurring, sticky |
-| Marketplace rev-share | 70/30 on third-party packs (Y3+) | integrators become distribution |
-| White-label | reseller licensing (already implicit in "client brings own ChirpStack" model) | Southern-Africa SI channel is the cheap sales force |
-| Managed services / SLA | monitoring-as-a-service tiers for operators without control rooms | high-margin services on own platform |
-
-Billing build: wrap Stripe (or Paystack/local for ZAR) behind a `billing` module; entitlements =
-license records checked at module boundaries. Effort M. Priority P1 (needed before self-serve).
+| **IEC 62443-4-1 lightweight SDL practices** (threat model, security requirements, test evidence, patch process) | **Start now** | Certification is NOT retrofittable — 4-2 component cert requires development-time 4-1 process evidence. Also corrected: zones/conduits are 62443-**3-2** system concepts; the gateway is a *component at a zone boundary*; SL2 is a full requirement set (identification, audit storage, software integrity, session control), not just "no inbound ports" |
+| MFA (TOTP) + session hardening | H2 | moved from H1 (capacity) |
+| OIDC SSO → SAML | Y2 | enterprise door-opener |
+| Secrets mgmt + edge PKI/cert rotation | with edge **alpha** (H1, minimal) → hardened at GA | earlier than v1 for the PKI seed |
+| **ISO 27001** | **Y2 — before SOC 2** | Reversed from v1: ISO is what SA/Africa mining, municipal and energy procurement recognizes; SOC 2 is a US attestation our wedge rarely requests. SOC 2 follows when international expansion demands (controls overlap; use compliance-automation tooling for both) |
+| Deployment models | SaaS → single-tenant VPC (Y2) → on-prem lite (Y3, reduced agent set per §6) | unchanged |
 
 ---
 
-## 10. Five-Year Roadmap
+## 9. Revenue Architecture (grounded in Y1 cash reality)
 
-**Y1-H1 — "Data moat + first wow" (next 6 months)**
-Asset registry refactor · Edge Gateway alpha (Modbus TCP + OPC-UA, buffering, fleet basics) ·
-MCP server (F1) + NLQ (F2) · Operations Assistant beta on top · MFA · billing skeleton ·
-Mining module v1 (pumps/conveyor/dust packs on existing twin+alarm engines) · 2–3 lighthouse deployments.
+**What actually pays the bills in Y1 (v1 omitted all of these):**
+- **Paid POCs** (R150k–R400k, 8–12 weeks, scoped success criteria) — the OT-standard sales vehicle.
+- **Site survey / commissioning / integration services** — priced properly, not given away.
+- **Customer-funded NRE** for drivers/features (the DNP3 pattern, §7) as an explicit stream.
+- **Non-dilutive funding workstream:** IDC, TIA, Mandela Mining Precinct programs, mining-house innovation
+  funds, DBSA/DFI water programs. For a bootstrapped team this is material and was absent from v1.
+- Consequence: **SOW/invoicing tooling before Stripe.** Card-swipe self-serve is a Y4+ international
+  motion; SA mining/municipal buyers procure via vendor registration, B-BBEE scorecards, MHSA §37(2)
+  agreements and MFMA tenders. Build the **vendor-onboarding pack** (tax clearance, BEE cert, safety file,
+  insurance) — that is the real conversion bottleneck, and it's paperwork, not code.
 
-**Y1-H2 — "Sellable platform"**
-Edge GA (+ Sparkplug B, RTU) · KB/RAG (F3) · Reporting Agent · insight pipeline v1 (F4) ·
-OIDC SSO · self-serve onboarding + billing live · Water module · twin predicted-state v1 ·
-white-label pilot with one SI.
+**Subscription model (corrected):** per-asset pricing is the segment *norm* (ThingsBoard per-device,
+Samsara per-asset), not a disruption. Our packaging: **site license wrapper** — fixed annual fee per site
+with asset-tier bands inside (procurement-friendly, budgetable, cap-respecting), unlimited users/dashboards
+always. **Define "asset" contractually now** (a nameable piece of equipment with ≤N devices and fair-use
+metric density) before billing exists — a gameable unit inverts unit economics. Anti-per-tag positioning
+survives as marketing against legacy contracts; it is not the business model's magic.
 
-**Y2 — "AI operations, proven"**
-Agent runtime hardened (F5) + Maintenance Engineer + Data Analyst agents · CV module (wrapped models)
-· Energy module + load forecasting · SOC 2 · single-tenant VPC offering · S7 driver ·
-mobile app to parity (assistant-first UX) · marketplace infrastructure (first-party packs as installable units).
+**Channel (corrected):** one motion in Y1 — **direct lighthouse**. The SI/white-label channel is
+anti-aligned with claim-code/self-serve UX (it deletes their billable hours); before any pilot, design SI
+economics deliberately (services-led certified-partner program, deal registration, 30–40% services attach)
+— Y2 at earliest. AI tier, module licensing, marketplace rev-share: unchanged from v1 but all Y2+.
 
-**Y3 — "Ecosystem"**
-Third-party marketplace opens (drivers/packs/agents, sandboxed, rev-share) · Safety/Reliability/
-Compliance agents · Manufacturing/OEE module · on-prem lite for air-gapped mines · ISO 27001 ·
-BACnet + utility-protocol partnerships · edge AI scoring GA.
-
-**Y4–Y5 — "Autonomous operations"**
-Closed-loop automation with graduated autonomy (recommend → approve-to-act → bounded auto-act with
-guardrails + insurance-grade audit) · fleet-wide cross-tenant benchmarking (privacy-preserving) ·
-international mid-market expansion via resellers · local-LLM edge option if economics land ·
-platform = the industrial MCP hub others integrate INTO.
-
----
-
-## 11. Game-Changers (not shipped by incumbents today, likely standard by 2031)
-
-1. **Conversational operations with citations** — every AI answer links to the tags/alarms/history
-   it used. Trust is the feature; C3/Maximo "AI" doesn't cite.
-2. **MCP-native platform** — Gito as the industrial MCP server: customers' own AI (Claude, Copilot)
-   operates their plant through our governed tools. We become infrastructure, not just an app.
-3. **Predicted-state digital twins in the browser** — live + forecast ghost state, no 3D consulting
-   project, authored in hours via the template skill (already proven internally).
-4. **Agent-authored asset packs** — "we bought a new crusher model" → agent drafts device type, twin,
-   alarm pack, report template from the manual PDF; human approves. Marketplace content at AI speed.
-5. **Unlimited-metrics per-asset pricing** — does to AVEVA/PTC what Ignition's unlimited tags did to
-   legacy SCADA licensing.
-6. **Claim-code edge onboarding** — gateway online → typed code → streaming in under 5 minutes;
-   consumer-grade UX in an industry that budgets weeks for commissioning.
-7. **Graduated autonomy with audit-grade guardrails** — the bridge from monitoring to *operating*,
-   crossed at the customer's pace, every agent action attributable and reversible.
-8. **Shift-handover intelligence** — auto-generated handover briefs (what alarmed, what changed, what
-   to watch) — tiny feature, daily habit, brutal retention.
+**Commercial skeleton (v1 had zero numbers — placeholder targets, founder to confirm):**
+Y1: 1–2 paid POCs converting to 1 lighthouse ARR ~R300–600k + services/NRE ≥ R500k.
+Y2: 4–6 sites, ARR R2–4m, break-even on run-rate. Y3: 15+ sites via 2–3 certified SIs, ARR R8–15m.
+These are falsifiable gates, not vibes; wrong numbers get corrected by contact with the market.
 
 ---
 
-## 12. What We Deliberately Do NOT Do
+## 10. Five-Year Roadmap (halved, serialized, gated)
 
-- No microservice rewrite; no Kafka before the written triggers fire (§7).
-- No 3D/Unity twin projects; SVG/web twins are the differentiator, not a compromise.
-- No training foundation/CV models from scratch — wrap and fine-tune only.
-- No PLC write-access by AI without human approval gates — ever, at any autonomy tier.
-- No per-tag or per-seat pricing, even when enterprise procurement asks for it.
-- No horizontal "everything platform" marketing — wedge first (mining/water/energy, Southern Africa),
-  expand from references.
+**Rule (review-forced):** max 3 concurrent workstreams; 25–30% of capacity reserved for run/maintain
+(the shipped surface already demands it: bridge follow-ups, alert-preview TODO, Flutter app debt).
+If capacity stays at demonstrated part-time cadence, stretch every phase ×2 — or hire.
+
+**Y1-H1 — "One honest wedge" (serial critical path):**
+1. Unify alarm engine (F0) → 2. Asset registry *additive* → 3. MCP server (F1) + F4-lite statistical
+insights → 4. Mining pump-station pack (shipped twins) → 5. Edge alpha (Modbus TCP, one real site) →
+6. **One** lighthouse — precondition: signed LOI/paid POC *before* the build list is committed.
+Dropped from H1 (vs v1): NLQ, public assistant beta, MFA, billing skeleton, OPC-UA, conveyor/dust packs,
+2nd/3rd lighthouse.
+
+**Y1-H2 — "Grounded assistant":** NLQ (F2) + KB (F3) → Operations Assistant public (honest scope per §6.2)
+→ Reporting Agent → OPC-UA (gopcua) + Sparkplug interop → MFA → ingest benchmark → Water pack v1 →
+ISO 27001 groundwork. Gate to enter H2: lighthouse live 30 days streaming real data; <3 critical bugs/mo;
+POC pipeline ≥2.
+
+**Y2 — "AI operations, proven":** agent runtime (F5) + Maintenance + Data Analyst agents → full F4 →
+multi-device asset twins + predicted-state twins → conveyor/dust packs → scoped edge AI (SLM) → ISO 27001
+cert → single-tenant VPC → S7 driver → SI partner program design → billing automation.
+
+**Y3 — "Ecosystem, carefully":** marketplace infra (first-party packs as installable units first) →
+Safety/Compliance agents → on-prem lite (reduced agents) → CV module (wrapped) → Manufacturing/OEE →
+certified-SI channel live → SOC 2 if international pipeline demands.
+
+**Y4–Y5 — "Autonomy + expansion":** graduated autonomy (recommend → approve-to-act → bounded auto-act,
+insurance-grade audit) → cross-tenant benchmarking (privacy-preserving) → international mid-market via
+partners → third-party marketplace → edge conversational agents if SLM economics land.
 
 ---
 
-## 13. Risks
+## 11. Differentiators (pruned by review — the survivors)
+
+1. **Tag-level cited answers at mid-market price** — enterprise assistants cite documents/summaries;
+   grounding to specific tags/alarms/timestamps, self-servable by an SMB mine, remains open space. This is
+   the positioning claim we can defend in a bake-off — "they don't cite" is NOT (C3 cites; never say it).
+2. **Predicted-state web twins** (uncertain-but-plausible whitespace) — live + forecast ghost state,
+   authored in hours via the template skill, no 3D consulting project.
+3. **Agent-authored asset packs** — new equipment manual PDF → drafted device type + twin + alarm pack +
+   report template; human approves. Marketplace content at AI speed.
+4. **The assembled wedge product** — edge + packs + twins + cited agents + SA compliance pack, one vendor,
+   deployable without an integrator army. Neither hyperscalers nor free-OSS-plus-hours delivers this.
+5. **Claim-code commissioning** — genuinely great UX; a feature, not a moat (and it must be reconciled
+   with SI channel economics before Y2).
+6. **Shift-handover briefs** — the *category* exists (eschbach SAMI, Hexagon j5); our version wins on
+   zero-setup (auto-generated from data already in Gito) and mid-market price. Retention feature.
+7. **Graduated autonomy with audit-grade guardrails** — the Y4 bridge from monitoring to operating.
+
+Removed by review: "MCP-native platform" (table stakes), "conversational operations" (shipped by five
+incumbents), "per-asset pricing as disruption" (segment norm — repackaged as site licenses, §9).
+
+---
+
+## 12. What We Deliberately Do NOT Do (additions in bold)
+
+- No microservice rewrite; no Kafka before the *measured* trigger (§7).
+- No 3D/Unity twins. No training foundation/CV models. No per-tag/per-seat pricing.
+- No PLC write-access by AI without human approval gates — ever.
+- **No public AI answers the foundations can't ground** — assistant scope grows with F-layers, never ahead.
+- **No self-serve/card-billing motion before Y4** — the wedge procures via tender and POC.
+- **No SI/white-label pilots before the channel economics are designed** (Y2).
+- **No claiming competitors lack what they ship** — every competitive claim carries a source and a date.
+- No horizontal platform marketing — wedge first, expand from references.
+
+---
+
+## 13. Risks (revised)
 
 | Risk | Mitigation |
 |---|---|
-| 2-dev team overreach | roadmap gates: nothing in H2 starts until H1 lighthouse metrics hit; AI-agent development leverage is the multiplier but review capacity is the ceiling |
-| LLM COGS erode AI-tier margin | metering from day one; caching; small-model routing for cheap tasks |
-| Incumbent bundling (Siemens/AWS give it away) | wedge depth + channel intimacy + pricing they structurally can't match |
-| Driver certification burden (DNP3/61850) | partner/defer; don't self-certify utility protocols early |
-| AI trust incident (wrong answer → bad decision) | citations mandatory, confidence surfacing, approval gates, incident playbook |
-| Single-founder key-person risk | this document + repo skills/docs ARE the mitigation — keep decisions written |
+| **Capacity is 1 part-time founder, not 2 FTE** (repo evidence: 10 dark weeks) | Roadmap sized to it (§10 rule); explicit fork: commit hours / hire one engineer / stretch phases ×2. This is the #1 decision the founder must make |
+| Incumbent AI ships faster than our wedge closes (AVEVA/AWS assistants improve quarterly) | 12–18mo window: H1/H2 dates are the strategy; every slip burns moat |
+| ThingsBoard/IoT.nxt price pressure at the low end | never compete on price with free; compete on assembled product + compliance + cited intelligence |
+| Lighthouse procurement stalls the plan (6–18mo mining cycles) | signed LOI precondition; POC-funded runway; H2 gate decoupled from deployment *count* |
+| LLM COGS erode AI margin | metering day one; small-model routing; edge SLM offload (Y2) |
+| AI trust incident | citations mandatory; honest scope (§6.2); incident playbook; approval gates |
+| Alarm-engine fork ships new divergence before unification lands | F0 is workstream #1; freeze processor alarm features until unified |
+| Key-person risk | this document, repo skills, and written decisions are the mitigation — keep them current |
 
 ---
 
-*Next actions: (1) adversarial review of this draft by multi-agent panel (queued — subagent limits reset 12:10am);
-(2) asset-registry design doc; (3) Edge Gateway alpha spec; (4) MCP server spec on existing routers.*
+*Review provenance: 6-agent adversarial panel (3 web fact-checkers, 3 repo-grounded skeptics), 68 findings
+(33 high). Full findings JSON preserved in session transcript; every reversed claim above carries its
+source in the findings record. Next actions: (1) founder decision on capacity fork (§13.1); (2) alarm-engine
+unification design doc; (3) asset-registry additive schema; (4) lighthouse LOI pursuit before H1 commit.*
