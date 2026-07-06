@@ -18,8 +18,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select, text
 
 from app.database import get_session, RLSSession
-from app.models.base import Device, Telemetry
+from app.models.base import Device
 from app.schemas.common import SuccessResponse
+from app.services.telemetry_stream import stream_ingest
 from app.services.lorawan_parsers import get_parser
 
 logger = logging.getLogger(__name__)
@@ -47,29 +48,6 @@ def _radio_to_lora_metrics(radio: dict) -> dict:
     }
     return {mapping[k]: v for k, v in radio.items() if k in mapping}
 
-
-def _build_telemetry_rows(tenant_id, device_id, metrics: dict, key_mapping: dict, ts: datetime) -> list:
-    rows = []
-    for raw_key, value in metrics.items():
-        if raw_key in SYSTEM_KEYS:
-            continue
-        canonical_key = key_mapping.get(raw_key, raw_key)
-        row = Telemetry(
-            tenant_id=tenant_id,
-            device_id=device_id,
-            metric_key=canonical_key,
-            ts=ts,
-        )
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            row.metric_value = float(value)
-        elif isinstance(value, str):
-            row.metric_value_str = value
-        elif isinstance(value, (dict, list)):
-            row.metric_value_json = value
-        else:
-            row.metric_value_str = str(value)
-        rows.append(row)
-    return rows
 
 
 @router.post("/{provider}", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
@@ -194,17 +172,32 @@ async def ingest_lorawan(
     if km_row and km_row[0]:
         key_mapping = km_row[0]
 
-    # --- Build telemetry rows: user metrics + __lora_* radio metadata ---
+    # --- Build metric dict: user metrics + __lora_* radio metadata ---
     all_metrics = dict(uplink.metrics)
     if uplink.radio:
         all_metrics.update(_radio_to_lora_metrics(uplink.radio))
 
-    rows = _build_telemetry_rows(tenant_id, device_id, all_metrics, key_mapping, ts)
-    if not rows:
+    mapped_metrics = {
+        key_mapping.get(k, k): v for k, v in all_metrics.items() if k not in SYSTEM_KEYS
+    }
+    if not mapped_metrics:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload")
 
-    session.add_all(rows)
-    await session.commit()
+    # Publish into the ingest stream — the processor inserts AND evaluates alarms
+    # there (single funnel; webhook-connected LoRaWAN devices get identical alarms).
+    if not redis_client:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingest pipeline unavailable — retry",
+        )
+    try:
+        await stream_ingest(redis_client, tenant_id, device_id, mapped_metrics, ts)
+    except Exception as e:
+        logger.error("Failed to publish LoRaWAN ingest to stream for device %s: %s", device_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingest pipeline unavailable — retry",
+        )
 
     # --- Update device last_seen + status ---
     await session.execute(

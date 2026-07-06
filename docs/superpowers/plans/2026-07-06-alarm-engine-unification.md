@@ -113,13 +113,19 @@ Verified e2e on bench tenant: THRESHOLD (regression), COMPOSITE ("2/2 conditions
 score 100%", CRITICAL), and GLOBAL rules all fired from one injected stream entry;
 notification_queue rows created and consumed by the dispatcher.
 
-**Step 3 — ALL REST ingest routes funnel into the stream (fixes D1).**
-Three routes: `POST /ingest` (device token), `POST /ingest/gateway` (batch), and
-`POST /lorawan/{provider}` (TTN/universal webhooks) — replace direct Telemetry inserts
-with `XADD telemetry:ingest` (same payload shape the MQTT paths produce; processor
-already does batch insert + twin cache + evaluation). Keep a synchronous 202 response.
-**Done when:** telemetry posted on EACH of the three routes appears in Timescale AND
-fires a test alarm; ingest latency unchanged (stream consumer already batches).
+**Step 3 — ALL REST ingest routes funnel into the stream (fixes D1). ✅ DONE 2026-07-06**
+All three routes now publish via `app/services/telemetry_stream.stream_ingest()` instead
+of direct ORM inserts; the consumer inserts + evaluates. Kept synchronous: validation,
+key mapping, last_seen/status updates, WS publish + twin cache; kept 201 status codes
+(devices in the field may check == 201). Redis unavailable → 503 so devices retry.
+Verified e2e per route: token ingest fired a CRITICAL threshold alarm + queued
+notification; LoRaWAN webhook (custom provider) fired an alarm with __lora_* radio
+metrics stored; gateway fan-out fired a GLOBAL rule for a sub-device.
+Also fixed pre-existing bugs found during verification:
+- Gateway route's batch last_seen UPDATE always 500'd: `ANY(:ids::uuid[])` breaks
+  SQLAlchemy's named-param parser → `ANY(CAST(:ids AS uuid[]))`.
+- (Local env) `resolve_device_token` SQL function was missing despite alembic head —
+  legacy of the phantom-revision reset; re-applied from migration 006.
 
 **Step 4 — alarms lifecycle auto-population (fixes D4).**
 Firing pipeline UPSERTs `alarms`: new ACTIVE alarm per (rule_id, device_id) if none
