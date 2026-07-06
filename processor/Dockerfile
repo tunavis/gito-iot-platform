@@ -1,3 +1,4 @@
+# Build context is the REPO ROOT (see docker-compose.yml) so shared/ is visible.
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -8,11 +9,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY processor/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Shared alarm evaluation library (same engine as the API — never diverge)
+COPY shared/alarm_core /opt/alarm_core
+RUN pip install --no-cache-dir /opt/alarm_core
+
 # Copy application code
-COPY mqtt_processor.py .
+COPY processor/mqtt_processor.py .
 
 # Health check: verify MQTT broker is reachable using configured env vars
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

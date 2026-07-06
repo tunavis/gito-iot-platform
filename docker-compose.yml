@@ -61,8 +61,9 @@ services:
   # MQTT Processor (Consumes MQTT, processes telemetry, fires alerts)
   processor:
     build:
-      context: ./processor
-      dockerfile: Dockerfile
+      # repo-root context so the image can install shared/alarm_core
+      context: .
+      dockerfile: ./processor/Dockerfile
     container_name: gito-processor
     environment:
       DATABASE_URL: postgresql://gito:${DB_PASSWORD:-dev-password}@postgres:5432/gito

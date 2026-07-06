@@ -96,12 +96,22 @@ logic from processor AlertEvaluator and composite/weighted logic from the dead A
 pytest suite: operators, None metric, cooldown boundaries, composite AND/OR, weights,
 global rules, empty conditions. **Done when:** suite green in CI; nothing imports it yet.
 
-**Step 2 — processor adopts alarm_core (fixes D2, D3, severity fetch).**
-Compose build context → repo root for processor + api; Dockerfiles COPY shared/.
-Replace AlertEvaluator + widen the SQL as above. alert_events gains severity column
-(idempotent migration). **Done when:** synthetic MQTT publish fires (a) a composite rule,
-(b) a global rule — both verified end-to-end on the bench tenant; existing threshold
-rules regress-tested.
+**Step 2 — processor adopts alarm_core (fixes D2, D3, severity fetch). ✅ DONE 2026-07-06**
+Compose build context → repo root for processor; Dockerfile installs shared/alarm_core.
+Replaced AlertEvaluator + widened the SQL as above (with 30s per-(tenant,device) rule
+cache, invalidated on firing). Discovered during implementation and fixed here:
+- Evaluation ran on the MQTT *publish* side, not in the stream consumer — moved into
+  StreamConsumer._process_entries so the stream is truly the single funnel (this is
+  what makes Step 3 automatic for REST routes).
+- DB stores legacy rule_type names (SIMPLE/COMPLEX) and symbol operators — normalized
+  at the row→Rule mapping / by alarm_core's operator aliases.
+- **D8 (new):** notification_queue had no unique constraint on alert_event_id, so the
+  processor's ON CONFLICT enqueue failed silently — notifications from fired alerts
+  never dispatched. Fixed by migration 019 (dedup + unique index).
+- metric_name made nullable for composite firings (migration 018).
+Verified e2e on bench tenant: THRESHOLD (regression), COMPOSITE ("2/2 conditions met,
+score 100%", CRITICAL), and GLOBAL rules all fired from one injected stream entry;
+notification_queue rows created and consumed by the dispatcher.
 
 **Step 3 — ALL REST ingest routes funnel into the stream (fixes D1).**
 Three routes: `POST /ingest` (device token), `POST /ingest/gateway` (batch), and

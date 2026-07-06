@@ -36,6 +36,8 @@ import redis.asyncio as aioredis
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 
+from alarm_core import Rule as AlarmRule, evaluate as evaluate_alarm_rules
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -73,6 +75,7 @@ SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id", "time", "datet
 COMMAND_RESPONSE_KEYS = {"command_id", "command_status", "command_result", "command_error"}
 
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
+RULES_CACHE_TTL_S = int(os.getenv('RULES_CACHE_TTL_S', '30'))
 
 # ChirpStack MQTT Bridge config
 BRIDGE_SYNC_INTERVAL_S  = 60    # seconds between periodic DB syncs
@@ -230,6 +233,8 @@ class DatabaseService:
         self._deveui_cache: dict[str, tuple[float, tuple[str, str] | None]] = {}
         # key_mapping cache: {device_id: (monotonic_time, {raw_key: canonical_key})}
         self._key_mapping_cache: dict[str, tuple[float, dict[str, str]]] = {}
+        # alert rules cache: {(tenant_id, device_id): (expires_monotonic, rules)}
+        self._rules_cache: dict[tuple[str, str], tuple[float, list]] = {}
 
     async def connect(self):
         self.conn_pool = AsyncConnectionPool(
@@ -450,6 +455,13 @@ class DatabaseService:
         return failed_tenants
 
     async def get_active_alert_rules(self, tenant_id: str, device_id: str) -> list:
+        """Fetch THRESHOLD + COMPOSITE rules for a device, including tenant-global
+        rules (device_id IS NULL). Cached ~30s per (tenant, device) — invalidated
+        on firing so cooldown state stays fresh."""
+        cache_key = (tenant_id, device_id)
+        cached = self._rules_cache.get(cache_key)
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
@@ -457,26 +469,35 @@ class DatabaseService:
                 )
                 cursor = await conn.execute(
                     """
-                    SELECT id, metric, operator, threshold, cooldown_minutes, last_fired_at
+                    SELECT id, rule_type, metric, operator, threshold,
+                           conditions, logic, severity,
+                           cooldown_minutes, last_fired_at
                     FROM alert_rules
-                    WHERE device_id = %s AND active = true AND tenant_id = %s
+                    WHERE active = true AND tenant_id = %s
+                      AND (device_id = %s OR device_id IS NULL)
                     ORDER BY created_at
                     """,
-                    (device_id, tenant_id),
+                    (tenant_id, device_id),
                 )
-                return [dict(row) for row in await cursor.fetchall()]
+                rules = [dict(row) for row in await cursor.fetchall()]
+                self._rules_cache[cache_key] = (time.monotonic() + RULES_CACHE_TTL_S, rules)
+                return rules
         except Exception as e:
             logger.error(f"Failed to fetch alert rules: {e}", exc_info=True)
             return []
+
+    def invalidate_rules_cache(self, tenant_id: str, device_id: str) -> None:
+        self._rules_cache.pop((tenant_id, device_id), None)
 
     async def fire_alert(
         self,
         tenant_id: str,
         alert_rule_id: str,
         device_id: str,
-        metric_name: str,
-        metric_value: float,
+        metric_name: str | None,
+        metric_value: float | None,
         message: str,
+        severity: str = "MAJOR",
     ) -> str | None:
         try:
             async with self.conn_pool.connection() as conn:
@@ -487,11 +508,11 @@ class DatabaseService:
                     """
                     INSERT INTO alert_events
                         (tenant_id, alert_rule_id, device_id, metric_name,
-                         metric_value, message, fired_at, notification_sent)
-                    VALUES (%s, %s, %s, %s, %s, %s, now(), false)
+                         metric_value, message, severity, fired_at, notification_sent)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, now(), false)
                     RETURNING id
                     """,
-                    (tenant_id, alert_rule_id, device_id, metric_name, metric_value, message),
+                    (tenant_id, alert_rule_id, device_id, metric_name, metric_value, message, severity),
                 )
                 row = await cursor.fetchone()
                 await conn.execute(
@@ -499,29 +520,12 @@ class DatabaseService:
                     (alert_rule_id, tenant_id),
                 )
                 await conn.commit()
+                # cooldown state changed — next evaluation must see fresh last_fired_at
+                self.invalidate_rules_cache(tenant_id, device_id)
                 return row["id"] if row else None
         except Exception as e:
             logger.error(f"Failed to fire alert: {e}")
             return None
-
-    async def get_device_and_tenant_info(self, tenant_id: str, device_id: str) -> dict:
-        try:
-            async with self.conn_pool.connection() as conn:
-                await conn.execute(
-                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
-                )
-                cursor = await conn.execute(
-                    """
-                    SELECT d.name as device_name, t.name as tenant_name
-                    FROM devices d JOIN tenants t ON d.tenant_id = t.id
-                    WHERE d.id = %s AND d.tenant_id = %s
-                    """,
-                    (device_id, tenant_id),
-                )
-                row = await cursor.fetchone()
-                return dict(row) if row else {"device_name": device_id, "tenant_name": tenant_id}
-        except Exception:
-            return {"device_name": device_id, "tenant_name": tenant_id}
 
 
 # ---------------------------------------------------------------------------
@@ -602,35 +606,6 @@ class RedisService:
 
 
 # ---------------------------------------------------------------------------
-# Alert evaluator
-# ---------------------------------------------------------------------------
-class AlertEvaluator:
-    OPERATORS = {
-        'gt':  lambda v, t: v > t,
-        'gte': lambda v, t: v >= t,
-        'lt':  lambda v, t: v < t,
-        'lte': lambda v, t: v <= t,
-        'eq':  lambda v, t: v == t,
-        'neq': lambda v, t: v != t,
-    }
-
-    @staticmethod
-    def should_fire_alert(rule: dict, metric_value: float, current_time: datetime) -> bool:
-        operator      = rule.get('operator')
-        threshold     = rule.get('threshold')
-        last_fired_at = rule.get('last_fired_at')
-        cooldown_min  = rule.get('cooldown_minutes', 0)
-
-        if operator not in AlertEvaluator.OPERATORS:
-            return False
-        if not AlertEvaluator.OPERATORS[operator](metric_value, threshold):
-            return False
-        if last_fired_at and current_time < last_fired_at + timedelta(minutes=cooldown_min):
-            return False
-        return True
-
-
-# ---------------------------------------------------------------------------
 # Stream consumer — reads batches from KeyDB Stream, batch-inserts to DB
 # ---------------------------------------------------------------------------
 class StreamConsumer:
@@ -648,9 +623,12 @@ class StreamConsumer:
       XAUTOCLAIM old pending entries (stale > 30 s) and reprocess them.
     """
 
-    def __init__(self, db_service: DatabaseService, redis_service: RedisService):
+    def __init__(self, db_service: DatabaseService, redis_service: RedisService, evaluate_fn=None):
         self.db    = db_service
         self.redis = redis_service
+        # Alarm evaluation happens HERE, at the single consumption point, so every
+        # ingest path that reaches the stream gets identical alarm behavior.
+        self._evaluate_fn = evaluate_fn
         self._running = False
 
     async def start(self):
@@ -688,6 +666,7 @@ class StreamConsumer:
         rows: list[tuple] = []
         msg_tenant: dict[str, str] = {}        # msg_id → tenant_id
         unconditional_ack: list[str] = []      # malformed entries — always ACK
+        evaluations: list[tuple] = []          # (tenant_id, device_id, payload, timestamp)
 
         for msg_id, data in entries:
             decoded = self._decode_stream_entry(data)
@@ -699,6 +678,7 @@ class StreamConsumer:
             tenant_id, device_id, payload, timestamp = decoded
             unit_map = await self.db.get_unit_map(device_id)
             msg_tenant[msg_id] = tenant_id
+            evaluations.append(decoded)
 
             for metric_key, metric_value in payload.items():
                 if metric_value is None:
@@ -730,6 +710,18 @@ class StreamConsumer:
                 "Batch insert failed for %d tenant(s) — NOT ACKing; will retry in %d ms: %s",
                 len(failed_tenants), PENDING_CLAIM_MS, failed_tenants,
             )
+
+        # Evaluate alarms for successfully-inserted messages. Evaluation failures
+        # must never block ACKs — alarms are best-effort per message, telemetry
+        # durability is not.
+        if self._evaluate_fn:
+            for tenant_id, device_id, payload, timestamp in evaluations:
+                if tenant_id in failed_tenants:
+                    continue
+                try:
+                    await self._evaluate_fn(tenant_id, device_id, payload, timestamp)
+                except Exception as e:
+                    logger.error(f"Alarm evaluation failed for {device_id}: {e}")
 
         # ACK: unconditional (malformed) + all msgs whose tenant insert succeeded
         ack_ids = unconditional_ack + [
@@ -1180,7 +1172,9 @@ class MQTTProcessor:
         logger.info("Starting MQTT Processor...")
         await self.db_service.connect()
         await self.redis_service.connect()
-        self.stream_consumer = StreamConsumer(self.db_service, self.redis_service)
+        self.stream_consumer = StreamConsumer(
+            self.db_service, self.redis_service, evaluate_fn=self.evaluate_alerts
+        )
         await self.stream_consumer.start()
         self.running = True
         logger.info("MQTT Processor started")
@@ -1282,8 +1276,7 @@ class MQTTProcessor:
             # ── Publish to pub/sub for WebSocket delivery ─────────────────
             await self.redis_service.publish_telemetry(tenant_id, device_id, payload)
 
-            # ── Evaluate alert rules (inline, payload in memory) ──────────
-            await self.evaluate_alerts(tenant_id, device_id, payload, timestamp)
+            # (alarm evaluation happens in the stream consumer — single funnel)
 
             # ── Correlate command responses (RPC Option B) ────────────────
             if "command_id" in payload:
@@ -1310,49 +1303,62 @@ class MQTTProcessor:
         timestamp: datetime,
     ):
         try:
-            rules = await self.db_service.get_active_alert_rules(tenant_id, device_id)
-            context = await self.db_service.get_device_and_tenant_info(tenant_id, device_id)
+            rows = await self.db_service.get_active_alert_rules(tenant_id, device_id)
+            if not rows:
+                return
 
-            for rule in rules:
-                metric_name  = rule.get('metric')
-                if metric_name not in payload:
-                    continue
-                metric_value = payload[metric_name]
-                if metric_value is None:
-                    continue
+            # DB stores legacy names (SIMPLE/COMPLEX); alarm_core speaks THRESHOLD/COMPOSITE
+            def _rule_type(raw: str | None) -> str:
+                return "COMPOSITE" if (raw or "").upper() in ("COMPOSITE", "COMPLEX") else "THRESHOLD"
 
-                if AlertEvaluator.should_fire_alert(rule, metric_value, timestamp):
-                    message = (
-                        f"{metric_name} {rule.get('operator')} {rule.get('threshold')} "
-                        f"(current: {metric_value})"
-                    )
-                    alert_event_id = await self.db_service.fire_alert(
-                        tenant_id, rule.get('id'), device_id,
-                        metric_name, metric_value, message,
-                    )
-                    await self.redis_service.publish_alert(
-                        tenant_id, device_id,
-                        {
-                            "alert_rule_id": rule.get('id'),
-                            "device_id":     device_id,
-                            "metric":        metric_name,
-                            "value":         metric_value,
-                            "message":       message,
-                        },
-                    )
-                    if alert_event_id:
-                        await self._queue_notification(tenant_id, alert_event_id)
+            rules = [
+                AlarmRule(
+                    id=str(r["id"]),
+                    rule_type=_rule_type(r.get("rule_type")),
+                    metric=r.get("metric"),
+                    operator=r.get("operator"),
+                    threshold=r.get("threshold"),
+                    conditions=r.get("conditions"),
+                    logic=r.get("logic"),
+                    severity=r.get("severity") or "MAJOR",
+                    cooldown_minutes=r.get("cooldown_minutes") or 0,
+                    last_fired_at=r.get("last_fired_at"),
+                )
+                for r in rows
+            ]
 
-                    logger.info(
-                        "Alert fired",
-                        extra={
-                            "tenant_id":    tenant_id,
-                            "device_id":    device_id,
-                            "alert_rule":   rule.get('id'),
-                            "metric":       metric_name,
-                            "value":        metric_value,
-                        },
-                    )
+            for firing in evaluate_alarm_rules(rules, payload, timestamp):
+                alert_event_id = await self.db_service.fire_alert(
+                    tenant_id, firing.rule_id, device_id,
+                    firing.metric, firing.value, firing.message, firing.severity,
+                )
+                await self.redis_service.publish_alert(
+                    tenant_id, device_id,
+                    {
+                        "alert_rule_id": firing.rule_id,
+                        "device_id":     device_id,
+                        "rule_type":     firing.rule_type,
+                        "severity":      firing.severity,
+                        "metric":        firing.metric,
+                        "value":         firing.value,
+                        "message":       firing.message,
+                    },
+                )
+                if alert_event_id:
+                    await self._queue_notification(tenant_id, alert_event_id)
+
+                logger.info(
+                    "Alert fired",
+                    extra={
+                        "tenant_id":  tenant_id,
+                        "device_id":  device_id,
+                        "alert_rule": firing.rule_id,
+                        "rule_type":  firing.rule_type,
+                        "severity":   firing.severity,
+                        "metric":     firing.metric,
+                        "value":      firing.value,
+                    },
+                )
         except Exception as e:
             logger.error(f"Error evaluating alerts for {device_id}: {e}")
 
@@ -1529,8 +1535,8 @@ class MQTTProcessor:
             # 9. Publish to pub/sub for WebSocket real-time delivery
             await self.redis_service.publish_telemetry(tenant_id, device_id, payload)
 
-            # 10. Evaluate alert rules (inline — works on __lora_* metrics too)
-            await self.evaluate_alerts(tenant_id, device_id, payload, timestamp)
+            # 10. Alarm evaluation happens in the stream consumer (single funnel,
+            #     __lora_* metrics included since they're in the stream payload)
 
             # 11. Correlate command responses (device may echo back command_id in object)
             if "command_id" in payload:
