@@ -19,9 +19,21 @@ MQTT / ChirpStack bridge → Redis stream → processor.evaluate_alerts()
 
 **Defects (each independently verified):**
 
+**Ingest paths inventory (the platform is multi-protocol — this table is the contract):**
+
+| Path | Protocol | Evaluated today? |
+|---|---|---|
+| Direct MQTT devices (`+/devices/+/telemetry`, processor:1573) | MQTT | ✅ |
+| ChirpStack uplinks, local broker (`application/+/…/up`, processor:1577) | LoRaWAN | ✅ |
+| ChirpStack outbound bridge workers (processor:962) | LoRaWAN | ✅ |
+| HTTP device-token ingest (`POST /ingest`, device_ingest.py:39) | HTTP | ❌ |
+| HTTP gateway batch ingest (`POST /ingest/gateway`, device_ingest.py:198) | HTTP | ❌ |
+| LoRaWAN provider webhooks — TTN/universal (`POST /lorawan/{provider}`, lorawan_ingest.py:75) | LoRaWAN | ❌ |
+| Future: Modbus/OPC-UA/S7 via Edge Gateway, Sparkplug B (strategy §7) | industrial | must join the funnel |
+
 | # | Defect | Evidence |
 |---|---|---|
-| D1 | **HTTP-ingested telemetry gets NO alarm evaluation** — device_ingest writes `Telemetry` rows directly; nothing in api/app calls stream_add/XADD | api/app/routers/device_ingest.py:111,180; grep for XADD in api/ = 0 hits |
+| D1 | **Any telemetry ingested via the REST API gets NO alarm evaluation — regardless of protocol** (HTTP token, HTTP gateway, AND TTN/webhook LoRaWAN). These routes write `Telemetry` rows directly; nothing in api/app calls stream_add/XADD | device_ingest.py:111,180; lorawan_ingest.py:75; grep for XADD in api/ = 0 hits |
 | D2 | **COMPOSITE rules never fire** — unified router stores them in `alert_rules` (conditions JSONB + logic), but the processor SELECT omits those columns and the loop does `if metric_name not in payload: continue` (metric is NULL for composite) | models/unified_alert_rule.py:89; processor:460,1316 |
 | D3 | **Global rules (device_id NULL) never fire** — processor filters `WHERE device_id = %s`; the unified router explicitly supports device_id=null "global" rules | processor:462; alert_rules_unified.py docstring |
 | D4 | **severity is dropped at firing** — alert_events insert carries no severity; the `alarms` lifecycle table (ack/clear workflow, UI) is NEVER auto-populated by rule firings — only manual CRUD via alarms router | processor:486; grep "Alarm(" = models/routers/schemas only |
@@ -31,10 +43,15 @@ MQTT / ChirpStack bridge → Redis stream → processor.evaluate_alerts()
 
 ## 2. Target architecture
 
-**One evaluation point, one evaluation library, every ingest path feeds it.**
+**One evaluation point, one evaluation library, every ingest path feeds it — protocol-neutral by
+construction.** A device's alarm behavior must never depend on how its data arrived. Any future
+protocol (Modbus, OPC-UA, S7, Sparkplug B, CoAP, camera events) gets alarms for free by publishing
+to the funnel; nothing else to build.
 
 ```
-ALL ingest paths (MQTT, bridges, HTTP token, gateway, TTN webhook)
+ALL ingest paths (direct MQTT · ChirpStack local · ChirpStack bridges ·
+                  HTTP token · HTTP gateway · LoRaWAN provider webhooks ·
+                  future Edge Gateway drivers)
         └─→ Redis stream (telemetry:ingest)          ← single funnel (fixes D1)
               └─→ processor StreamConsumer
                     └─→ alarm_core.evaluate(rules, payload, now)   ← shared pure library
@@ -86,12 +103,13 @@ Replace AlertEvaluator + widen the SQL as above. alert_events gains severity col
 (b) a global rule — both verified end-to-end on the bench tenant; existing threshold
 rules regress-tested.
 
-**Step 3 — HTTP/webhook ingest funnels into the stream (fixes D1).**
-device_ingest + gateway + TTN webhook: replace direct Telemetry inserts with
-`XADD telemetry:ingest` (same payload shape the bridges produce; processor already
-does batch insert + twin cache + evaluation). Keep a synchronous 202 response.
-**Done when:** HTTP-posted telemetry appears in Timescale AND fires alarms; ingest
-latency unchanged (stream consumer already batches).
+**Step 3 — ALL REST ingest routes funnel into the stream (fixes D1).**
+Three routes: `POST /ingest` (device token), `POST /ingest/gateway` (batch), and
+`POST /lorawan/{provider}` (TTN/universal webhooks) — replace direct Telemetry inserts
+with `XADD telemetry:ingest` (same payload shape the MQTT paths produce; processor
+already does batch insert + twin cache + evaluation). Keep a synchronous 202 response.
+**Done when:** telemetry posted on EACH of the three routes appears in Timescale AND
+fires a test alarm; ingest latency unchanged (stream consumer already batches).
 
 **Step 4 — alarms lifecycle auto-population (fixes D4).**
 Firing pipeline UPSERTs `alarms`: new ACTIVE alarm per (rule_id, device_id) if none
