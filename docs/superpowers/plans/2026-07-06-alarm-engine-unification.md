@@ -127,11 +127,22 @@ Also fixed pre-existing bugs found during verification:
 - (Local env) `resolve_device_token` SQL function was missing despite alembic head —
   legacy of the phantom-revision reset; re-applied from migration 006.
 
-**Step 4 — alarms lifecycle auto-population (fixes D4).**
-Firing pipeline UPSERTs `alarms`: new ACTIVE alarm per (rule_id, device_id) if none
-active, else bump occurrence_count/last_seen. Severity flows through. Ack/clear stays
-manual (existing router). **Done when:** a fired rule shows in the UI alarms page
-without manual creation; re-fires bump count instead of duplicating.
+**Step 4 — alarms lifecycle auto-population (fixes D4). ✅ DONE 2026-07-07**
+fire_alert now UPSERTs `alarms` in the same transaction as the alert_event: a new
+ACTIVE alarm per (rule_id, device_id), else an occurrence bump. Severity flows through.
+Deviations from the original plan (the table lacked the assumed columns):
+- No occurrence_count/last_seen columns exist → occurrence tracking lives in the
+  `context` JSONB (occurrence_count, last_value, last_seen_event_id); no schema churn.
+- Dedup via migration 020 partial unique index `(alert_rule_id, device_id)
+  WHERE status='ACTIVE'` + `ON CONFLICT … DO UPDATE`.
+- asyncpg needs explicit casts on bare params inside jsonb_build_object
+  (`%s::text` / `%s::double precision`) or it errors "cannot determine type".
+- Guarded the "Alert fired" log + publish/notify on alert_event_id — a rolled-back
+  firing no longer logs success or emits a phantom notification.
+Verified e2e: threshold rule fired 3× (cooldown bypassed) → exactly ONE ACTIVE alarm,
+occurrence_count=3, last_value=28, 3 alert_events; composite firing → ACTIVE alarm
+(alarm_type 'composite', rule_type COMPOSITE); both returned by the alarms API
+(`GET /alarms?status=ACTIVE`). Ack/clear untouched (existing router).
 
 **Step 5 — deletion + preview fix (D5, D6, D7).**
 Delete processor EmailService (dead), delete API AlertRuleEvaluationEngine (logic now

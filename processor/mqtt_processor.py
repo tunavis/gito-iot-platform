@@ -498,7 +498,13 @@ class DatabaseService:
         metric_value: float | None,
         message: str,
         severity: str = "MAJOR",
+        rule_type: str = "THRESHOLD",
     ) -> str | None:
+        """Record a firing: append an alert_event, bump the rule's cooldown, and
+        UPSERT the lifecycle alarm — all atomically. The alarm dedups on the
+        partial unique index (one ACTIVE alarm per rule+device); a re-fire bumps
+        occurrence_count in context instead of creating a duplicate."""
+        alarm_type = metric_name if metric_name else "composite"
         try:
             async with self.conn_pool.connection() as conn:
                 await conn.execute(
@@ -515,6 +521,42 @@ class DatabaseService:
                     (tenant_id, alert_rule_id, device_id, metric_name, metric_value, message, severity),
                 )
                 row = await cursor.fetchone()
+                alert_event_id = row["id"] if row else None
+
+                # Lifecycle alarm — new ACTIVE row, or occurrence bump if one is open.
+                await conn.execute(
+                    """
+                    INSERT INTO alarms
+                        (tenant_id, alert_rule_id, device_id, alarm_type, source,
+                         severity, status, message, context, fired_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'ACTIVE', %s,
+                            jsonb_build_object(
+                                'occurrence_count', 1,
+                                'rule_type', %s::text,
+                                'metric', %s::text,
+                                'value', %s::double precision,
+                                'last_event_id', %s::text
+                            ),
+                            now())
+                    ON CONFLICT (alert_rule_id, device_id) WHERE status = 'ACTIVE'
+                        AND alert_rule_id IS NOT NULL AND device_id IS NOT NULL
+                    DO UPDATE SET
+                        severity   = EXCLUDED.severity,
+                        message    = EXCLUDED.message,
+                        updated_at = now(),
+                        context    = COALESCE(alarms.context, '{}'::jsonb) || jsonb_build_object(
+                            'occurrence_count',
+                                COALESCE((alarms.context->>'occurrence_count')::int, 1) + 1,
+                            'last_value', EXCLUDED.context->'value',
+                            'last_seen_event_id', EXCLUDED.context->'last_event_id'
+                        )
+                    """,
+                    (
+                        tenant_id, alert_rule_id, device_id, alarm_type, f"device:{device_id}",
+                        severity, message, rule_type, metric_name, metric_value, alert_event_id,
+                    ),
+                )
+
                 await conn.execute(
                     "UPDATE alert_rules SET last_fired_at = now() WHERE id = %s AND tenant_id = %s",
                     (alert_rule_id, tenant_id),
@@ -522,7 +564,7 @@ class DatabaseService:
                 await conn.commit()
                 # cooldown state changed — next evaluation must see fresh last_fired_at
                 self.invalidate_rules_cache(tenant_id, device_id)
-                return row["id"] if row else None
+                return alert_event_id
         except Exception as e:
             logger.error(f"Failed to fire alert: {e}")
             return None
@@ -1331,7 +1373,13 @@ class MQTTProcessor:
                 alert_event_id = await self.db_service.fire_alert(
                     tenant_id, firing.rule_id, device_id,
                     firing.metric, firing.value, firing.message, firing.severity,
+                    firing.rule_type,
                 )
+                if not alert_event_id:
+                    # fire_alert already logged the failure; don't publish/notify a
+                    # firing that was rolled back
+                    continue
+
                 await self.redis_service.publish_alert(
                     tenant_id, device_id,
                     {
@@ -1344,8 +1392,7 @@ class MQTTProcessor:
                         "message":       firing.message,
                     },
                 )
-                if alert_event_id:
-                    await self._queue_notification(tenant_id, alert_event_id)
+                await self._queue_notification(tenant_id, alert_event_id)
 
                 logger.info(
                     "Alert fired",
