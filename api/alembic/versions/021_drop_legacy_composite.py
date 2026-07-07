@@ -27,7 +27,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Recreate minimal structure (empty) for reversibility; the unified engine
     # does not use these — restore only if rolling back the whole unification.
-    op.execute("""
+    op.execute(
+        """
         CREATE TABLE IF NOT EXISTS composite_alert_rules (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
@@ -35,8 +36,10 @@ def downgrade() -> None:
             logic VARCHAR(10) NOT NULL DEFAULT 'AND',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-    """)
-    op.execute("""
+    """
+    )
+    op.execute(
+        """
         CREATE TABLE IF NOT EXISTS alert_rule_conditions (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             rule_id UUID NOT NULL,
@@ -47,4 +50,5 @@ def downgrade() -> None:
             sequence INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-    """)
+    """
+    )

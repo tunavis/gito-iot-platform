@@ -18,16 +18,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("""
+    op.execute(
+        """
         ALTER TABLE alert_events ALTER COLUMN metric_name DROP NOT NULL;
-    """)
+    """
+    )
 
 
 def downgrade() -> None:
     # Backfill NULLs before restoring the constraint
-    op.execute("""
+    op.execute(
+        """
         UPDATE alert_events SET metric_name = 'composite' WHERE metric_name IS NULL;
-    """)
-    op.execute("""
+    """
+    )
+    op.execute(
+        """
         ALTER TABLE alert_events ALTER COLUMN metric_name SET NOT NULL;
-    """)
+    """
+    )

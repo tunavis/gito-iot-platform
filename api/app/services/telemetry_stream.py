@@ -17,7 +17,9 @@ STREAM_KEY = "telemetry:ingest"
 STREAM_MAXLEN = 100_000
 
 
-async def stream_ingest(redis, tenant_id, device_id, metrics: dict, ts: datetime) -> None:
+async def stream_ingest(
+    redis, tenant_id, device_id, metrics: dict, ts: datetime
+) -> None:
     """XADD one device's metrics to the ingest stream. Raises on failure —
     callers should surface a 503 so devices retry instead of losing data."""
     await redis.xadd(

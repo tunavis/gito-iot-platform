@@ -20,14 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Dedup defensively before the unique index (idempotent re-runs included)
-    op.execute("""
+    op.execute(
+        """
         DELETE FROM notification_queue a USING notification_queue b
         WHERE a.alert_event_id = b.alert_event_id AND a.ctid > b.ctid;
-    """)
-    op.execute("""
+    """
+    )
+    op.execute(
+        """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_queue_alert_event
             ON notification_queue (alert_event_id);
-    """)
+    """
+    )
 
 
 def downgrade() -> None:

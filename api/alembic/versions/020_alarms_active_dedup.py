@@ -23,7 +23,8 @@ def upgrade() -> None:
     # Defensive: collapse any pre-existing duplicate ACTIVE alarms (keep newest)
     # so the unique index can be created. Auto-alarms don't exist yet, so this is
     # normally a no-op — but makes the migration safe to run against dirty data.
-    op.execute("""
+    op.execute(
+        """
         UPDATE alarms a SET status = 'CLEARED', cleared_at = now(), updated_at = now()
         FROM (
             SELECT id,
@@ -35,12 +36,15 @@ def upgrade() -> None:
             WHERE status = 'ACTIVE' AND alert_rule_id IS NOT NULL AND device_id IS NOT NULL
         ) dup
         WHERE a.id = dup.id AND dup.rn > 1;
-    """)
-    op.execute("""
+    """
+    )
+    op.execute(
+        """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_alarms_active_rule_device
             ON alarms (alert_rule_id, device_id)
             WHERE status = 'ACTIVE' AND alert_rule_id IS NOT NULL AND device_id IS NOT NULL;
-    """)
+    """
+    )
 
 
 def downgrade() -> None:

@@ -17,26 +17,35 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 _OPERATORS: dict[str, Callable[[float, float], bool]] = {
-    "gt":  lambda v, t: v > t,
+    "gt": lambda v, t: v > t,
     "gte": lambda v, t: v >= t,
-    "lt":  lambda v, t: v < t,
+    "lt": lambda v, t: v < t,
     "lte": lambda v, t: v <= t,
-    "eq":  lambda v, t: v == t,
+    "eq": lambda v, t: v == t,
     "neq": lambda v, t: v != t,
 }
 
-_SYMBOL_ALIASES = {">": "gt", ">=": "gte", "<": "lt", "<=": "lte", "==": "eq", "!=": "neq"}
+_SYMBOL_ALIASES = {
+    ">": "gt",
+    ">=": "gte",
+    "<": "lt",
+    "<=": "lte",
+    "==": "eq",
+    "!=": "neq",
+}
 
 
 @dataclass
 class Rule:
     id: str
-    rule_type: str = "THRESHOLD"          # THRESHOLD | COMPOSITE
-    metric: Optional[str] = None          # THRESHOLD
-    operator: Optional[str] = None        # THRESHOLD
-    threshold: Optional[float] = None     # THRESHOLD
-    conditions: Optional[list[dict]] = None  # COMPOSITE: [{field, operator, threshold, weight}]
-    logic: Optional[str] = None           # COMPOSITE: AND | OR
+    rule_type: str = "THRESHOLD"  # THRESHOLD | COMPOSITE
+    metric: Optional[str] = None  # THRESHOLD
+    operator: Optional[str] = None  # THRESHOLD
+    threshold: Optional[float] = None  # THRESHOLD
+    conditions: Optional[
+        list[dict]
+    ] = None  # COMPOSITE: [{field, operator, threshold, weight}]
+    logic: Optional[str] = None  # COMPOSITE: AND | OR
     severity: str = "MAJOR"
     cooldown_minutes: int = 0
     last_fired_at: Optional[datetime] = None
@@ -65,7 +74,9 @@ def _coerce(value: Any) -> Optional[float]:
         return None
 
 
-def _condition_met(payload: dict, fld: Optional[str], op: Optional[str], thr: Any) -> bool:
+def _condition_met(
+    payload: dict, fld: Optional[str], op: Optional[str], thr: Any
+) -> bool:
     fn = _OPERATORS.get(_SYMBOL_ALIASES.get(op, op))
     value = _coerce(payload.get(fld)) if fld else None
     threshold = _coerce(thr)
@@ -75,9 +86,8 @@ def _condition_met(payload: dict, fld: Optional[str], op: Optional[str], thr: An
 
 
 def _in_cooldown(rule: Rule, now: datetime) -> bool:
-    return (
-        rule.last_fired_at is not None
-        and now < rule.last_fired_at + timedelta(minutes=rule.cooldown_minutes)
+    return rule.last_fired_at is not None and now < rule.last_fired_at + timedelta(
+        minutes=rule.cooldown_minutes
     )
 
 
@@ -107,7 +117,9 @@ def _evaluate_composite(rule: Rule, payload: dict) -> Optional[Firing]:
     met_flags, score, total_weight = [], 0, 0
     for cond in conditions:
         weight = cond.get("weight", 1)
-        met = _condition_met(payload, cond.get("field"), cond.get("operator"), cond.get("threshold"))
+        met = _condition_met(
+            payload, cond.get("field"), cond.get("operator"), cond.get("threshold")
+        )
         met_flags.append(met)
         total_weight += weight
         if met:
