@@ -1,6 +1,6 @@
 """Device management routes - CRUD operations with RLS enforcement."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
@@ -381,6 +381,15 @@ class BulkAssignGroupRequest(BaseModel):
     device_ids: List[UUID]
     device_group_id: Optional[UUID] = None
 
+class BulkRegisterRequest(BaseModel):
+    """Register many bridge-discovered dev_EUIs at once, all as one device type."""
+    dev_euis: List[str]
+    device_type_id: UUID
+    name_prefix: Optional[str] = None          # e.g. "Water Meter" → "Water Meter 85A1"
+    integration_id: Optional[UUID] = None      # clears registered euis from its unknown list
+    site_id: Optional[UUID] = None
+    device_group_id: Optional[UUID] = None
+
 
 @router.post("/bulk/delete", response_model=SuccessResponse)
 async def bulk_delete_devices(
@@ -459,4 +468,96 @@ async def bulk_assign_device_group(
     return SuccessResponse(data={
         "updated_count": len(devices),
         "message": f"Successfully {action} for {len(devices)} device(s)"
+    })
+
+
+@router.post("/bulk-register", response_model=SuccessResponse)
+async def bulk_register_devices(
+    tenant_id: UUID,
+    body: BulkRegisterRequest,
+    http_request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+):
+    """Register many bridge-discovered dev_EUIs at once, all under one device type.
+
+    Multi-tenant: every device is stamped with the current tenant; dev_EUIs already
+    registered IN THIS TENANT are skipped (they're unique only within a tenant);
+    registered euis are cleared from this tenant's bridge unknown-list.
+    """
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    await session.set_tenant_context(tenant_id)
+
+    from app.models.device_type import DeviceType
+
+    # Validate the device type belongs to this tenant (RLS + explicit)
+    dt = (await session.execute(
+        select(DeviceType).where(
+            DeviceType.tenant_id == tenant_id,
+            DeviceType.id == body.device_type_id,
+        )
+    )).scalar_one_or_none()
+    if not dt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device type not found")
+
+    # Normalize + de-dupe requested euis; validate 16-hex format
+    import re
+    requested: list[str] = []
+    invalid: list[str] = []
+    for raw in body.dev_euis:
+        eui = (raw or "").strip().lower()
+        if re.fullmatch(r"[0-9a-f]{16}", eui):
+            if eui not in requested:
+                requested.append(eui)
+        else:
+            invalid.append(raw)
+    if not requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid dev_EUIs supplied")
+
+    # Which of these are already registered in THIS tenant?
+    already = {
+        r[0] for r in (await session.execute(
+            select(Device.dev_eui).where(
+                Device.tenant_id == tenant_id,
+                Device.dev_eui.in_(requested),
+            )
+        )).all()
+    }
+
+    created: list[str] = []
+    prefix = (body.name_prefix or dt.name).strip()
+    for eui in requested:
+        if eui in already:
+            continue
+        session.add(Device(
+            tenant_id=tenant_id,
+            name=f"{prefix} {eui[-4:].upper()}",
+            device_type=dt.name,
+            device_type_id=dt.id,
+            dev_eui=eui,
+            site_id=body.site_id,
+            device_group_id=body.device_group_id,
+            attributes={},
+            status="offline",
+        ))
+        created.append(eui)
+
+    if created:
+        await session.commit()
+
+    # Self-heal: drop the now-registered euis from this bridge's unknown list
+    redis = getattr(http_request.app.state, "redis", None)
+    if redis and created and body.integration_id:
+        try:
+            await redis.hdel(f"bridge:unknown:{body.integration_id}", *created)
+        except Exception as e:
+            logger.warning("Failed to clear registered euis from unknown list: %s", e)
+
+    return SuccessResponse(data={
+        "registered": len(created),
+        "skipped_already_registered": sorted(already),
+        "invalid": invalid,
+        "message": f"Registered {len(created)} device(s)"
+                   + (f", skipped {len(already)} already-registered" if already else ""),
     })
