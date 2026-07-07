@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-dev-password}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5433 → container 5432 (5432 free for WSL/other stacks)
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -104,7 +104,7 @@ services:
       LOG_LEVEL: DEBUG
       ENVIRONMENT: development
     ports:
-      - "8000:8000"  # Direct access for debugging (also routed via nginx)
+      - "8001:8000"  # host 8001 → container 8000 (8000 free for WSL/other stacks)
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,7 +137,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-min-32-chars-xxxxx}
       NODE_ENV: development
     ports:
-      - "3000:3000"  # Only nginx (port 80) should be accessed directly
+      - "3001:3000"  # host 3001 → container 3000 (3000 free for WSL/other stacks)
     depends_on:
       api:
         condition: service_healthy
