@@ -13,11 +13,15 @@ Endpoints:
 """
 
 import logging
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, text
+
+from alarm_core import Rule as AlarmRule, evaluate as evaluate_alarm_rules
 
 from app.database import get_session, RLSSession
 from app.models.unified_alert_rule import UnifiedAlertRule
@@ -392,17 +396,19 @@ async def preview_alert_rule(
     rule_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+    hours: int = Query(24, ge=1, le=720, description="Hours of history to replay"),
 ):
-    """
-    Preview rule evaluation against recent telemetry.
-    
-    Shows how many alerts would have been triggered in recent history.
-    Useful for testing rules before enabling them.
+    """Preview a rule against recent telemetry.
+
+    Replays the last N hours of the device's telemetry through the SAME
+    evaluation engine the processor uses (alarm_core), reconstructing one
+    payload per timestamp, and reports how often the rule would have fired
+    (cooldown honoured). Lets operators test a rule before enabling it.
     """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(UnifiedAlertRule).where(
             and_(
@@ -412,21 +418,91 @@ async def preview_alert_rule(
         )
     )
     rule = result.scalar_one_or_none()
-    
     if not rule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alert rule not found",
-        )
-    
-    # TODO: Implement actual rule evaluation against historical data
-    # For now, return a placeholder response
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert rule not found")
+
+    started = time.monotonic()
+    rule_type = "COMPOSITE" if (rule.rule_type or "").upper() in ("COMPOSITE", "COMPLEX") else "THRESHOLD"
+
+    # Determine which metrics this rule reads, so the replay query stays narrow
+    if rule_type == "COMPOSITE":
+        metrics = [c.get("field") for c in (rule.conditions or []) if c.get("field")]
+    else:
+        metrics = [rule.metric] if rule.metric else []
+    if not metrics:
+        return {
+            "rule_id": str(rule.id), "rule_name": rule.name, "rule_type": rule.rule_type,
+            "matching_alerts": 0, "sample_alerts": [], "preview_hours": hours,
+            "evaluation_time_ms": 0, "message": "Rule has no metrics to evaluate",
+        }
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    # Only global rules (device_id NULL) span devices; else scope to the rule's device.
+    device_filter = "" if rule.device_id is None else "AND device_id = :device_id"
+    params = {"cutoff": cutoff, "metrics": metrics}
+    if rule.device_id is not None:
+        params["device_id"] = str(rule.device_id)
+
+    rows = (await session.execute(
+        text(f"""
+            SELECT device_id, ts, metric_key, metric_value
+            FROM telemetry
+            WHERE ts >= :cutoff AND metric_key = ANY(:metrics)
+              AND metric_value IS NOT NULL {device_filter}
+            ORDER BY device_id, ts
+        """),
+        params,
+    )).fetchall()
+
+    # Reconstruct payloads: group same-device rows within a 1s window into one
+    # "reading" (telemetry is stored one row per metric at a shared timestamp).
+    core_rule = AlarmRule(
+        id=str(rule.id), rule_type=rule_type,
+        metric=rule.metric, operator=rule.operator, threshold=rule.threshold,
+        conditions=rule.conditions, logic=rule.logic,
+        severity=rule.severity or "MAJOR",
+        cooldown_minutes=rule.cooldown_minutes or 0,
+        last_fired_at=None,
+    )
+
+    matching = 0
+    samples: list[dict] = []
+    last_fired: dict[str, datetime] = {}   # per-device cooldown tracking
+    buckets: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    for r in rows:
+        key = (str(r.device_id), r.ts.replace(microsecond=0))
+        if key not in buckets:
+            buckets[key] = {}
+            order.append(key)
+        buckets[key][r.metric_key] = r.metric_value
+
+    for key in order:
+        device_id, ts = key
+        payload = buckets[key]
+        core_rule.last_fired_at = last_fired.get(device_id)
+        firings = evaluate_alarm_rules([core_rule], payload, ts)
+        if firings:
+            matching += 1
+            last_fired[device_id] = ts
+            if len(samples) < 20:
+                f = firings[0]
+                samples.append({
+                    "device_id": device_id,
+                    "timestamp": ts.isoformat(),
+                    "message": f.message,
+                    "value": f.value,
+                })
+
+    elapsed_ms = int((time.monotonic() - started) * 1000)
     return {
         "rule_id": str(rule.id),
         "rule_name": rule.name,
         "rule_type": rule.rule_type,
-        "matching_alerts": 0,
-        "sample_alerts": [],
-        "evaluation_time_ms": 0,
-        "message": "Preview evaluation not yet implemented",
+        "preview_hours": hours,
+        "readings_evaluated": len(order),
+        "matching_alerts": matching,
+        "sample_alerts": samples,
+        "evaluation_time_ms": elapsed_ms,
+        "message": f"Rule would have fired {matching} time(s) in the last {hours}h",
     }

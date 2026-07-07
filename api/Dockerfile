@@ -8,10 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Shared alarm evaluation library (same engine as the processor — never diverge)
+COPY shared/alarm_core /opt/alarm_core
+
 # Copy requirements and install
 COPY api/pyproject.toml .
 COPY api/app ./app
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir /opt/alarm_core && \
     pip install --no-cache-dir -e .
 
 # Copy Alembic migrations and init.sql

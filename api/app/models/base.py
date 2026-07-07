@@ -178,26 +178,6 @@ class AlertRule(BaseModel):
     )
 
 
-class AlertRuleCondition(BaseModel):
-    """Condition in a composite alert rule - supports multi-condition AND/OR logic."""
-    __tablename__ = "alert_rule_conditions"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=False, index=True)
-    field = Column(String(100), nullable=False)  # temperature, humidity, battery, rssi, pressure, etc.
-    operator = Column(String(10), nullable=False)  # >, <, >=, <=, ==, !=
-    threshold = Column(Float, nullable=False)
-    weight = Column(Integer, default=1, nullable=False)  # For weighted scoring (1-100)
-    sequence = Column(Integer, default=0, nullable=False)  # Execution order for complex rules
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-
-    __table_args__ = (
-        Index("idx_alert_conditions_rule", "rule_id"),
-        CheckConstraint("operator IN ('>', '<', '>=', '<=', '==', '!=')", name="valid_condition_operator"),
-        CheckConstraint("weight >= 1 AND weight <= 100", name="valid_condition_weight"),
-    )
-
-
 class AlertEvent(BaseModel):
     """Alarm events - Cumulocity-style alarms with severity levels and acknowledgment workflow."""
     __tablename__ = "alert_events"

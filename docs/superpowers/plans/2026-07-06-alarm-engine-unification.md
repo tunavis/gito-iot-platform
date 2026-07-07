@@ -144,12 +144,34 @@ occurrence_count=3, last_value=28, 3 alert_events; composite firing → ACTIVE a
 (alarm_type 'composite', rule_type COMPOSITE); both returned by the alarms API
 (`GET /alarms?status=ACTIVE`). Ack/clear untouched (existing router).
 
-**Step 5 — deletion + preview fix (D5, D6, D7).**
-Delete processor EmailService (dead), delete API AlertRuleEvaluationEngine (logic now
-lives in alarm_core), rewrite preview endpoint on alarm_core replay (closes the
-CLAUDE.md TODO), migration to DROP composite_alert_rules + alert_rule_conditions
-(after a row-count check confirms empty/stale). **Done when:** grep shows one evaluator
-in the codebase; preview returns real counts.
+**Step 5 — deletion + preview fix (D5, D6, D7). ✅ DONE 2026-07-07**
+Deleted (all verified zero live callers first): processor `EmailService` + its dead
+SMTP imports/constants; API `AlertRuleEvaluationEngine` (alert_rule_engine.py); the
+orphaned legacy composite chain — `alert_rule_service.py`, `schemas/advanced_alerts.py`,
+`models/composite_alert_rule.py`, and `AlertRuleCondition` in base.py — with
+`models/__init__.py` exports pruned. Migration 021 drops `composite_alert_rules` +
+`alert_rule_conditions` (both verified 0 rows).
+Preview endpoint rewritten (D5 TODO closed): replays the last N hours of telemetry
+through alarm_core (same engine as the processor), reconstructs one payload per
+timestamp, honours cooldown per device. alarm_core added to the API image
+(Dockerfile) so API + processor share one evaluator. Verified: previewing a
+flow_rate>25 rule over 720h replayed 14 readings → 8 real firings with sample messages
+(12ms). API boots clean after all deletions; 38 alarm_core tests still green.
+
+**Deliberately deferred (out of scope, risky):** base.py still has a legacy `AlertRule`
+model mapped to the SAME `alert_rules` table as `UnifiedAlertRule` (two mappers, one
+table). Untangling that needs its own investigation — noted, not touched here.
+
+---
+
+## Outcome — all 5 steps shipped
+
+The telemetry stream is the single alarm funnel. Every ingest path (MQTT, ChirpStack
+local + bridges, HTTP token, gateway, LoRaWAN webhooks, future Edge drivers) gets
+identical alarm behavior. Composite + global rules fire (previously never did); every
+firing carries severity, queues its notification (D8 unique-index fix), and opens/updates
+a lifecycle alarm. One evaluator (`alarm_core`, 38 tests) shared by API + processor.
+Preview works. Dead code and legacy tables gone.
 
 ## 4. Rollout & risk
 

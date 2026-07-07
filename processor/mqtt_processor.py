@@ -27,9 +27,6 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from smtplib import SMTP_SSL, SMTP
 
 import aiomqtt
 import redis.asyncio as aioredis
@@ -57,13 +54,6 @@ MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', 'processor')
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@postgres:5432/gito')
 REDIS_URL    = os.getenv('REDIS_URL', 'redis://keydb:6379')
-
-SMTP_HOST       = os.getenv('SMTP_HOST', '')
-SMTP_PORT_NUM   = int(os.getenv('SMTP_PORT', '587'))
-SMTP_USER       = os.getenv('SMTP_USER', '')
-SMTP_PASSWORD   = os.getenv('SMTP_PASSWORD', '')
-SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', 'noreply@gito-iot.local')
-SMTP_USE_TLS    = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
 
 MAX_PAYLOAD_SIZE    = 256 * 1024   # 256 KB
 MAX_TELEMETRY_VALUE = 1e10
@@ -97,85 +87,6 @@ STREAM_BLOCK_MS  = 100   # ms to block waiting for messages
 PENDING_CLAIM_MS = 30_000
 
 UNIT_CACHE_TTL = 300  # seconds
-
-
-# ---------------------------------------------------------------------------
-# Email
-# ---------------------------------------------------------------------------
-class EmailService:
-    @staticmethod
-    async def send_alert_email(
-        recipient: str,
-        device_name: str,
-        metric: str,
-        value: float,
-        threshold: float,
-        operator: str,
-        tenant_name: str,
-    ) -> bool:
-        try:
-            if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
-                logger.warning("SMTP configuration incomplete - skipping email")
-                return False
-
-            subject = f"Alert: {device_name} - {metric} threshold breached"
-            body = EmailService._generate_alert_email_body(
-                device_name, metric, value, threshold, operator, tenant_name
-            )
-
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"]    = SMTP_FROM_EMAIL
-            msg["To"]      = recipient
-            msg.attach(MIMEText(body, "plain"))
-            msg.attach(MIMEText(EmailService._convert_to_html(body), "html"))
-
-            if SMTP_USE_TLS:
-                with SMTP(SMTP_HOST, SMTP_PORT_NUM) as server:
-                    server.starttls()
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                    server.send_message(msg)
-            else:
-                with SMTP_SSL(SMTP_HOST, SMTP_PORT_NUM) as server:
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                    server.send_message(msg)
-
-            logger.info(f"Alert email sent to {recipient} for {device_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send alert email: {e}")
-            return False
-
-    @staticmethod
-    def _generate_alert_email_body(device_name, metric, value, threshold, operator, tenant_name) -> str:
-        op_text = {
-            ">": "greater than", "<": "less than",
-            ">=": "greater than or equal to", "<=": "less than or equal to",
-            "==": "equal to", "!=": "not equal to",
-        }.get(operator, operator)
-        return f"""Alert Notification
-
-Device: {device_name}
-Tenant: {tenant_name}
-Metric: {metric}
-Current Value: {value}
-Threshold: {threshold} ({op_text})
-Status: THRESHOLD BREACHED
-
-This alert was triggered because the {metric} value ({value}) is {op_text} the configured threshold ({threshold}).
-
-Please investigate the device status and take appropriate action.
-
----
-Gito IoT Platform
-"""
-
-    @staticmethod
-    def _convert_to_html(text: str) -> str:
-        html = "<html><body><pre style='font-family: monospace'>"
-        html += text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        html += "</pre></body></html>"
-        return html
 
 
 # ---------------------------------------------------------------------------

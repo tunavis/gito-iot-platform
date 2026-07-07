@@ -7,7 +7,6 @@ from app.models.base import (
     Device,
     DeviceCredential,
     AlertRule,
-    AlertRuleCondition,
     AlertEvent,
     AuditLog,
     FirmwareVersion,
@@ -26,7 +25,6 @@ from app.models.notification import (
     NotificationQueue,
 )
 from app.models.alarm import Alarm
-from app.models.composite_alert_rule import CompositeAlertRule
 from app.models.unified_alert_rule import UnifiedAlertRule
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.device_type import DeviceType
@@ -38,7 +36,6 @@ __all__ = [
     "Device",
     "DeviceCredential",
     "AlertRule",
-    "AlertRuleCondition",
     "AlertEvent",
     "AuditLog",
     "Organization",
@@ -52,7 +49,6 @@ __all__ = [
     "NotificationTemplate",
     "NotificationQueue",
     "Alarm",
-    "CompositeAlertRule",  # Legacy - use UnifiedAlertRule
     "UnifiedAlertRule",    # Unified alert rules (THRESHOLD + COMPOSITE)
     "Dashboard",
     "DashboardWidget",
