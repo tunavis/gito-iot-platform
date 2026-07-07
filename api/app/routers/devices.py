@@ -134,6 +134,21 @@ async def create_device(
 
     await session.set_tenant_context(tenant_id)
 
+    # dev_EUI is unique per tenant — return a clear 409 instead of a raw 500 IntegrityError
+    if device_data.dev_eui:
+        existing = await session.execute(
+            select(Device.name).where(
+                Device.tenant_id == tenant_id,
+                Device.dev_eui == device_data.dev_eui,
+            )
+        )
+        owner = existing.scalar_one_or_none()
+        if owner:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"dev_EUI '{device_data.dev_eui}' is already registered to device '{owner}'.",
+            )
+
     # Merge GPS coordinates into attributes
     attrs = dict(device_data.attributes) if device_data.attributes else {}
     if device_data.latitude is not None:

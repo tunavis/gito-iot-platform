@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from app.database import get_session, RLSSession
 from app.dependencies import get_current_user
-from app.models.base import Integration
+from app.models.base import Integration, Device
 from app.schemas.common import SuccessResponse
 from app.schemas.integration import (
     IntegrationCreate,
@@ -234,13 +234,33 @@ async def list_integrations(
         except Exception as e:
             logger.warning("Failed to fetch bridge statuses: %s", e)
 
-    # Batch-fetch unknown device counts for chirpstack_mqtt integrations
+    # Batch-fetch unknown device counts, excluding dev_euis that are already
+    # registered (so the badge matches the filtered panel — no phantom counts).
     unknown_counts: dict[str, int] = {}
     if mqtt_ids and redis:
         try:
+            per_integration: dict[str, list[str]] = {}
+            all_euis: set[str] = set()
             for iid in mqtt_ids:
-                count = await redis.hlen(f"bridge:unknown:{iid}")
-                unknown_counts[iid] = count
+                euis = await redis.hkeys(f"bridge:unknown:{iid}")
+                euis = [e.decode() if isinstance(e, bytes) else e for e in euis]
+                per_integration[iid] = euis
+                all_euis.update(euis)
+
+            registered: set[str] = set()
+            if all_euis:
+                # Explicit tenant filter + RLS (defense-in-depth) — dev_euis are only
+                # unique WITHIN a tenant, so never match another tenant's devices.
+                rows = await session.execute(
+                    select(Device.dev_eui).where(
+                        Device.tenant_id == tenant_id,
+                        Device.dev_eui.in_(list(all_euis)),
+                    )
+                )
+                registered = {r[0] for r in rows.all()}
+
+            for iid, euis in per_integration.items():
+                unknown_counts[iid] = sum(1 for e in euis if e not in registered)
         except Exception as e:
             logger.warning("Failed to fetch unknown device counts: %s", e)
 
@@ -336,10 +356,32 @@ async def list_unknown_devices(
     if redis:
         try:
             raw = await redis.hgetall(f"bridge:unknown:{integration_id}")
+            seen: dict[str, str] = {}
             for dev_eui_raw, ts_raw in raw.items():
                 dev_eui = dev_eui_raw.decode() if isinstance(dev_eui_raw, bytes) else dev_eui_raw
                 ts = ts_raw.decode() if isinstance(ts_raw, bytes) else ts_raw
-                entries.append(UnknownDeviceEntry(dev_eui=dev_eui, first_seen=ts))
+                seen[dev_eui] = ts
+
+            # Exclude dev_euis that are already registered — otherwise a device
+            # stays "unregistered" forever after it's added, luring the user back
+            # into the full wizard. Also self-heal: drop registered ones from Redis.
+            registered: set[str] = set()
+            if seen:
+                rows = await session.execute(
+                    select(Device.dev_eui).where(
+                        Device.tenant_id == tenant_id,
+                        Device.dev_eui.in_(list(seen.keys())),
+                    )
+                )
+                registered = {r[0] for r in rows.all()}
+                if registered:
+                    await redis.hdel(f"bridge:unknown:{integration_id}", *registered)
+
+            entries = [
+                UnknownDeviceEntry(dev_eui=eui, first_seen=ts)
+                for eui, ts in seen.items()
+                if eui not in registered
+            ]
         except Exception as e:
             logger.warning("Failed to fetch unknown devices: %s", e)
 

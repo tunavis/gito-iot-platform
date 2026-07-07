@@ -439,7 +439,9 @@ async def preview_alert_rule(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     # Only global rules (device_id NULL) span devices; else scope to the rule's device.
     device_filter = "" if rule.device_id is None else "AND device_id = :device_id"
-    params = {"cutoff": cutoff, "metrics": metrics}
+    # Explicit tenant filter + RLS (defense-in-depth) — a global rule replay must
+    # never read another tenant's telemetry.
+    params = {"cutoff": cutoff, "metrics": metrics, "tenant_id": str(current_tenant)}
     if rule.device_id is not None:
         params["device_id"] = str(rule.device_id)
 
@@ -447,7 +449,8 @@ async def preview_alert_rule(
         text(f"""
             SELECT device_id, ts, metric_key, metric_value
             FROM telemetry
-            WHERE ts >= :cutoff AND metric_key = ANY(:metrics)
+            WHERE tenant_id = :tenant_id AND ts >= :cutoff
+              AND metric_key = ANY(:metrics)
               AND metric_value IS NOT NULL {device_filter}
             ORDER BY device_id, ts
         """),
