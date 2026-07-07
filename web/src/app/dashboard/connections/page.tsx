@@ -174,6 +174,11 @@ interface UnknownDevice {
   first_seen: string;
 }
 
+interface DeviceTypeOption {
+  id: string;
+  name: string;
+}
+
 function UnknownDevicesPanel({
   integrationId,
   tenantId,
@@ -183,18 +188,30 @@ function UnknownDevicesPanel({
 }) {
   const router = useRouter();
   const [devices, setDevices] = useState<UnknownDevice[]>([]);
+  const [types, setTypes] = useState<DeviceTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // bulk-register form state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [typeId, setTypeId] = useState('');
+  const [namePrefix, setNamePrefix] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
-    fetch(`/api/v1/tenants/${tenantId}/integrations/${integrationId}/unknown-devices`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((result) => {
-        const data = result.data ?? result;
-        setDevices(data.unknown_devices ?? []);
+    Promise.all([
+      fetch(`/api/v1/tenants/${tenantId}/integrations/${integrationId}/unknown-devices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()),
+      fetch(`/api/v1/tenants/${tenantId}/device-types?is_active=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()),
+    ])
+      .then(([unknownRes, typesRes]) => {
+        setDevices((unknownRes.data ?? unknownRes).unknown_devices ?? []);
+        setTypes((typesRes.data ?? []).map((t: any) => ({ id: t.id, name: t.name })));
       })
       .catch(() => {
         setError('Failed to load');
@@ -203,27 +220,114 @@ function UnknownDevicesPanel({
       .finally(() => setLoading(false));
   }, [integrationId, tenantId]);
 
+  function toggle(devEui: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(devEui) ? next.delete(devEui) : next.add(devEui);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((prev) =>
+      prev.size === devices.length ? new Set() : new Set(devices.map((d) => d.dev_eui)),
+    );
+  }
+
+  async function handleBulkRegister() {
+    if (selected.size === 0 || !typeId) return;
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch(`/api/v1/tenants/${tenantId}/devices/bulk-register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          dev_euis: Array.from(selected),
+          device_type_id: typeId,
+          name_prefix: namePrefix.trim() || undefined,
+          integration_id: integrationId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.detail || 'Bulk register failed');
+      const data = json.data ?? json;
+      // Drop the registered ones from the list
+      setDevices((prev) => prev.filter((d) => !selected.has(d.dev_eui)));
+      setSelected(new Set());
+      setResult(data.message ?? `Registered ${data.registered} device(s)`);
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : 'Bulk register failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (loading) return <p className="text-xs text-slate-400 py-2">Loading...</p>;
   if (error) return <p className="text-xs text-red-400 py-2">Could not load devices.</p>;
-  if (devices.length === 0) return <p className="text-xs text-slate-400 py-2">No unregistered devices.</p>;
+  if (devices.length === 0)
+    return <p className="text-xs text-slate-400 py-2">No unregistered devices.</p>;
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-3 space-y-3">
+      {/* Bulk register toolbar */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg p-2">
+        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={selected.size === devices.length && devices.length > 0}
+            ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < devices.length; }}
+            onChange={toggleAll}
+          />
+          {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+        </label>
+        <select
+          value={typeId}
+          onChange={(e) => setTypeId(e.target.value)}
+          className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-200"
+        >
+          <option value="">Device type…</option>
+          {types.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+        <input
+          value={namePrefix}
+          onChange={(e) => setNamePrefix(e.target.value)}
+          placeholder="Name prefix (optional)"
+          className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-200 w-40"
+        />
+        <button
+          onClick={handleBulkRegister}
+          disabled={selected.size === 0 || !typeId || submitting}
+          className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1 rounded font-medium"
+        >
+          {submitting ? 'Registering…' : `Register ${selected.size || ''} selected`}
+        </button>
+        {result && <span className="text-xs text-emerald-400">{result}</span>}
+      </div>
+
+      {/* Device rows */}
       {devices.map((d) => (
         <div key={d.dev_eui} className="flex items-center justify-between bg-slate-800 rounded px-3 py-2">
-          <div>
-            <p className="text-xs font-mono text-slate-200">{d.dev_eui}</p>
-            <p className="text-xs text-slate-500">
-              First seen {new Date(d.first_seen).toLocaleString()}
-            </p>
-          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={selected.has(d.dev_eui)} onChange={() => toggle(d.dev_eui)} />
+            <span>
+              <span className="block text-xs font-mono text-slate-200">{d.dev_eui}</span>
+              <span className="block text-xs text-slate-500">
+                First seen {new Date(d.first_seen).toLocaleString()}
+              </span>
+            </span>
+          </label>
           <button
             onClick={() =>
               router.push(`/dashboard/devices/new?dev_eui=${encodeURIComponent(d.dev_eui)}&source=bridge`)
             }
-            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded"
+            className="text-xs text-slate-400 hover:text-indigo-400 px-2 py-1"
+            title="Register with the full wizard instead"
           >
-            Register device
+            wizard →
           </button>
         </div>
       ))}
