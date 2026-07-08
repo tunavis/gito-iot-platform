@@ -16,6 +16,27 @@ export interface DefaultSettings {
   offline_threshold: number;
 }
 
+/** One byte-layout field in a declarative payload decoder. */
+export interface DecoderField {
+  name: string;
+  offset: number;
+  length: number;
+  type: 'uint8' | 'int8' | 'uint16' | 'int16' | 'uint32' | 'int32' | 'float32';
+  endian?: 'big' | 'little';
+  scale?: number;
+  value_offset?: number;
+}
+
+/**
+ * Declarative LoRaWAN payload decoder — used ONLY when the network server
+ * hasn't decoded the uplink itself (no NS 'object'). No code execution.
+ */
+export interface PayloadDecoder {
+  type: 'declarative';
+  f_port?: number;
+  fields: DecoderField[];
+}
+
 export interface DeviceType {
   id: string;
   name: string;
@@ -29,6 +50,7 @@ export interface DeviceType {
   capabilities: string[];
   default_settings?: DefaultSettings;
   connectivity?: ProtocolConfig;
+  decoder?: PayloadDecoder | null;
   is_active: boolean;
   device_count: number;
   created_at: string;
@@ -47,6 +69,7 @@ export interface DeviceTypeForm {
   capabilities: string[];
   default_settings: DefaultSettings;
   connectivity: ProtocolConfig;
+  decoder: PayloadDecoder | null;
   is_active: boolean;
 }
 

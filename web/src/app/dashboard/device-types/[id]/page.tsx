@@ -85,6 +85,7 @@ export default function DeviceTypeDetailPage() {
       capabilities: dt.capabilities || [],
       default_settings: dt.default_settings || DEFAULT_FORM.default_settings,
       connectivity: dt.connectivity || DEFAULT_FORM.connectivity,
+      decoder: dt.decoder ?? null,
       is_active: dt.is_active ?? true,
     });
   };

@@ -1,0 +1,12 @@
+[project]
+name = "gito-payload-codec"
+version = "0.1.0"
+description = "Declarative LoRaWAN payload decoder shared by the Gito API and ingest processor"
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["payload_codec*"]

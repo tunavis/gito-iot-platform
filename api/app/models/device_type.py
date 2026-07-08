@@ -72,6 +72,11 @@ class DeviceType(BaseModel):
     # Key Mapping - maps device telemetry keys to standard metric names
     key_mapping = Column(JSONB, nullable=False, default={})
 
+    # Payload Decoder - declarative byte-layout spec used ONLY when the network
+    # server hasn't decoded the uplink itself (no NS 'object'). See shared/payload_codec.
+    # {"type": "declarative", "fields": [{"name","offset","length","type","scale",...}]}
+    decoder = Column(JSONB, nullable=True, default=None)
+
     # Status
     is_active = Column(Boolean, default=True, nullable=False)
     device_count = Column(Integer, default=0, nullable=False)  # cached count

@@ -20,10 +20,14 @@ PROVIDERS = ("chirpstack", "ttn", "helium", "actility", "custom")
 @dataclass
 class NormalizedUplink:
     dev_eui: str                          # 16-char hex, lower-cased
-    metrics: dict[str, Any]              # {"temperature": 25.5, ...}
+    metrics: dict[str, Any]              # {"temperature": 25.5, ...} — may be EMPTY
+                                           # when the network server hasn't decoded the
+                                           # payload; the router then tries the device
+                                           # type's own decoder against raw_payload.
     dedup_id: str                         # provider-unique string for deduplication
     radio: dict[str, Any] = field(default_factory=dict)  # optional radio metadata
-    raw_payload: str | None = None        # base64 raw LoRa payload (for debugging)
+    raw_payload: str | None = None        # base64 raw LoRa payload
+    f_port: int | None = None             # LoRaWAN FPort, for port-scoped decoders
 
 
 def _safe_float(val: Any) -> float | None:
@@ -47,8 +51,11 @@ def _safe_int(val: Any) -> int | None:
 def parse_chirpstack(body: dict) -> NormalizedUplink | None:
     """Parse a ChirpStack v4 uplink webhook payload.
 
-    ChirpStack sends decoded sensor data in body["object"].
-    Radio info is in body["rxInfo"][0] (best gateway = first entry).
+    ChirpStack sends decoded sensor data in body["object"] when a codec is
+    configured there. If it's absent, we still return an uplink (metrics={})
+    carrying raw_payload/f_port — the router then tries the device type's own
+    decoder before giving up. Only a genuinely unparseable payload (no dev_eui)
+    returns None.
     """
     device_info = body.get("deviceInfo") or {}
     dev_eui = device_info.get("devEui") or body.get("devEui")
@@ -57,9 +64,12 @@ def parse_chirpstack(body: dict) -> NormalizedUplink | None:
         return None
 
     metrics = body.get("object")
-    if not metrics or not isinstance(metrics, dict):
-        logger.warning("chirpstack: missing or empty 'object' field — configure a codec in ChirpStack")
-        return None
+    if not isinstance(metrics, dict):
+        metrics = {}
+        logger.info(
+            "chirpstack: no decoded 'object' for dev_eui %s — will try the device "
+            "type's own decoder against the raw payload", dev_eui,
+        )
 
     dedup_id = body.get("deduplicationId") or dev_eui + str(body.get("fCnt", ""))
 
@@ -91,6 +101,7 @@ def parse_chirpstack(body: dict) -> NormalizedUplink | None:
         dedup_id=dedup_id,
         radio=radio,
         raw_payload=body.get("data"),
+        f_port=_safe_int(body.get("fPort")),
     )
 
 

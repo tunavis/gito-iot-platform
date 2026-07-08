@@ -34,6 +34,7 @@ from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 
 from alarm_core import Rule as AlarmRule, evaluate as evaluate_alarm_rules
+from payload_codec import decode as decode_payload
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -144,6 +145,8 @@ class DatabaseService:
         self._deveui_cache: dict[str, tuple[float, tuple[str, str] | None]] = {}
         # key_mapping cache: {device_id: (monotonic_time, {raw_key: canonical_key})}
         self._key_mapping_cache: dict[str, tuple[float, dict[str, str]]] = {}
+        # payload decoder cache: {device_id: (monotonic_time, spec | None)}
+        self._decoder_cache: dict[str, tuple[float, dict | None]] = {}
         # alert rules cache: {(tenant_id, device_id): (expires_monotonic, rules)}
         self._rules_cache: dict[tuple[str, str], tuple[float, list]] = {}
 
@@ -221,6 +224,77 @@ class DatabaseService:
         if not mapping:
             return payload
         return {mapping.get(k, k): v for k, v in payload.items()}
+
+    async def get_decoder(self, device_id: str) -> dict | None:
+        """Return the device type's payload decoder spec, or None. Cached 5 min."""
+        now = time.monotonic()
+        cached = self._decoder_cache.get(device_id)
+        if cached and (now - cached[0]) < UNIT_CACHE_TTL:
+            return cached[1]
+
+        spec: dict | None = None
+        try:
+            async with self.conn_pool.connection() as conn:
+                result = await conn.execute(
+                    "SELECT dt.decoder FROM devices d "
+                    "JOIN device_types dt ON d.device_type_id = dt.id WHERE d.id = %s",
+                    (device_id,),
+                )
+                row = await result.fetchone()
+                if row:
+                    raw = row.get("decoder") if isinstance(row, dict) else row[0]
+                    if isinstance(raw, dict):
+                        spec = raw
+        except Exception as e:
+            logger.debug(f"Decoder lookup failed for {device_id}: {e}")
+
+        self._decoder_cache[device_id] = (now, spec)
+        return spec
+
+    async def mark_device_seen(self, tenant_id: str, device_id: str) -> None:
+        """Bump last_seen/status for a device whose uplink produced no telemetry
+        (no NS object, no decoder) — it should still show online."""
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
+                )
+                await conn.execute(
+                    "UPDATE devices SET last_seen = now(), status = 'online', updated_at = now() "
+                    "WHERE id = %s AND tenant_id = %s",
+                    (device_id, tenant_id),
+                )
+                await conn.commit()
+        except Exception as e:
+            logger.warning("Failed to mark device %s seen: %s", device_id, e)
+
+    async def store_raw_uplink(
+        self,
+        tenant_id: str,
+        device_id: str,
+        raw_b64: str,
+        f_port: int | None,
+        decoded: bool,
+        codec_used: str | None,
+    ) -> None:
+        """Persist every LoRaWAN uplink's raw bytes, decoded or not — enables
+        re-decode over history once a device-type decoder is authored/fixed."""
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO raw_uplinks
+                        (tenant_id, device_id, f_port, raw_b64, decoded, codec_used, ts)
+                    VALUES (%s, %s, %s, %s, %s, %s, now())
+                    """,
+                    (tenant_id, device_id, f_port, raw_b64, decoded, codec_used),
+                )
+                await conn.commit()
+        except Exception as e:
+            logger.warning("Failed to store raw uplink for device %s: %s", device_id, e)
 
     async def device_exists(self, tenant_id: str, device_id: str) -> bool:
         """
@@ -1435,15 +1509,41 @@ class MQTTProcessor:
                 )
                 return
 
-            # 5. Extract decoded sensor data from the 'object' field
+            # 5. Extract decoded sensor data from the 'object' field. NS-decoded
+            # output always wins — never double-decode. Every uplink's raw bytes
+            # are persisted regardless of outcome so a decoder authored later can
+            # be replayed over history (raw_uplinks table).
+            raw_b64 = cs_msg.get("data")
+            f_port  = cs_msg.get("fPort")
             sensor_data = cs_msg.get("object")
+            codec_used: str | None = None
+
+            if sensor_data and isinstance(sensor_data, dict):
+                codec_used = "ns"
+            else:
+                decoder_spec = await self.db_service.get_decoder(device_id)
+                decoded = decode_payload(decoder_spec, raw_b64, f_port) if decoder_spec else {}
+                if decoded:
+                    sensor_data = decoded
+                    codec_used = "declarative"
+
+            if raw_b64:
+                await self.db_service.store_raw_uplink(
+                    tenant_id, device_id, raw_b64, f_port,
+                    decoded=codec_used is not None, codec_used=codec_used,
+                )
+
             if not sensor_data or not isinstance(sensor_data, dict):
                 logger.warning(
-                    "ChirpStack uplink for dev_eui %s has no decoded 'object' — "
-                    "configure a payload codec in ChirpStack for application %s",
+                    "ChirpStack uplink for dev_eui %s has no decoded 'object' and no "
+                    "working device-type decoder — configure a payload codec in "
+                    "ChirpStack, or set a decoder on the device type, for application %s",
                     dev_eui,
                     cs_msg.get("deviceInfo", {}).get("applicationId", "unknown"),
                 )
+                # Still surface the device as online — it IS transmitting, we just
+                # can't read the payload yet.
+                await self.db_service.mark_device_seen(tenant_id, device_id)
                 return
 
             # 6. Strip system keys and flatten nested dicts

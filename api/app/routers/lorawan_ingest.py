@@ -22,6 +22,7 @@ from app.models.base import Device
 from app.schemas.common import SuccessResponse
 from app.services.telemetry_stream import stream_ingest
 from app.services.lorawan_parsers import get_parser
+from payload_codec import decode as decode_payload
 
 logger = logging.getLogger(__name__)
 
@@ -158,30 +159,78 @@ async def ingest_lorawan(
     device_id = device.id
     ts = datetime.now(timezone.utc)
 
-    # --- Fetch key mapping from device type ---
+    # --- Fetch key mapping + payload decoder from device type (one query) ---
     key_mapping: dict = {}
-    km_result = await session.execute(
+    decoder_spec: dict | None = None
+    dt_result = await session.execute(
         text(
-            "SELECT dt.key_mapping FROM devices d "
+            "SELECT dt.key_mapping, dt.decoder FROM devices d "
             "JOIN device_types dt ON d.device_type_id = dt.id "
             "WHERE d.id = :device_id"
         ),
         {"device_id": str(device_id)},
     )
-    km_row = km_result.fetchone()
-    if km_row and km_row[0]:
-        key_mapping = km_row[0]
+    dt_row = dt_result.fetchone()
+    if dt_row:
+        if dt_row[0]:
+            key_mapping = dt_row[0]
+        if dt_row[1]:
+            decoder_spec = dt_row[1]
 
-    # --- Build metric dict: user metrics + __lora_* radio metadata ---
-    all_metrics = dict(uplink.metrics)
+    # --- NS didn't decode? Try the device type's own decoder (never double-decode) ---
+    codec_used: str | None = "ns" if uplink.metrics else None
+    metrics = dict(uplink.metrics)
+    if not metrics and decoder_spec:
+        decoded = decode_payload(decoder_spec, uplink.raw_payload, uplink.f_port)
+        if decoded:
+            metrics = decoded
+            codec_used = "declarative"
+
+    # --- Always persist the raw bytes, decoded or not — enables re-decode later ---
+    if uplink.raw_payload:
+        try:
+            await session.execute(
+                text(
+                    "INSERT INTO raw_uplinks "
+                    "(tenant_id, device_id, f_port, raw_b64, decoded, codec_used, ts) "
+                    "VALUES (:tenant_id, :device_id, :f_port, :raw_b64, :decoded, :codec_used, :ts)"
+                ),
+                {
+                    "tenant_id": str(tenant_id), "device_id": str(device_id),
+                    "f_port": uplink.f_port, "raw_b64": uplink.raw_payload,
+                    "decoded": codec_used is not None, "codec_used": codec_used, "ts": ts,
+                },
+            )
+            await session.commit()
+        except Exception as e:
+            logger.warning("Failed to store raw uplink for device %s: %s", device_id, e)
+
+    if not metrics:
+        # Genuinely nothing to store as telemetry — but the device IS transmitting,
+        # so it should show online, not be treated as a client error.
+        await session.execute(
+            text(
+                "UPDATE devices SET last_seen = :ts, status = 'online', updated_at = now() "
+                "WHERE id = :device_id AND tenant_id = :tenant_id"
+            ),
+            {"ts": ts, "device_id": str(device_id), "tenant_id": str(tenant_id)},
+        )
+        await session.commit()
+        logger.info(
+            "lorawan_ingest: no decoded metrics for device %s via %s (tenant %s) — "
+            "configure a ChirpStack codec or set a decoder on the device type",
+            device_id, provider, tenant_id,
+        )
+        return SuccessResponse(data={"ingested": 0, "decoded": False, "timestamp": ts.isoformat()})
+
+    # --- Build metric dict: decoded/NS metrics + __lora_* radio metadata ---
+    all_metrics = dict(metrics)
     if uplink.radio:
         all_metrics.update(_radio_to_lora_metrics(uplink.radio))
 
     mapped_metrics = {
         key_mapping.get(k, k): v for k, v in all_metrics.items() if k not in SYSTEM_KEYS
     }
-    if not mapped_metrics:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload")
 
     # Publish into the ingest stream — the processor inserts AND evaluates alarms
     # there (single funnel; webhook-connected LoRaWAN devices get identical alarms).
@@ -222,7 +271,7 @@ async def ingest_lorawan(
     # --- Publish to Redis for WebSocket + digital twin (non-critical) ---
     if redis_client:
         try:
-            clean_payload = {k: v for k, v in uplink.metrics.items() if k not in SYSTEM_KEYS}
+            clean_payload = {k: v for k, v in metrics.items() if k not in SYSTEM_KEYS}
             channel = f"telemetry:{tenant_id}:{device_id}"
             message = _json.dumps({
                 "device_id": str(device_id),
@@ -235,8 +284,8 @@ async def ingest_lorawan(
 
     user_metric_count = len([k for k in all_metrics if not k.startswith("__lora_")])
     logger.info(
-        "lorawan_ingest: %d metrics for device %s via %s (tenant %s)",
-        user_metric_count, device_id, provider, tenant_id,
+        "lorawan_ingest: %d metrics for device %s via %s (tenant %s, codec=%s)",
+        user_metric_count, device_id, provider, tenant_id, codec_used,
     )
 
     return SuccessResponse(data={"ingested": user_metric_count, "timestamp": ts.isoformat()})

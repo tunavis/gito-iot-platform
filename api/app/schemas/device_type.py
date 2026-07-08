@@ -107,6 +107,7 @@ class DeviceTypeCreate(BaseModel):
     command_schema: Optional[dict] = Field(default={}, description="Available commands with parameter schemas")
     metadata: Optional[dict] = Field(default={}, description="Custom metadata")
     key_mapping: Optional[Dict[str, str]] = Field(default={}, description="Maps raw device telemetry keys to canonical data_model keys. E.g. {'WATER_FLOW_BOILER': 'flow_rate'}")
+    decoder: Optional[dict] = Field(default=None, description="Declarative byte-layout payload decoder, used only when the network server hasn't decoded the uplink. E.g. {'type': 'declarative', 'fields': [{'name': 'flow_rate', 'offset': 0, 'length': 2, 'type': 'uint16', 'scale': 0.1}]}")
 
     @model_validator(mode="after")
     def validate_unique_field_names(self) -> "DeviceTypeCreate":
@@ -139,6 +140,7 @@ class DeviceTypeUpdate(BaseModel):
     command_schema: Optional[dict] = None
     metadata: Optional[dict] = None
     key_mapping: Optional[Dict[str, str]] = None
+    decoder: Optional[dict] = None
     is_active: Optional[bool] = None
 
     @model_validator(mode="after")
@@ -174,6 +176,7 @@ class DeviceTypeResponse(BaseModel):
     command_schema: Optional[dict] = Field(default={})
     metadata: Optional[dict] = Field(None, validation_alias="extra_metadata")
     key_mapping: Optional[Dict[str, str]] = Field(default={})
+    decoder: Optional[dict] = Field(default=None)
 
     is_active: bool
     device_count: int

@@ -179,6 +179,10 @@ async def create_device_type(
         default_settings=default_settings_json,
         connectivity=connectivity_json,
         extra_metadata=device_type_data.metadata or {},
+        # Previously dropped on create (only persisted via a later update) — fixed:
+        key_mapping=device_type_data.key_mapping or {},
+        command_schema=device_type_data.command_schema or {},
+        decoder=device_type_data.decoder,
     )
 
     session.add(device_type)

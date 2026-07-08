@@ -16,6 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY shared/alarm_core /opt/alarm_core
 RUN pip install --no-cache-dir /opt/alarm_core
 
+# Shared payload decoder library (same declarative decoder as the API — never diverge)
+COPY shared/payload_codec /opt/payload_codec
+RUN pip install --no-cache-dir /opt/payload_codec
+
 # Copy application code
 COPY processor/mqtt_processor.py .
 

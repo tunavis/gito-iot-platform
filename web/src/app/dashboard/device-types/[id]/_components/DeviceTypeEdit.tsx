@@ -14,9 +14,10 @@ import {
   CAPABILITIES,
   COLORS,
 } from '../../_constants';
-import type { DeviceTypeForm, DataModelField, DiscoveredMetric } from '../../_types';
+import type { DeviceTypeForm, DataModelField, DiscoveredMetric, PayloadDecoder } from '../../_types';
 import DataModelTable from './DataModelTable';
 import DiscoveredMetricsPanel from './DiscoveredMetricsPanel';
+import PayloadDecoderTable from './PayloadDecoderTable';
 
 interface DeviceTypeEditProps {
   form: DeviceTypeForm;
@@ -42,6 +43,7 @@ export default function DeviceTypeEdit({
   const [expandedSections, setExpandedSections] = React.useState({
     basic: true,
     dataModel: true,
+    decoder: false,
     capabilities: true,
     settings: false,
     connectivity: false,
@@ -263,6 +265,23 @@ export default function DeviceTypeEdit({
                 }}
               />
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Payload Decoder */}
+      <div className="gito-card overflow-hidden">
+        <SectionHeader
+          sectionKey="decoder"
+          title="Payload Decoder"
+          badge={form.decoder ? `${form.decoder.fields.length} fields` : 'off'}
+        />
+        {expandedSections.decoder && (
+          <div className="px-6 pb-6 border-t border-th-default pt-4">
+            <PayloadDecoderTable
+              decoder={form.decoder}
+              onChange={(decoder: PayloadDecoder | null) => setForm({ ...form, decoder })}
+            />
           </div>
         )}
       </div>

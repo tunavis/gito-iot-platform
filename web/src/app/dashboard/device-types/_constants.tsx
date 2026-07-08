@@ -94,6 +94,18 @@ export const FIELD_TYPES = [
   { value: 'array', label: 'Array' },
 ];
 
+// --- Payload Decoder byte types ---
+
+export const DECODER_FIELD_TYPES = [
+  { value: 'uint8', label: 'uint8 (1 byte)' },
+  { value: 'int8', label: 'int8 (1 byte)' },
+  { value: 'uint16', label: 'uint16 (2 bytes)' },
+  { value: 'int16', label: 'int16 (2 bytes)' },
+  { value: 'uint32', label: 'uint32 (4 bytes)' },
+  { value: 'int32', label: 'int32 (4 bytes)' },
+  { value: 'float32', label: 'float32 (4 bytes)' },
+];
+
 export const fieldTypeBadgeStyles: Record<string, { bg: string; color: string; border: string }> = {
   float:     { bg: 'rgba(37,99,235,0.1)',   color: '#3b82f6', border: 'rgba(37,99,235,0.2)' },
   integer:   { bg: 'rgba(37,99,235,0.1)',   color: '#3b82f6', border: 'rgba(37,99,235,0.2)' },
@@ -142,6 +154,7 @@ export const DEFAULT_FORM: DeviceTypeForm = {
       retain: false,
     },
   },
+  decoder: null,
   is_active: true,
 };
 
