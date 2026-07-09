@@ -71,6 +71,7 @@ out/
 dist/
 build/
 *.pem
+*.tsbuildinfo
 
 # Docker
 .dockerignore
