@@ -14,10 +14,9 @@ import {
   CAPABILITIES,
   COLORS,
 } from '../../_constants';
-import type { DeviceTypeForm, DataModelField, DiscoveredMetric, PayloadDecoder } from '../../_types';
-import DataModelTable from './DataModelTable';
+import type { DeviceTypeForm, DiscoveredMetric, UnifiedMetric } from '../../_types';
 import DiscoveredMetricsPanel from './DiscoveredMetricsPanel';
-import PayloadDecoderTable from './PayloadDecoderTable';
+import MetricsTable from './MetricsTable';
 
 interface DeviceTypeEditProps {
   form: DeviceTypeForm;
@@ -42,8 +41,7 @@ export default function DeviceTypeEdit({
 }: DeviceTypeEditProps) {
   const [expandedSections, setExpandedSections] = React.useState({
     basic: true,
-    dataModel: true,
-    decoder: false,
+    metrics: true,
     capabilities: true,
     settings: false,
     connectivity: false,
@@ -59,26 +57,6 @@ export default function DeviceTypeEdit({
       capabilities: form.capabilities.includes(cap)
         ? form.capabilities.filter((c) => c !== cap)
         : [...form.capabilities, cap],
-    });
-  };
-
-  const updateDataModelField = (index: number, updates: Partial<DataModelField>) => {
-    const newFields = [...form.data_model];
-    newFields[index] = { ...newFields[index], ...updates };
-    setForm({ ...form, data_model: newFields });
-  };
-
-  const removeDataModelField = (index: number) => {
-    setForm({ ...form, data_model: form.data_model.filter((_, i) => i !== index) });
-  };
-
-  const addDataModelField = () => {
-    setForm({
-      ...form,
-      data_model: [
-        ...form.data_model,
-        { name: '', type: 'float', unit: '', description: '', required: false },
-      ],
     });
   };
 
@@ -228,22 +206,16 @@ export default function DeviceTypeEdit({
         )}
       </div>
 
-      {/* Data Model */}
+      {/* Metrics */}
       <div className="gito-card overflow-hidden">
-        <SectionHeader sectionKey="dataModel" title="Data Model" badge={`${form.data_model.length} fields`} />
-        {expandedSections.dataModel && (
+        <SectionHeader sectionKey="metrics" title="Metrics" badge={`${form.metrics.length} defined`} />
+        {expandedSections.metrics && (
           <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
-            <p className="text-sm text-th-secondary">
-              Define the telemetry fields this device type sends. This creates a schema for
-              validating and displaying device data.
-            </p>
-
-            <DataModelTable
-              fields={form.data_model}
-              mode="edit"
-              onUpdate={updateDataModelField}
-              onRemove={removeDataModelField}
-              onAdd={addDataModelField}
+            <MetricsTable
+              metrics={form.metrics}
+              fPort={form.decoderFPort}
+              onChange={(metrics: UnifiedMetric[]) => setForm({ ...form, metrics })}
+              onFPortChange={(decoderFPort) => setForm({ ...form, decoderFPort })}
             />
 
             {/* Discovered Metrics — edit mode only */}
@@ -253,35 +225,18 @@ export default function DeviceTypeEdit({
                 totalDevices={discoveredTotal}
                 loading={discoveredLoading}
                 onRefresh={onRefreshDiscovered}
-                currentFieldNames={form.data_model.map((f) => f.name)}
+                currentFieldNames={form.metrics.map((m) => m.name)}
                 onAddField={(key) => {
                   setForm({
                     ...form,
-                    data_model: [
-                      ...form.data_model,
-                      { name: key, type: 'float', unit: '', description: '', required: false },
+                    metrics: [
+                      ...form.metrics,
+                      { name: key, type: 'float', unit: '', description: '', required: false, source: { mode: 'direct' } },
                     ],
                   });
                 }}
               />
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Payload Decoder */}
-      <div className="gito-card overflow-hidden">
-        <SectionHeader
-          sectionKey="decoder"
-          title="Payload Decoder"
-          badge={form.decoder ? `${form.decoder.fields.length} fields` : 'off'}
-        />
-        {expandedSections.decoder && (
-          <div className="px-6 pb-6 border-t border-th-default pt-4">
-            <PayloadDecoderTable
-              decoder={form.decoder}
-              onChange={(decoder: PayloadDecoder | null) => setForm({ ...form, decoder })}
-            />
           </div>
         )}
       </div>

@@ -139,7 +139,8 @@ export const DEFAULT_FORM: DeviceTypeForm = {
   category: 'sensor',
   icon: 'thermometer',
   color: '#10b981',
-  data_model: [],
+  metrics: [],
+  decoderFPort: null,
   capabilities: ['telemetry'],
   default_settings: {
     heartbeat_interval: 60,
@@ -154,7 +155,6 @@ export const DEFAULT_FORM: DeviceTypeForm = {
       retain: false,
     },
   },
-  decoder: null,
   is_active: true,
 };
 

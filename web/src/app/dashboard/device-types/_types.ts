@@ -51,6 +51,7 @@ export interface DeviceType {
   default_settings?: DefaultSettings;
   connectivity?: ProtocolConfig;
   decoder?: PayloadDecoder | null;
+  key_mapping?: Record<string, string>;
   is_active: boolean;
   device_count: number;
   created_at: string;
@@ -65,11 +66,13 @@ export interface DeviceTypeForm {
   category: string;
   icon: string;
   color: string;
-  data_model: DataModelField[];
+  // Unified metric list — merged from / split back into data_model + decoder +
+  // key_mapping at load/save (see _metrics.ts). The backend storage is unchanged.
+  metrics: UnifiedMetric[];
+  decoderFPort: number | null;
   capabilities: string[];
   default_settings: DefaultSettings;
   connectivity: ProtocolConfig;
-  decoder: PayloadDecoder | null;
   is_active: boolean;
 }
 
@@ -78,4 +81,34 @@ export interface DiscoveredMetric {
   device_count: number;
   last_seen: string | null;
   in_schema: boolean;
+}
+
+/**
+ * A single metric, defined once. Unifies what were three disconnected
+ * mechanisms — data_model (schema), decoder.fields (byte layout), key_mapping
+ * (raw→canonical rename) — into one row. Merged from / split back to those three
+ * stored columns by _metrics.ts; the backend storage is unchanged.
+ */
+export type MetricSource =
+  | { mode: 'direct' }
+  | {
+      mode: 'decode';
+      offset: number;
+      length: number;
+      byteType: DecoderField['type'];
+      endian: 'big' | 'little';
+      scale: number;
+      value_offset: number;
+    }
+  | { mode: 'rename'; rawKey: string };
+
+export interface UnifiedMetric {
+  name: string;
+  type: string;          // schema type: float | integer | boolean | string | ...
+  unit: string;
+  description: string;
+  min_value?: number;
+  max_value?: number;
+  required: boolean;
+  source: MetricSource;  // HOW it arrives
 }

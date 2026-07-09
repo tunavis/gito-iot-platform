@@ -7,7 +7,8 @@ import { useToast } from '@/components/ToastProvider';
 import { ArrowLeft, Edit, Save, Cpu, X } from 'lucide-react';
 import { btn } from '@/components/ui/buttonStyles';
 import { categoryIcons, DEFAULT_FORM } from '../_constants';
-import type { DeviceType, DeviceTypeForm, DiscoveredMetric, DataModelField } from '../_types';
+import type { DeviceType, DeviceTypeForm, DiscoveredMetric } from '../_types';
+import { mergeMetrics, splitMetrics } from '../_metrics';
 import DeviceTypeView from './_components/DeviceTypeView';
 import DeviceTypeEdit from './_components/DeviceTypeEdit';
 
@@ -73,19 +74,12 @@ export default function DeviceTypeDetailPage() {
       category: dt.category || 'sensor',
       icon: dt.icon || 'thermometer',
       color: dt.color || '#10b981',
-      data_model: (dt.data_model || []).map((f: DataModelField) => ({
-        name: f.name || '',
-        type: f.type || 'float',
-        unit: f.unit || '',
-        description: f.description || '',
-        min_value: (f as any).min ?? f.min_value,
-        max_value: (f as any).max ?? f.max_value,
-        required: f.required || false,
-      })),
+      // Merge the three stored columns into one unified metric list (see _metrics.ts).
+      metrics: mergeMetrics(dt.data_model || [], dt.decoder, dt.key_mapping || {}),
+      decoderFPort: dt.decoder?.f_port ?? null,
       capabilities: dt.capabilities || [],
       default_settings: dt.default_settings || DEFAULT_FORM.default_settings,
       connectivity: dt.connectivity || DEFAULT_FORM.connectivity,
-      decoder: dt.decoder ?? null,
       is_active: dt.is_active ?? true,
     });
   };
@@ -140,13 +134,17 @@ export default function DeviceTypeDetailPage() {
         ? `/api/v1/tenants/${auth.tenant}/device-types`
         : `/api/v1/tenants/${auth.tenant}/device-types/${params.id}`;
 
+      // Split the unified metric list back into the three stored columns.
+      const { metrics, decoderFPort, ...rest } = form;
+      const body = { ...rest, ...splitMetrics(metrics, decoderFPort ?? undefined) };
+
       const response = await fetch(url, {
         method: isNew ? 'POST' : 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${auth.token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

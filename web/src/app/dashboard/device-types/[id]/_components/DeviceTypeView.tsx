@@ -11,8 +11,9 @@ import {
   formatSeconds,
   formatRange,
 } from '../../_constants';
-import type { DeviceType, DiscoveredMetric } from '../../_types';
-import DataModelTable from './DataModelTable';
+import type { DeviceType, DiscoveredMetric, UnifiedMetric } from '../../_types';
+import { mergeMetrics } from '../../_metrics';
+import { Binary, KeyRound } from 'lucide-react';
 import DiscoveredMetricsPanel from './DiscoveredMetricsPanel';
 
 interface DeviceTypeViewProps {
@@ -31,6 +32,7 @@ export default function DeviceTypeView({
   onRefreshDiscovered,
 }: DeviceTypeViewProps) {
   const dt = deviceType;
+  const metrics = mergeMetrics(dt.data_model || [], dt.decoder, dt.key_mapping || {});
 
   return (
     <div className="space-y-6">
@@ -96,17 +98,46 @@ export default function DeviceTypeView({
         />
       </div>
 
-      {/* Data Model */}
+      {/* Metrics */}
       <div className="gito-card overflow-hidden">
         <div className="px-6 py-4 border-b border-th-default flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-th-primary">Data Model</h3>
+            <h3 className="text-base font-semibold text-th-primary">Metrics</h3>
             <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary font-medium">
-              {dt.data_model?.length || 0} fields
+              {metrics.length} defined
             </span>
           </div>
         </div>
-        <DataModelTable fields={dt.data_model || []} mode="view" />
+        {metrics.length === 0 ? (
+          <div className="px-6 py-8 text-sm text-th-muted">No metrics defined yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] font-bold uppercase tracking-widest text-th-muted border-b border-th-subtle">
+                  <th className="px-6 py-2 font-bold">Name</th>
+                  <th className="px-3 py-2 font-bold">Type</th>
+                  <th className="px-3 py-2 font-bold">Unit</th>
+                  <th className="px-3 py-2 font-bold">Range</th>
+                  <th className="px-3 py-2 font-bold">Required</th>
+                  <th className="px-3 py-2 font-bold">How it arrives</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.map((m) => (
+                  <tr key={m.name} className="border-b border-th-subtle last:border-0">
+                    <td className="px-6 py-2.5 font-mono text-th-primary">{m.name}</td>
+                    <td className="px-3 py-2.5 text-th-secondary">{m.type}</td>
+                    <td className="px-3 py-2.5 text-th-secondary">{m.unit || '—'}</td>
+                    <td className="px-3 py-2.5 text-th-secondary font-mono">{formatRange(m.min_value, m.max_value)}</td>
+                    <td className="px-3 py-2.5 text-th-secondary">{m.required ? 'Yes' : 'No'}</td>
+                    <td className="px-3 py-2.5"><SourceBadge source={m.source} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Capabilities */}
@@ -211,9 +242,35 @@ export default function DeviceTypeView({
           totalDevices={discoveredTotal}
           loading={discoveredLoading}
           onRefresh={onRefreshDiscovered}
-          currentFieldNames={(dt.data_model || []).map((f) => f.name)}
+          currentFieldNames={metrics.map((m) => m.name)}
         />
       )}
     </div>
   );
+}
+
+/** Compact read-only badge describing how a metric's value arrives. */
+function SourceBadge({ source }: { source: UnifiedMetric['source'] }) {
+  if (source.mode === 'decode') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium"
+        style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}>
+        <Binary className="w-3 h-3" />
+        <span className="font-mono">{source.byteType} @{source.offset}
+          {source.scale !== 1 ? ` ×${source.scale}` : ''}
+          {source.value_offset ? ` ${source.value_offset > 0 ? '+' : ''}${source.value_offset}` : ''}
+        </span>
+      </span>
+    );
+  }
+  if (source.mode === 'rename') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium"
+        style={{ background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.2)' }}>
+        <KeyRound className="w-3 h-3" />
+        <span className="font-mono">← {source.rawKey}</span>
+      </span>
+    );
+  }
+  return <span className="text-xs text-th-muted">Sent as-is</span>;
 }
