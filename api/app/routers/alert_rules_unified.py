@@ -24,7 +24,12 @@ from sqlalchemy import select, func, and_, text
 from alarm_core import Rule as AlarmRule, evaluate as evaluate_alarm_rules
 
 from app.database import get_session, RLSSession
-from app.models.unified_alert_rule import UnifiedAlertRule
+from app.models.unified_alert_rule import (
+    UnifiedAlertRule,
+    RULE_TYPE_DB_VALUES,
+    SEVERITY_DB_VALUES,
+    normalize_rule_type,
+)
 from app.models.base import Device
 from app.schemas.alert_unified import (
     AlertRuleCreate,
@@ -77,16 +82,21 @@ async def list_alert_rules(
     
     # Apply filters
     if rule_type:
-        query = query.where(UnifiedAlertRule.rule_type == rule_type.upper())
-        count_query = count_query.where(UnifiedAlertRule.rule_type == rule_type.upper())
-    
+        # rule_type is stored in DB format (SIMPLE/COMPLEX) via @validates, but
+        # some rows may predate that hook — match every value that normalizes
+        # to the requested type instead of a single literal (see RULE_TYPE_DB_VALUES).
+        db_values = RULE_TYPE_DB_VALUES.get(rule_type.upper(), (rule_type.upper(),))
+        query = query.where(UnifiedAlertRule.rule_type.in_(db_values))
+        count_query = count_query.where(UnifiedAlertRule.rule_type.in_(db_values))
+
     if device_id:
         query = query.where(UnifiedAlertRule.device_id == device_id)
         count_query = count_query.where(UnifiedAlertRule.device_id == device_id)
-    
+
     if severity:
-        query = query.where(UnifiedAlertRule.severity == severity.lower())
-        count_query = count_query.where(UnifiedAlertRule.severity == severity.lower())
+        db_values = SEVERITY_DB_VALUES.get(severity.lower(), (severity.upper(),))
+        query = query.where(UnifiedAlertRule.severity.in_(db_values))
+        count_query = count_query.where(UnifiedAlertRule.severity.in_(db_values))
     
     if enabled is not None:
         query = query.where(UnifiedAlertRule.enabled == enabled)
@@ -314,17 +324,22 @@ async def update_alert_rule(
     if rule_data.cooldown_minutes is not None:
         rule.cooldown_minutes = rule_data.cooldown_minutes
     
+    # rule.rule_type is whatever's actually in the DB column (SIMPLE/COMPLEX,
+    # or legacy THRESHOLD/COMPOSITE) — @validates doesn't run on load, so
+    # compare the normalized value, not the raw attribute.
+    current_rule_type = normalize_rule_type(rule.rule_type)
+
     # Update THRESHOLD-specific fields (only for THRESHOLD rules)
-    if rule.rule_type == "THRESHOLD":
+    if current_rule_type == "THRESHOLD":
         if rule_data.metric is not None:
             rule.metric = rule_data.metric
         if rule_data.operator is not None:
             rule.operator = rule_data.operator
         if rule_data.threshold is not None:
             rule.threshold = rule_data.threshold
-    
+
     # Update COMPOSITE-specific fields (only for COMPOSITE rules)
-    if rule.rule_type == "COMPOSITE":
+    if current_rule_type == "COMPOSITE":
         if rule_data.conditions is not None:
             rule.conditions = [
                 {
@@ -422,7 +437,7 @@ async def preview_alert_rule(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert rule not found")
 
     started = time.monotonic()
-    rule_type = "COMPOSITE" if (rule.rule_type or "").upper() in ("COMPOSITE", "COMPLEX") else "THRESHOLD"
+    rule_type = normalize_rule_type(rule.rule_type)
 
     # Determine which metrics this rule reads, so the replay query stays narrow
     if rule_type == "COMPOSITE":

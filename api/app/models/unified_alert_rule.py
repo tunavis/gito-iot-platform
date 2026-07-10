@@ -1,6 +1,7 @@
 """Unified Alert Rule model - supports both threshold and composite rules."""
 
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import Column, String, Float, Integer, Boolean, Text, DateTime, ForeignKey, Index, CheckConstraint
@@ -37,6 +38,15 @@ SEVERITY_DB_TO_API = {
     "CRITICAL": "critical"
 }
 
+# See the comment above RULE_TYPE_DB_VALUES — same issue applies to severity:
+# "MAJOR" is a legacy DB synonym for API "warning" (see SEVERITY_DB_TO_API
+# above), so a `severity="warning"` filter must match both DB values.
+SEVERITY_DB_VALUES = {
+    "info": ("MINOR",),
+    "warning": ("WARNING", "MAJOR"),
+    "critical": ("CRITICAL",),
+}
+
 # Rule type mapping between API format and DB format
 RULE_TYPE_API_TO_DB = {
     "THRESHOLD": "SIMPLE",
@@ -47,6 +57,28 @@ RULE_TYPE_DB_TO_API = {
     "SIMPLE": "THRESHOLD",
     "COMPLEX": "COMPOSITE"
 }
+
+# `rule_type`/`severity` are only converted to DB format by the @validates
+# hooks below, which run on Python-side assignment, NOT when SQLAlchemy loads
+# a row from a query — a loaded instance's attribute is whatever is actually
+# in the column. Some rows also predate these hooks (or were written via raw
+# SQL) and store the API-format string directly. Any code comparing against
+# one format only (e.g. `rule.rule_type == "THRESHOLD"` on a loaded instance,
+# or filtering `UnifiedAlertRule.rule_type == "THRESHOLD"` against the DB
+# column) silently matches nothing for those rows. Use the *_DB_VALUES dicts
+# and normalize_rule_type()/normalize_severity() below wherever a `rule_type`
+# or `severity` value of unknown provenance needs comparing — don't compare
+# against a single literal directly.
+RULE_TYPE_DB_VALUES = {
+    "THRESHOLD": ("SIMPLE", "THRESHOLD"),
+    "COMPOSITE": ("COMPLEX", "COMPOSITE"),
+}
+
+
+def normalize_rule_type(value: Optional[str]) -> str:
+    """Normalize a rule_type value of unknown (DB, API, or legacy) format to canonical API format."""
+    value = (value or "").upper()
+    return "COMPOSITE" if value in RULE_TYPE_DB_VALUES["COMPOSITE"] else "THRESHOLD"
 
 
 class UnifiedAlertRule(BaseModel):
