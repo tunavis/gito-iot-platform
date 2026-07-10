@@ -17,7 +17,8 @@ import json as _json
 
 from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
-from app.models.base import Device, Telemetry
+from app.services.telemetry_stream import stream_ingest
+from app.models.base import Device
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.dependencies import get_current_tenant
 
@@ -594,13 +595,17 @@ async def ingest_telemetry(
     payload: Dict[str, Any] = None,
 ):
     """
-    Ingest telemetry data for a device.
+    Ingest telemetry data for a device (JWT-authenticated path).
 
     Accepts a flat JSON object where keys are metric names and values are
-    numeric, string, or JSON values. Each metric is stored as a separate
-    key-value row (industry-standard pattern).
+    numeric, string, or JSON values. Publishes into the shared ingest stream
+    (see app/services/telemetry_stream.py) — the processor consuming that
+    stream does the actual Timescale insert and alarm evaluation, so this
+    endpoint gets identical alarm behavior to MQTT/LoRaWAN ingest instead of
+    a second, divergent code path.
 
-    After storing, publishes to Redis pub/sub for real-time WebSocket delivery.
+    Also publishes directly to Redis pub/sub for immediate WebSocket delivery
+    and updates the digital twin cache, ahead of the processor's own cycle.
 
     Example body:
         {"temperature": 25.5, "humidity": 65.2, "status": "online"}
@@ -634,31 +639,28 @@ async def ingest_telemetry(
         if key_mapping:
             payload = {key_mapping.get(k, k): v for k, v in payload.items()}
 
-    rows = []
-    for key, value in payload.items():
-        if key in system_keys:
-            continue
-        row = Telemetry(
-            tenant_id=tenant_id,
-            device_id=device_id,
-            metric_key=key,
-            ts=ts,
-        )
-        if isinstance(value, (int, float)):
-            row.metric_value = float(value)
-        elif isinstance(value, str):
-            row.metric_value_str = value
-        elif isinstance(value, (dict, list)):
-            row.metric_value_json = value
-        else:
-            row.metric_value_str = str(value)
-        rows.append(row)
-
-    if not rows:
+    metrics = {k: v for k, v in payload.items() if k not in system_keys}
+    if not metrics:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload")
 
-    session.add_all(rows)
-    await session.commit()
+    # Publish into the ingest stream — the processor inserts AND evaluates alarms
+    # there (single funnel; see app/services/telemetry_stream.py). Writing rows
+    # directly here (the old behavior) stored the data but silently skipped
+    # alarm evaluation for anything posted through this endpoint.
+    redis_client_app = getattr(request.app.state, "redis", None)
+    if not redis_client_app:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingest pipeline unavailable — retry",
+        )
+    try:
+        await stream_ingest(redis_client_app, tenant_id, device_id, metrics, ts)
+    except Exception as e:
+        logger.error(f"Failed to publish ingest to stream for device {device_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingest pipeline unavailable — retry",
+        )
 
     # Update device last_seen + flip online
     await session.execute(
@@ -667,32 +669,28 @@ async def ingest_telemetry(
     )
     await session.commit()
 
-    # Publish to Redis for WebSocket real-time delivery + update digital twin cache
-    clean_payload = {k: v for k, v in payload.items() if k not in system_keys}
-    redis_client_app = getattr(request.app.state, "redis", None)
-    if redis_client_app:
-        try:
-            channel = f"telemetry:{tenant_id}:{device_id}"
-            message = _json.dumps({
-                "device_id": str(device_id),
-                "payload": clean_payload,
-                "timestamp": ts.isoformat(),
-            })
-            await redis_client_app.publish(channel, message)
-        except Exception as e:
-            # Redis publish failure is non-critical — data is already stored in DB
-            logger.warning(f"Failed to publish telemetry to Redis: {e}")
-        try:
-            from app.services.digital_twin import DigitalTwinService
-            twin = DigitalTwinService(redis_client_app)
-            await twin.update_device_state(device_id, clean_payload, timestamp=ts.isoformat())
-        except Exception as e:
-            logger.warning(f"Failed to update digital twin cache: {e}")
-    else:
-        logger.debug("app.state.redis not available — skipping pub/sub and digital twin update")
+    # Publish to Redis for immediate WebSocket delivery + update digital twin cache
+    # (the processor will also insert + evaluate alarms once it consumes the
+    # stream entry above — this is just for instant UI feedback, not storage).
+    try:
+        channel = f"telemetry:{tenant_id}:{device_id}"
+        message = _json.dumps({
+            "device_id": str(device_id),
+            "payload": metrics,
+            "timestamp": ts.isoformat(),
+        })
+        await redis_client_app.publish(channel, message)
+    except Exception as e:
+        logger.warning(f"Failed to publish telemetry to Redis: {e}")
+    try:
+        from app.services.digital_twin import DigitalTwinService
+        twin = DigitalTwinService(redis_client_app)
+        await twin.update_device_state(device_id, metrics, timestamp=ts.isoformat())
+    except Exception as e:
+        logger.warning(f"Failed to update digital twin cache: {e}")
 
-    logger.info(f"Ingested {len(rows)} metrics for device {device_id}")
-    return SuccessResponse(data={"ingested": len(rows), "timestamp": ts.isoformat()})
+    logger.info(f"Ingested {len(metrics)} metrics for device {device_id}")
+    return SuccessResponse(data={"ingested": len(metrics), "timestamp": ts.isoformat()})
 
 
 @router.get("/cached")
