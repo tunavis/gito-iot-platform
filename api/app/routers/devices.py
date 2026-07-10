@@ -15,33 +15,11 @@ from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.dependencies import get_current_tenant
 from app.services.device_management import DeviceManagementService
+from app.services.device_status import fetch_offline_thresholds
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/devices", tags=["devices"])
-
-
-async def _fetch_offline_thresholds(
-    session: RLSSession,
-    device_type_ids: list[UUID],
-) -> dict[str, int]:
-    """Batch-fetch offline_threshold from device_types.default_settings for a set of type IDs.
-
-    Returns {device_type_id_str: threshold_seconds}.
-    """
-    if not device_type_ids:
-        return {}
-    placeholders = ", ".join(f":id{i}" for i in range(len(device_type_ids)))
-    params = {f"id{i}": str(uid) for i, uid in enumerate(device_type_ids)}
-    result = await session.execute(
-        text(
-            f"SELECT id::text, (default_settings->>'offline_threshold')::int "
-            f"FROM device_types WHERE id::text IN ({placeholders}) "
-            f"AND default_settings->>'offline_threshold' IS NOT NULL"
-        ),
-        params,
-    )
-    return {row[0]: row[1] for row in result}
 
 
 def _to_response(device, thresholds: dict[str, int]) -> DeviceResponse:
@@ -106,7 +84,7 @@ async def list_devices(
 
     # Batch-fetch per-type offline thresholds
     type_ids = list({d.device_type_id for d in devices if d.device_type_id})
-    thresholds = await _fetch_offline_thresholds(session, type_ids)
+    thresholds = await fetch_offline_thresholds(session, type_ids)
 
     return SuccessResponse(
         data=[_to_response(d, thresholds) for d in devices],
@@ -232,7 +210,7 @@ async def get_device(
         )
 
     type_ids = [device.device_type_id] if device.device_type_id else []
-    thresholds = await _fetch_offline_thresholds(session, type_ids)
+    thresholds = await fetch_offline_thresholds(session, type_ids)
 
     return SuccessResponse(data=_to_response(device, thresholds))
 

@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID
 
+from app.services.device_status import DEFAULT_OFFLINE_THRESHOLD_SECONDS, is_effectively_offline
+
 
 class DeviceStatus(str, Enum):
     """Device status enumeration."""
@@ -58,9 +60,6 @@ class DeviceUpdate(BaseModel):
     device_profile_id: Optional[str] = Field(None, description="Device profile UUID")
 
 
-DEFAULT_OFFLINE_THRESHOLD = 900  # seconds — 15 minutes
-
-
 class DeviceResponse(BaseModel):
     """Device response model."""
     id: UUID
@@ -96,21 +95,11 @@ class DeviceResponse(BaseModel):
     def compute_effective_status(self) -> "DeviceResponse":
         """Override ONLINE → OFFLINE when last_seen is missing or stale.
 
-        A device marked 'online' that has never reported (last_seen IS NULL)
-        or whose last_seen exceeds the offline threshold is shown as offline.
-        Uses the device type's default_settings.offline_threshold when available,
-        otherwise falls back to 900 s (15 minutes). Other statuses (IDLE, ERROR,
-        PROVISIONING) are intentional operator states and are never overridden.
+        See app/services/device_status.py — the single shared definition of
+        "effectively offline", also used by the analytics endpoints so uptime/
+        fleet-overview numbers can't diverge from what the device list shows.
         """
-        if self.status != DeviceStatus.ONLINE:
-            return self
-        # Never reported → offline
-        if self.last_seen is None:
-            self.status = DeviceStatus.OFFLINE
-            return self
-        threshold = self.offline_threshold or DEFAULT_OFFLINE_THRESHOLD
-        now = datetime.now(timezone.utc)
-        last = self.last_seen if self.last_seen.tzinfo else self.last_seen.replace(tzinfo=timezone.utc)
-        if (now - last).total_seconds() > threshold:
+        threshold = self.offline_threshold or DEFAULT_OFFLINE_THRESHOLD_SECONDS
+        if is_effectively_offline(self.status.value, self.last_seen, threshold):
             self.status = DeviceStatus.OFFLINE
         return self

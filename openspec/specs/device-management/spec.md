@@ -71,24 +71,36 @@ Successfully created devices are named `"{prefix} {last-4-hex-uppercased}"` wher
   supplied) the 5 newly-registered euis are removed from that integration's Redis
   "unknown devices" hash (`bridge:unknown:{integration_id}`)
 
-### Requirement: Device offline status is computed per-request from a per-type threshold, not stored
-The system SHALL treat a device's persisted `status='online'` as potentially stale:
-`devices.py::_fetch_offline_thresholds` batch-reads
-`device_types.default_settings->>'offline_threshold'` (seconds) for the listed
-devices, and the response schema (`DeviceResponse`, via a model validator not shown
-in the router but referenced by `_to_response`) recomputes effective status using
-`last_seen` vs. that threshold — falling back to a 900-second (15 minute) default
-when no per-type threshold is configured (the same `OFFLINE_THRESHOLD_SECONDS = 900`
-constant is duplicated in `analytics.py`).
+### Requirement: Device offline status is computed per-request from a per-type threshold, not stored, via one shared definition
+The system SHALL treat a device's persisted `status='online'` as potentially
+stale (only `NotificationBackgroundTasks.detect_offline_devices`, ticking every
+5 minutes, flips the stored column) and recompute effective status per request
+from `app/services/device_status.py` — the one place this is defined:
+`fetch_offline_thresholds()` batch-reads `device_types.default_settings->>
+'offline_threshold'` (seconds), and `is_effectively_offline(status, last_seen,
+threshold)` decides, falling back to `DEFAULT_OFFLINE_THRESHOLD_SECONDS = 900`
+(15 min) when no per-type threshold is configured. Used by `DeviceResponse`'s
+model validator (`GET /devices`, `GET /devices/{id}`) and both
+`GET /analytics/fleet-overview` (mirrored in raw SQL, same threshold constant
+passed as a bind param) and `GET /analytics/device-uptime` (calls the shared
+Python predicate directly) — previously each reimplemented this independently
+and had already diverged (see Scenario below).
 
 #### Scenario: Device stopped reporting but DB status still says online
 - **WHEN** a device's `last_seen` is older than its type's `offline_threshold` (or
   900s default) but `devices.status` column still reads `'online'` (no background
   job has flipped it yet for this particular read)
-- **THEN** `GET /devices` and `GET /devices/{id}` responses report it as effectively
-  offline via `offline_threshold`-aware computation, while `GET /analytics/fleet-overview`
-  independently recomputes the same effective-status logic in raw SQL — two separate
-  implementations of the same rule that must be kept in sync by hand
+- **THEN** `GET /devices`, `GET /devices/{id}`, `GET /analytics/fleet-overview`,
+  and `GET /analytics/device-uptime` all report it as effectively offline,
+  consistently, via the one shared `is_effectively_offline()`
+
+#### Scenario: Device has never reported any telemetry
+- **WHEN** `devices.status = 'online'` (provisioned default) and `last_seen IS NULL`
+- **THEN** it's treated as offline everywhere — previously `GET /analytics/
+  device-uptime`'s own copy of this logic returned "online" for this exact case
+  (`if d.last_seen is None: return True`), inflating uptime% for fleets with
+  newly-provisioned or never-connected devices, while the device list already
+  correctly showed it as offline
 
 ### Requirement: Device types define the telemetry schema, key mapping, decoder, and command schema
 The system SHALL let `device_types.data_model` (JSONB array of `{name, type, unit,
