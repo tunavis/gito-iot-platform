@@ -198,24 +198,17 @@ CREATE POLICY user_isolation ON dashboards
 
 ## 🎨 Widget Types
 
-### Implemented (Iteration 2)
-1. **KPI Card** (`kpi_card`)
-   - Shows single metric value
-   - Trend indicator (up/down percentage)
-   - Color-coded thresholds (warning/critical)
-   - Real-time updates (30s refresh)
+### Implemented (12 types, `DashboardGrid.tsx`)
+`kpi_card`, `chart` (line/area/bar), `gauge`, `stat_group`, `pie_chart`,
+`scatter_plot`, `heatmap`, `alarm_summary`, `table`, `status_matrix`, `map`
+(Leaflet), `device_info`.
 
-2. **Chart** (`chart`)
-   - Types: line, area, bar
-   - Multi-metric support
-   - Multi-device comparison
-   - Time range selector (1h, 6h, 24h, 7d, 30d)
-   - Real-time updates (30s refresh)
-
-### Planned (Iteration 3)
-3. **Gauge** - Circular/linear gauge for single metric
-4. **Map** - Device location visualization
-5. **Table** - Tabular telemetry data
+**Config forms exist for only 8** of these in `WidgetConfigModal.tsx`
+(`kpi_card`, `chart`, `gauge`, `pie_chart`, `stat_group`, `alarm_summary`,
+`scatter_plot`, `heatmap`) — `table`, `map`, `status_matrix`, and `device_info`
+fall through to a generic "No configuration available for this widget type"
+message. `device_info` also has no entry in `WidgetLibrary.tsx`'s "add widget"
+picker, so it's renderable but not currently addable through the UI.
 
 ---
 
@@ -348,28 +341,23 @@ const { metric, unit, color, trend_period = "24h" } = configuration;
 - 11 duplicate database indexes (optimization opportunity)
 
 ❌ Missing (Planned):
-- Gauge/Map/Table widgets (Iteration 3)
-- Grafana integration (Future)
-- OTA firmware updates (Future)
+- Grafana integration (Future) — provisioning config exists, no service deployed
+- Config forms for `table`/`map`/`status_matrix`/`device_info` widgets (see Widget Types above)
+
+Note: Gauge/Map/Table widgets and OTA firmware updates are implemented, not
+planned — this section previously listed them as future work after they'd
+already shipped.
 
 ---
 
 ## 🎯 Current Iteration
 
-**Iteration 2: Charts & Templates** ✅ COMPLETE
-- ✅ KPI Card widget (real data)
-- ✅ Chart widget (real data)
-- ✅ Template gallery (real API)
-- ✅ DeviceBindingModal (schema-driven UX)
-- ✅ Widget configuration (industry-standard)
-
-**Next: Iteration 3: Advanced Widgets**
-- Gauge widget
-- Map widget
-- Table widget
+12 widget types and OTA firmware campaigns are implemented (see Widget Types
+above and `openspec/specs/firmware-ota/spec.md`). No active iteration is
+tracked here currently — check `openspec/changes/` for in-flight work.
 
 ---
 
-**Last Updated**: 2026-01-31
+**Last Updated**: 2026-07-11
 **Maintained By**: Claude (AI Assistant)
 **Project Status**: Active Development
