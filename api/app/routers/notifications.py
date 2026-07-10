@@ -66,13 +66,15 @@ async def create_channel(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
     
+    # No verification flow exists (no confirmation email/webhook ping is ever
+    # sent, verified_at is never set anywhere) — default to the model's honest
+    # False rather than claiming every new channel is pre-verified.
     channel = NotificationChannel(
         tenant_id=current_tenant,
         user_id=current_user_id,
         channel_type=channel_data.get("channel_type"),
         config=channel_data.get("config", {}),
         enabled=channel_data.get("enabled", True),
-        verified=True
     )
     
     session.add(channel)

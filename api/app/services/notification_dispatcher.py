@@ -9,7 +9,7 @@ from sqlalchemy import and_, select
 from app.database import RLSSession
 from app.models import (
     AlertEvent,
-    AlertRule,
+    UnifiedAlertRule,
     NotificationChannel,
     NotificationRule,
     Notification,
@@ -44,7 +44,7 @@ class NotificationDispatcher:
             return []
 
         alert_rule = (await self.session.execute(
-            select(AlertRule).where(AlertRule.id == alert_event.alert_rule_id)
+            select(UnifiedAlertRule).where(UnifiedAlertRule.id == alert_event.alert_rule_id)
         )).scalars().first()
 
         device = (await self.session.execute(
@@ -91,7 +91,7 @@ class NotificationDispatcher:
 
         return notification_ids
 
-    async def _is_throttled(self, channel: NotificationChannel, alert_rule: AlertRule) -> bool:
+    async def _is_throttled(self, channel: NotificationChannel, alert_rule: UnifiedAlertRule) -> bool:
         """Check if channel is throttled."""
         cutoff = datetime.utcnow() - timedelta(minutes=self.throttle_minutes)
         recent = (await self.session.execute(
@@ -109,7 +109,7 @@ class NotificationDispatcher:
         self,
         alert_event: AlertEvent,
         channel: NotificationChannel,
-        alert_rule: AlertRule,
+        alert_rule: UnifiedAlertRule,
         device: Device,
         user: Optional[User],
     ) -> Optional[UUID]:

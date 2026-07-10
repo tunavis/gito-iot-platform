@@ -154,30 +154,6 @@ class DeviceCommand(BaseModel):
     )
 
 
-class AlertRule(BaseModel):
-    """Threshold-based alert rules - tenant-scoped, device-specific."""
-    __tablename__ = "alert_rules"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
-    metric = Column(String(50), nullable=False)  # temperature, humidity, battery, rssi, pressure
-    operator = Column(String(10), nullable=False)  # gt, gte, lt, lte, eq, neq
-    threshold = Column(Float, nullable=False)
-    cooldown_minutes = Column(Integer, default=5, nullable=False)
-    active = Column(String(1), default="1", nullable=False)  # Boolean as string for SQL compatibility
-    last_fired_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-
-    __table_args__ = (
-        Index("idx_alert_rules_device", "device_id"),
-        Index("idx_alert_rules_active", "active"),
-        CheckConstraint("metric IN ('temperature', 'humidity', 'battery', 'rssi', 'pressure')", name="valid_alert_metric"),
-        CheckConstraint("operator IN ('gt', 'gte', 'lt', 'lte', 'eq', 'neq')", name="valid_alert_operator"),
-    )
-
-
 class AlertEvent(BaseModel):
     """Alarm events - Cumulocity-style alarms with severity levels and acknowledgment workflow."""
     __tablename__ = "alert_events"

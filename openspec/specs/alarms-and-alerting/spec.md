@@ -129,7 +129,14 @@ a new row into `alert_events` (append-only history — never deduped).
 runs each pending row through `NotificationDispatcher.process_alert_event()`
 (`api/app/services/notification_dispatcher.py`), which is `async` and uses the
 real async `RLSSession` (`self.session.execute(select(...))`, not SQLModel's
-`.exec()`) it's actually constructed with. `NotificationDispatcher` has no
+`.exec()`) it's actually constructed with, and resolves each alert event's rule
+via `UnifiedAlertRule` — until fixed, it imported the plain `AlertRule` from
+`app.models` (`app/models/base.py`, since deleted), a stale pre-unification
+model mapped to the *same* `alert_rules` table with conflicting column
+definitions (`active` as `String(1)` vs `UnifiedAlertRule`'s `Boolean`, no
+`rule_type`/`severity`/`conditions`/`logic` columns at all) — harmless for
+THRESHOLD rules (the common `metric`/`threshold` columns happened to line up)
+but wrong for COMPOSITE rules. `NotificationDispatcher` has no
 per-user muted-rules/quiet-hours suppression — `User` has no
 `notification_preferences` column, and no such feature exists anywhere else in
 the codebase (checked: no migration, no schema, no frontend UI) — so once a
@@ -166,10 +173,12 @@ index (none exists on `notification_rules` for this pair).
 - **THEN** the second call returns `409 Conflict` — "Notification rule already
   exists for this alert rule and channel combination"
 
-### Requirement: Notification channels are marked verified unconditionally on creation
-The system SHALL, on `POST /tenants/{id}/notifications/channels`, set
-`verified=True` regardless of channel type or any actual verification step (e.g. no
-confirmation email is sent for an `email` channel, no test webhook ping for
-`webhook`/`slack`) — `verified` exists as a schema field and DB column but there is
-no code path anywhere that ever sets it to `False` after creation or performs
-verification.
+### Requirement: Notification channels default to unverified — no verification flow exists yet
+`POST /tenants/{id}/notifications/channels` no longer hardcodes `verified=True`
+— new channels get the model's own default (`False`). No verification flow
+exists anywhere in the codebase (no confirmation email for `email` channels,
+no test webhook ping for `webhook`/`slack`, `verified_at` is never set by any
+code path) — `verified` is honest but currently inert (nothing gates behavior
+on it; `PUT /channels/{id}` still lets a client set it directly either way).
+Building a real verification flow (send a confirmation link/OTP, require a
+callback) is unimplemented, tracked separately from this fix.
