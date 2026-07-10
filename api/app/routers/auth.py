@@ -7,7 +7,7 @@ from typing import Annotated
 import logging
 
 from app.database import get_session
-from app.models.base import User, Tenant
+from app.models.base import User, Tenant, AuditLog
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from app.schemas.common import SuccessResponse, ErrorDetail, ErrorResponse
 from app.security import verify_password, create_access_token, decode_token
@@ -98,6 +98,23 @@ async def login(
 
     # Update last_login (fire and forget - don't wait for result)
     # In production, consider doing this async
+
+    # Audit trail — best-effort, must never fail the login itself.
+    # /auth/login isn't a /tenants/{id}/... path, so the audit-log middleware
+    # (app/middleware.py) can't catch it; logged explicitly here instead.
+    try:
+        await session.set_tenant_context(user.tenant_id, user.id)
+        session.add(AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="login",
+            resource_type="auth",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        ))
+        await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to write login audit log for user {user.id}: {e}")
 
     return SuccessResponse(
         data=TokenResponse(

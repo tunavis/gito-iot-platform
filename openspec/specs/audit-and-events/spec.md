@@ -19,22 +19,42 @@ endpoint on this router.
 - **THEN** `403 Forbidden`, checked after the tenant-access check but before any
   query executes
 
-### Requirement: audit_logs table has RLS and a full schema, but nothing in the reviewed codebase writes to it
-The system SHALL have `audit_logs` fully modeled (`tenant_id`, `user_id`, `action`,
-`resource_type`, `resource_id`, `changes` JSONB, `ip_address`, `user_agent`,
-`created_at`) with the standard tenant-isolation RLS policy — but no router or
-service anywhere in `api/app/` (outside `audit_logs.py`'s own read queries and the
-model definition itself) constructs an `AuditLog(...)` row. There is no
-audit-logging middleware, no per-mutation-endpoint logging call, and no DB trigger
-populating this table from other tables' changes. The `/audit-logs` API is
-fully functional for querying, but the table it queries has no known write path —
-so it is effectively always empty in the current codebase.
+### Requirement: audit_logs is populated by a path-based middleware, not per-endpoint instrumentation
+The system SHALL write an `AuditLog` row for every tenant-scoped mutation via
+`app/middleware.py::audit_log_middleware` — registered once in `main.py`
+(`app.middleware("http")(audit_log_middleware)`), not instrumented into each of
+the 19+ routers individually, so a router can't silently go unaudited by
+forgetting the call. For a request matching `/api/v{n}/tenants/{tenant_id}/...`
+with method POST/PUT/PATCH/DELETE and a 2xx response, it derives `action` from
+the HTTP method (POST→create, PUT/PATCH→update, DELETE→delete), `resource_type`
+from the path segments between `tenant_id` and a trailing UUID (if any),
+`resource_id` from that trailing UUID, `user_id` by re-decoding the request's
+own JWT (`app.security.decode_token`), and `ip_address`/`user_agent` from the
+request. `changes` (before/after diff) is NOT populated by this middleware —
+capturing a real diff needs per-resource-type knowledge a generic path-based
+middleware doesn't have; left empty pending a future, more targeted addition.
+Failures here are logged and swallowed — audit logging must never be the
+reason a real request fails. `POST /auth/login` isn't tenant-path-scoped so the
+middleware can't catch it; `auth.py::login()` writes its own `action="login"`
+row explicitly instead, same best-effort/non-blocking pattern.
 
 #### Scenario: A user creates/updates/deletes a device, user, or alert rule
 - **WHEN** any mutating endpoint elsewhere in the API succeeds (e.g.
   `POST /devices`, `PUT /users/{id}`, `DELETE /alarms/{id}`)
-- **THEN** no corresponding `audit_logs` row is created — none of those handlers
-  call `session.add(AuditLog(...))` or equivalent
+- **THEN** the middleware writes a corresponding `audit_logs` row —
+  automatically, with no change needed in the endpoint itself
+
+#### Scenario: Resource type parsing is approximate for multi-segment paths
+- **WHEN** a path has no trailing UUID, e.g.
+  `POST /tenants/{tid}/ota/campaigns/{cid}/execute`
+- **THEN** `resource_type` becomes the verbose `"ota/campaigns/{cid}/execute"`
+  (the campaign UUID isn't recognized as trailing since "execute" follows it) —
+  acceptable for a best-effort audit trail, not a router-aware parser
+
+#### Scenario: Audit write fails
+- **WHEN** the DB is unreachable, or the JWT re-decode fails for any reason
+- **THEN** the error is logged and swallowed; the original response is returned
+  unchanged — a broken audit trail must never break the actual request
 
 ### Requirement: Audit stats aggregate action/resource/user counts over a rolling window
 The system SHALL, on `GET /audit-logs/stats?days=N` (1-365, default 30), compute

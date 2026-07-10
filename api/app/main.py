@@ -109,6 +109,10 @@ def create_app() -> FastAPI:
         expose_headers=["x-total-count", "x-page"],
     )
 
+    # Audit logging — writes audit_logs rows for tenant-scoped mutations
+    from app.middleware import audit_log_middleware
+    app.middleware("http")(audit_log_middleware)
+
     # Rate limiting (slowapi)
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
