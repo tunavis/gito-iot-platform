@@ -44,5 +44,12 @@ The system SHALL route every `/api/*` request through `nginx`'s `location /api/`
 - **THEN** nginx forwards it directly to FastAPI — the Next.js route handler at `web/src/app/api/auth/login/route.ts` (mounted at the different path `/api/auth/login`, no `/v1`) is never invoked in this deployment; the httpOnly cookie described in CLAUDE.md's auth pattern is set by FastAPI itself
 
 #### Scenario: A request targets `/api/tenants/{id}/devices`
-- **WHEN** the frontend or middleware would route through `web/src/app/api/tenants/[tenant_id/]/devices/route.ts`
-- **THEN** it cannot resolve correctly even in isolation — the route's own directory name is malformed (`[tenant_id/]`, not `[tenant_id]`) — and in practice never runs at all because nginx never forwards `/api/*` to the Next.js container
+- **WHEN** the frontend or middleware would route through
+  `web/src/app/api/tenants/[tenant_id]/devices/route.ts` (folder name fixed —
+  was literally `[tenant_id/]`, a `/` embedded inside the segment name itself,
+  which made Next.js unable to recognize it as a dynamic route at all)
+- **THEN** it's now a structurally valid Next.js route, but still never runs in
+  the deployed topology (nginx never forwards `/api/*` to the Next.js
+  container), and no frontend code calls this relative path anyway (checked:
+  nothing fetches `/api/tenants/...`) — kept as-is rather than deleted pending
+  a decision on the whole `web/src/app/api/` layer's future
