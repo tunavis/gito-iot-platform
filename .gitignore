@@ -15,6 +15,14 @@
 !.env.staging.example
 !.env.production.example
 
+# SSH deploy keys and stray secret/token files (NEVER commit)
+gito_staging_deploy_new
+gito_staging_deploy_new.pub
+token.txt
+*.pem
+id_rsa*
+id_ed25519*
+
 # Python
 __pycache__/
 *.py[cod]
