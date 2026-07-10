@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET_KEY || 'dev-secret-key-min-32-chars-xxx-dev-only'
-);
+// No insecure fallback: JWT_SECRET_KEY is a required env var (see .env.example)
+// on both the API and here. Silently defaulting to a known string would let
+// anyone forge a valid session cookie against a deployment that forgot to set it.
+if (!process.env.JWT_SECRET_KEY) {
+  throw new Error('JWT_SECRET_KEY environment variable is required and must not be empty');
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET_KEY);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
