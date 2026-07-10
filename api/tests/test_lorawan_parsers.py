@@ -40,9 +40,16 @@ def test_parse_chirpstack_no_deveui_returns_none():
     assert result is None
 
 
-def test_parse_chirpstack_no_object_returns_none():
+def test_parse_chirpstack_no_object_returns_empty_metrics_not_none():
+    # No server-side codec configured in ChirpStack for this device — per
+    # parse_chirpstack's docstring, this must NOT return None: the router
+    # (lorawan_ingest.py) checks `if not metrics` to fall back to the device
+    # type's own raw-payload decoder. Returning None here would drop the
+    # uplink before that fallback ever runs.
     result = parse_chirpstack({"deviceInfo": {"devEui": "abc123"}})
-    assert result is None
+    assert result is not None
+    assert result.dev_eui == "abc123"
+    assert result.metrics == {}
 
 
 def test_parse_chirpstack_empty_rxinfo():
