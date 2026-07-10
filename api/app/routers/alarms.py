@@ -29,20 +29,24 @@ async def get_alarm_summary(
     tenant_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
-    status: Optional[str] = Query(None, description="Filter by status"),
+    # Named alarm_status (not status) — a bound parameter named `status`
+    # shadows the fastapi.status module for the whole function body, so
+    # `status.HTTP_403_FORBIDDEN` below would raise AttributeError instead
+    # of returning 403. alias= keeps the actual query string key unchanged.
+    alarm_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
     device_id: Optional[UUID] = Query(None, description="Filter by device"),
 ):
     """Get alarm summary statistics"""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
 
     # Build filter
     filters = [Alarm.tenant_id == tenant_id]
-    if status:
-        filters.append(Alarm.status == status.upper())
+    if alarm_status:
+        filters.append(Alarm.status == alarm_status.upper())
     if severity:
         filters.append(Alarm.severity == severity.upper())
     if device_id:
@@ -95,7 +99,8 @@ async def list_alarms(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    status: Optional[str] = Query(None, description="Filter by status"),
+    # Named alarm_status (not status) — see get_alarm_summary above for why.
+    alarm_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
     device_id: Optional[UUID] = Query(None, description="Filter by device"),
     alarm_type: Optional[str] = Query(None, description="Filter by alarm type"),
@@ -103,13 +108,13 @@ async def list_alarms(
     """List alarms with filtering and pagination"""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
 
     # Build filters
     filters = [Alarm.tenant_id == tenant_id]
-    if status:
-        filters.append(Alarm.status == status.upper())
+    if alarm_status:
+        filters.append(Alarm.status == alarm_status.upper())
     if severity:
         filters.append(Alarm.severity == severity.upper())
     if device_id:

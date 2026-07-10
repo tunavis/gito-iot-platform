@@ -19,6 +19,12 @@ class SuccessResponse(BaseModel, Generic[T]):
     success: bool = True
     data: Optional[T] = None
     meta: Optional[PaginationMeta] = None
+    # Was missing: callers (e.g. device_types.py's create/update/delete/clone)
+    # already pass message="..." to the constructor — Pydantic v2 silently
+    # drops unknown kwargs by default, so it never actually reached the
+    # response body. No frontend currently reads it (hardcoded toast text),
+    # so this was dead/misleading rather than a live bug.
+    message: Optional[str] = None
 
 
 class ErrorDetail(BaseModel):

@@ -266,7 +266,8 @@ export default function DeviceDetailPage() {
         });
         if (alarmsRes.ok) {
           const json = await alarmsRes.json();
-          setAlarms(json.data || []);
+          // GET /alarms returns AlarmListResponse{alarms,...} — bare, not SuccessResponse{data}.
+          setAlarms(json.alarms || []);
         }
       } catch {
         // Device loading failed — error state handled by empty device check
@@ -1784,8 +1785,9 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
         const res = await fetch(`/api/v1/tenants/${tenant}/alarms?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` }});
         const json = await res.json();
         if (!res.ok) throw new Error(json.error?.message || 'Failed to load alarms');
-        setAlarms(json.data || []);
-        if (!selectedId && json.data?.length) setSelectedId(json.data[0].id);
+        // GET /alarms returns AlarmListResponse{alarms,...} — bare, not SuccessResponse{data}.
+        setAlarms(json.alarms || []);
+        if (!selectedId && json.alarms?.length) setSelectedId(json.alarms[0].id);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load alarms');
       } finally { setLoading(false); }
@@ -1799,7 +1801,8 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
     const res = await fetch(`/api/v1/tenants/${tenant}/alarms/${alarmId}/acknowledge`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json();
-    if (res.ok) setAlarms(prev => prev.map(a => a.id === alarmId ? json.data : a));
+    // POST .../acknowledge returns AlarmSchema directly — bare, not SuccessResponse{data}.
+    if (res.ok) setAlarms(prev => prev.map(a => a.id === alarmId ? json : a));
   };
 
   const clear = async (alarmId: string) => {
@@ -1808,7 +1811,8 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
     const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id as string;
     const res = await fetch(`/api/v1/tenants/${tenant}/alarms/${alarmId}/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json();
-    if (res.ok) setAlarms(prev => prev.map(a => a.id === alarmId ? json.data : a));
+    // POST .../clear returns AlarmSchema directly — bare, not SuccessResponse{data}.
+    if (res.ok) setAlarms(prev => prev.map(a => a.id === alarmId ? json : a));
   };
 
   const severityChip = (s: AlarmSeverity) => {

@@ -34,7 +34,8 @@ export default function AlarmSummaryWidget({ config: _config, dataSources: _ds }
         );
         if (!res.ok) { setLoading(false); return; }
         const json = await res.json();
-        const alarms: any[] = json.data || [];
+        // GET /alarms returns AlarmListResponse{alarms,total,page,page_size} — bare, not SuccessResponse{data}.
+        const alarms: any[] = json.alarms || [];
 
         const grouped: Record<string, number> = {};
         for (const alarm of alarms) {

@@ -116,8 +116,9 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
 
             if (!response.ok) return null;
 
-            const device = await response.json();
-            return device;
+            // GET /devices/{id} returns SuccessResponse{data} — unwrap, don't return the envelope.
+            const json = await response.json();
+            return json.data;
           } catch (error) {
             console.error(`Failed to fetch device ${ds.device_id}:`, error);
             return null;

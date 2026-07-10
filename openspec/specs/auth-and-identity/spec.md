@@ -104,6 +104,27 @@ endpoints — an inconsistency between routers in the same codebase.
 - **THEN** access is permitted and `session.set_tenant_context(client_id)` scopes
   the actual query to the client tenant, not the management tenant
 
+### Requirement: The denied-access 403 must not shadow the `status` module with a same-named query parameter
+`from fastapi import status` at module scope, combined with a query parameter
+literally named `status` (e.g. `status: Optional[str] = Query(None, ...)` for
+filtering by resource status), makes every reference to `status` inside that
+specific function resolve to the parameter, not the module — including
+`raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, ...)` in the
+denied-access branch. `list_organizations`, `get_alarm_summary`, `list_alarms`,
+and `list_users` all had this: the filter parameter is renamed (`org_status`/
+`alarm_status`/`user_status`) with `alias="status"` on the `Query(...)` so the
+actual query-string key (`?status=...`) is unchanged for callers.
+
+#### Scenario: Cross-tenant request to a status-filterable endpoint
+- **WHEN** a JWT's tenant doesn't match (or isn't an ancestor of) the path
+  tenant, on any of the four fixed endpoints
+- **THEN** `403 Forbidden` is returned — previously this raised
+  `AttributeError: 'str'/'NoneType' object has no attribute 'HTTP_403_FORBIDDEN'`
+  (surfaced as an unhandled `500`) instead, since `status` was bound to
+  whatever the client passed as the `?status=` filter value (or `None`) for
+  the rest of the function. Only trips on the actual denial path, not normal
+  same-tenant usage — which is why it went unnoticed.
+
 ### Requirement: RLS session context is set explicitly per request, not derived from JWT automatically
 The system SHALL require every router to call `await session.set_tenant_context(tenant_id[, user_id])`
 before issuing tenant-scoped queries. This executes

@@ -32,6 +32,37 @@ The system SHALL switch on `widget.widget_type` in `DashboardGrid.renderWidget()
 - **WHEN** `widget.widget_type` does not match any case in the switch
 - **THEN** the grid renders an "Unknown Widget Type" placeholder card showing the raw type string instead of crashing
 
+### Requirement: Widget data-fetch code must match each backend endpoint's actual response shape, not a copy-pasted assumption
+Different routers return different shapes (`SuccessResponse{data}` wrapper vs.
+bare object/list) — a repo-wide audit catalogued all of them (see
+`openspec/specs/auth-and-identity/spec.md`). Widgets fetching data directly
+(not through a shared client) must match the specific endpoint they call, not
+whatever convention a similar-looking widget happened to use.
+
+#### Scenario: AlarmSummaryWidget and device-detail alarm views
+- **WHEN** `AlarmSummaryWidget.tsx`, the device detail page's recent-alarms
+  panel, and its Alarms tab (list + acknowledge + clear) call `GET
+  /tenants/{id}/alarms` or `POST .../acknowledge` / `.../clear`
+- **THEN** they read `json.alarms` (list) or `json` directly (acknowledge/clear
+  — `AlarmSchema` returned bare, no wrapper) — previously all five read
+  `json.data`, which is `undefined` for these endpoints (`AlarmListResponse`
+  has no `data` field; acknowledge/clear return the alarm directly), so the
+  summary widget always showed zero alarms, the device detail panels always
+  showed an empty list, and acknowledge/clear silently corrupted local state
+  with `undefined`. The top-level `/dashboard/alarms` page was never affected
+  — it already read `json.alarms`/bare `json` correctly, which is how the
+  mismatch went unnoticed for this long.
+
+#### Scenario: MapWidget with explicit device bindings
+- **WHEN** a Map widget has `dataSources` configured (specific devices bound,
+  not "show all")
+- **THEN** each bound device is fetched via `GET /devices/{id}` and the code
+  reads `json.data` — previously it returned the raw parsed response (the
+  `SuccessResponse` envelope) instead of unwrapping it, so `latitude`/
+  `longitude` were always `undefined` and bound devices never rendered a pin
+  (the separate "show all devices" fallback path was unaffected — it already
+  unwrapped `.data` correctly)
+
 #### Scenario: One widget throws during render
 - **WHEN** a single widget component throws (e.g. malformed `configuration`)
 - **THEN** its `ErrorBoundary` contains the failure so the rest of the dashboard continues rendering

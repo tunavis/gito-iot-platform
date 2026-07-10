@@ -33,7 +33,11 @@ async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     role: Optional[str] = Query(None, pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$"),
-    status: Optional[str] = Query(None, pattern="^(active|inactive|suspended)$"),
+    # Named user_status (not status) — a bound parameter named `status`
+    # shadows the fastapi.status module for the whole function body, so
+    # `status.HTTP_403_FORBIDDEN` below would raise AttributeError instead
+    # of returning 403. alias= keeps the actual query string key unchanged.
+    user_status: Optional[str] = Query(None, alias="status", pattern="^(active|inactive|suspended)$"),
     search: Optional[str] = Query(None, max_length=255),
 ):
     """List all users for a tenant with pagination and filters.
@@ -41,7 +45,7 @@ async def list_users(
     Args:
         tenant_id: Tenant UUID from path
         role: Filter by user role
-        status: Filter by user status
+        user_status: Filter by user status (query param name: status)
         search: Search by email or full name
         page: Page number (1-indexed)
         per_page: Items per page (max 100)
@@ -60,8 +64,8 @@ async def list_users(
     if role:
         query = query.where(User.role == role)
 
-    if status:
-        query = query.where(User.status == status)
+    if user_status:
+        query = query.where(User.status == user_status)
 
     if search:
         search_pattern = f"%{search.lower()}%"

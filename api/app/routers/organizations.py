@@ -25,26 +25,31 @@ async def list_organizations(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
-    status: Optional[str] = Query(None, pattern="^(active|inactive|suspended)$"),
+    # Named org_status (not status) to avoid shadowing the `status` module
+    # imported from fastapi — a bound parameter named `status` shadows it for
+    # the whole function body, so `status.HTTP_403_FORBIDDEN` below would
+    # otherwise raise AttributeError instead of returning 403. alias= keeps
+    # the actual query string key (?status=...) unchanged.
+    org_status: Optional[str] = Query(None, alias="status", pattern="^(active|inactive|suspended)$"),
 ):
     """List all organizations for a tenant."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Build query
     query = select(Organization).where(Organization.tenant_id == tenant_id)
-    
-    if status:
-        query = query.where(Organization.status == status)
-    
+
+    if org_status:
+        query = query.where(Organization.status == org_status)
+
     query = query.order_by(Organization.created_at.desc())
-    
+
     # Count total
     count_query = select(func.count()).select_from(Organization).where(Organization.tenant_id == tenant_id)
-    if status:
-        count_query = count_query.where(Organization.status == status)
+    if org_status:
+        count_query = count_query.where(Organization.status == org_status)
     
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
