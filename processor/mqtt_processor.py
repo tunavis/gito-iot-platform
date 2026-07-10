@@ -65,6 +65,19 @@ SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id", "time", "datet
 # Command response keys — when present in telemetry, correlate with device_commands table
 COMMAND_RESPONSE_KEYS = {"command_id", "command_status", "command_result", "command_error"}
 
+# OTA progress keys — when present in telemetry, correlate with ota_campaign_devices
+# table (see api/app/services/ota_dispatch.py's module docstring for the contract).
+OTA_TELEMETRY_KEYS = {"ota_status", "ota_progress", "ota_error"}
+# Device-reported sub-states collapse onto ota_campaign_devices.status's narrower
+# CHECK constraint (pending|in_progress|completed|failed|skipped).
+OTA_STATUS_TO_DB = {
+    "pending": "pending",
+    "downloading": "in_progress",
+    "installing": "in_progress",
+    "completed": "completed",
+    "failed": "failed",
+}
+
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
 RULES_CACHE_TTL_S = int(os.getenv('RULES_CACHE_TTL_S', '30'))
 
@@ -1309,6 +1322,10 @@ class MQTTProcessor:
             if "command_id" in payload:
                 await self._handle_command_response(tenant_id, device_id, payload)
 
+            # ── Correlate OTA progress reports ────────────────────────────
+            if "ota_status" in payload:
+                await self._handle_ota_progress(tenant_id, device_id, payload)
+
             logger.info(
                 "Telemetry buffered",
                 extra={
@@ -1466,6 +1483,74 @@ class MQTTProcessor:
                 "Failed to correlate command response %s: %s", command_id, e
             )
 
+    async def _handle_ota_progress(
+        self, tenant_id: str, device_id: str, payload: dict
+    ) -> None:
+        """Correlate a device's telemetry with its active OTA campaign row.
+
+        When telemetry contains 'ota_status' (and optionally 'ota_progress'/
+        'ota_error'), update the device's active ota_campaign_devices row so
+        GET /ota/campaigns/{id}/status reflects real device-reported progress
+        instead of staying at whatever execute_campaign last set it to.
+        """
+        ota_status = payload.get("ota_status")
+        if not ota_status:
+            return
+
+        db_status = OTA_STATUS_TO_DB.get(str(ota_status).lower())
+        ota_progress = payload.get("ota_progress")
+        ota_error = payload.get("ota_error")
+
+        set_clauses = []
+        params: list = []
+        if db_status:
+            set_clauses.append("status = %s")
+            params.append(db_status)
+        if isinstance(ota_progress, (int, float)):
+            set_clauses.append("progress_percent = %s")
+            params.append(int(ota_progress))
+        if ota_error:
+            set_clauses.append("error_message = %s")
+            params.append(str(ota_error))
+        if db_status in ("completed", "failed"):
+            set_clauses.append("completed_at = now()")
+        if not set_clauses:
+            return
+
+        # ota_campaign_devices has no tenant_id column of its own — scope
+        # through its parent campaign (also: no RLS policy exists on this
+        # table, so this join is the actual tenant boundary, not defense in depth).
+        params.extend([tenant_id, device_id])
+        try:
+            async with self.db_service.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)",
+                    (tenant_id,),
+                )
+                cur = await conn.execute(
+                    f"""UPDATE ota_campaign_devices
+                       SET {", ".join(set_clauses)}
+                       WHERE id = (
+                           SELECT ocd.id
+                           FROM ota_campaign_devices ocd
+                           JOIN ota_campaigns oc ON oc.id = ocd.campaign_id
+                           WHERE oc.tenant_id = %s::uuid
+                             AND ocd.device_id = %s::uuid
+                             AND ocd.status IN ('pending', 'in_progress')
+                           ORDER BY ocd.started_at DESC NULLS LAST, ocd.id DESC
+                           LIMIT 1
+                       )""",
+                    params,
+                )
+                await conn.commit()
+                if cur.rowcount:
+                    logger.info(
+                        "OTA progress updated from telemetry",
+                        extra={"device_id": device_id, "ota_status": ota_status, "ota_progress": ota_progress},
+                    )
+        except Exception as e:
+            logger.error(f"Failed to update OTA progress for device {device_id}: {e}")
+
     async def _process_chirpstack_uplink(self, dev_eui: str, payload_bytes: bytes) -> None:
         """
         Handle a ChirpStack v4 MQTT uplink.
@@ -1599,6 +1684,10 @@ class MQTTProcessor:
             # 11. Correlate command responses (device may echo back command_id in object)
             if "command_id" in payload:
                 await self._handle_command_response(tenant_id, device_id, payload)
+
+            # 12. Correlate OTA progress reports
+            if "ota_status" in payload:
+                await self._handle_ota_progress(tenant_id, device_id, payload)
 
             logger.info(
                 "ChirpStack uplink buffered",

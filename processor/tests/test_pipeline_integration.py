@@ -65,6 +65,7 @@ def _make_consumer(batch_insert_return: set | None = None):
     consumer.db = db
     consumer.redis = redis
     consumer._running = True
+    consumer._evaluate_fn = None
     return consumer, db, redis
 
 
@@ -195,6 +196,8 @@ def _make_processor_mock(
     processor.db_service = MagicMock()
     processor.db_service.device_exists = AsyncMock(return_value=device_exists)
     processor.db_service.get_active_alert_rules = AsyncMock(return_value=[])
+    processor.db_service.get_key_mapping = AsyncMock(return_value={})
+    processor.db_service.get_decoder = AsyncMock(return_value=None)
 
     # Redis service mock
     mock_redis = AsyncMock()

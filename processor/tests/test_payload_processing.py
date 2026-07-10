@@ -1,23 +1,27 @@
 """
-Tests for TelemetryValidator and AlertEvaluator in mqtt_processor.py.
+Tests for TelemetryValidator in mqtt_processor.py.
 
 Covers:
   - flatten_payload: nested dict flattening (the new feature)
   - validate_payload: accepts / rejects various payload shapes
   - is_valid_uuid: UUID format validation
-  - AlertEvaluator.should_fire_alert: threshold + cooldown logic
+
+Threshold/cooldown alert evaluation logic used to live here as a local
+AlertEvaluator class; it was migrated to the shared alarm_core package (see
+shared/alarm_core/tests/test_engine.py) and this file's copy went stale
+(imported a class that no longer exists in mqtt_processor.py at all).
 """
 
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 
 # Add the processor directory to the path so we can import mqtt_processor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from mqtt_processor import TelemetryValidator, AlertEvaluator  # noqa: E402
+from mqtt_processor import TelemetryValidator  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -247,108 +251,3 @@ class TestIsValidUUID:
     def test_invalid_none(self):
         assert TelemetryValidator.is_valid_uuid(None) is False
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# AlertEvaluator.should_fire_alert
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestAlertEvaluator:
-
-    def _rule(self, operator, threshold, cooldown_minutes=0, last_fired_at=None):
-        return {
-            "operator": operator,
-            "threshold": threshold,
-            "cooldown_minutes": cooldown_minutes,
-            "last_fired_at": last_fired_at,
-        }
-
-    now = datetime(2026, 1, 1, 12, 0, 0)
-
-    # ── threshold conditions ──────────────────────────────────────────────────
-
-    def test_gt_fires_when_above(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("gt", 80), 85.0, self.now) is True
-
-    def test_gt_no_fire_when_equal(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("gt", 80), 80.0, self.now) is False
-
-    def test_gt_no_fire_when_below(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("gt", 80), 75.0, self.now) is False
-
-    def test_gte_fires_when_equal(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("gte", 80), 80.0, self.now) is True
-
-    def test_gte_fires_when_above(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("gte", 80), 90.0, self.now) is True
-
-    def test_lt_fires_when_below(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("lt", 20), 15.0, self.now) is True
-
-    def test_lt_no_fire_when_equal(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("lt", 20), 20.0, self.now) is False
-
-    def test_lte_fires_when_equal(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("lte", 20), 20.0, self.now) is True
-
-    def test_eq_fires_when_equal(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("eq", 42), 42.0, self.now) is True
-
-    def test_eq_no_fire_when_different(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("eq", 42), 43.0, self.now) is False
-
-    def test_neq_fires_when_different(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("neq", 0), 1.0, self.now) is True
-
-    def test_neq_no_fire_when_equal(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("neq", 0), 0.0, self.now) is False
-
-    def test_unknown_operator_no_fire(self):
-        assert AlertEvaluator.should_fire_alert(self._rule("invalid_op", 50), 55.0, self.now) is False
-
-    # ── cooldown logic ────────────────────────────────────────────────────────
-
-    def test_no_cooldown_always_fires(self):
-        rule = self._rule("gt", 80, cooldown_minutes=0, last_fired_at=self.now)
-        assert AlertEvaluator.should_fire_alert(rule, 90.0, self.now) is True
-
-    def test_within_cooldown_suppressed(self):
-        last_fired = self.now - timedelta(minutes=5)
-        rule = self._rule("gt", 80, cooldown_minutes=15, last_fired_at=last_fired)
-        assert AlertEvaluator.should_fire_alert(rule, 90.0, self.now) is False
-
-    def test_after_cooldown_fires(self):
-        last_fired = self.now - timedelta(minutes=20)
-        rule = self._rule("gt", 80, cooldown_minutes=15, last_fired_at=last_fired)
-        assert AlertEvaluator.should_fire_alert(rule, 90.0, self.now) is True
-
-    def test_exactly_at_cooldown_boundary_fires(self):
-        last_fired = self.now - timedelta(minutes=15)
-        rule = self._rule("gt", 80, cooldown_minutes=15, last_fired_at=last_fired)
-        # current_time == last_fired + cooldown → NOT suppressed (condition is <)
-        assert AlertEvaluator.should_fire_alert(rule, 90.0, self.now) is True
-
-    def test_never_fired_before_no_cooldown_issue(self):
-        rule = self._rule("gt", 80, cooldown_minutes=60, last_fired_at=None)
-        assert AlertEvaluator.should_fire_alert(rule, 90.0, self.now) is True
-
-    # ── integration: flatten → validate → alert ───────────────────────────────
-
-    def test_flatten_then_validate_then_alert(self):
-        """
-        End-to-end pipeline test:
-        Tasmota sends nested payload → flatten → validate → alert fires.
-        """
-        raw = {"SI7021": {"Temperature": 85.0, "Humidity": 61.2}}
-        flattened = TelemetryValidator.flatten_payload(raw)
-        assert TelemetryValidator.validate_payload(flattened) is True
-
-        rule = {
-            "operator": "gt",
-            "threshold": 80.0,
-            "cooldown_minutes": 0,
-            "last_fired_at": None,
-            "metric": "SI7021__Temperature",
-        }
-        value = flattened.get("SI7021__Temperature")
-        assert value == 85.0
-        assert AlertEvaluator.should_fire_alert(rule, value, datetime.utcnow()) is True

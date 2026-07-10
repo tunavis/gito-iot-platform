@@ -283,7 +283,9 @@ async def execute_campaign(
     current_tenant: UUID = Depends(get_current_tenant),
     session: RLSSession = Depends(get_session),
 ):
-    """Start an OTA campaign — adds devices and submits Cadence workflows."""
+    """Start an OTA campaign — adds devices and dispatches the firmware update
+    to each one directly via its native protocol (MQTT/HTTP/LoRaWAN, see
+    OTADispatchService). No Cadence or other workflow engine is involved."""
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
@@ -314,8 +316,11 @@ async def execute_campaign(
         raise HTTPException(status_code=404, detail="Firmware version not found")
 
     # Create OTACampaignDevice rows for all targets
+    campaign_devices_by_device_id = {}
     for did in device_ids:
-        session.add(OTACampaignDevice(campaign_id=campaign_id, device_id=did))
+        cd = OTACampaignDevice(campaign_id=campaign_id, device_id=did)
+        session.add(cd)
+        campaign_devices_by_device_id[did] = cd
     campaign.status = "in_progress"
     campaign.started_at = datetime.utcnow()
     await session.commit()
@@ -336,18 +341,19 @@ async def execute_campaign(
             firmware_hash=fw.hash,
             firmware_version=fw.version,
         )
+        campaign_device = campaign_devices_by_device_id.get(device.id)
         if ok:
             dispatched += 1
+            if campaign_device:
+                campaign_device.status = "in_progress"
+                campaign_device.started_at = datetime.utcnow()
         else:
             failed += 1
             errors.append({"device_id": str(device.id), "error": err})
-            # Mark individual campaign device as failed
-            await session.execute(
-                select(OTACampaignDevice).where(
-                    OTACampaignDevice.campaign_id == campaign_id,
-                    OTACampaignDevice.device_id == device.id,
-                )
-            )
+            if campaign_device:
+                campaign_device.status = "failed"
+                campaign_device.error_message = err
+                campaign_device.completed_at = datetime.utcnow()
 
     await session.commit()
 
