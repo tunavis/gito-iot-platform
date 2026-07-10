@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@gito-iot.local"
     SMTP_USE_TLS: bool = True
 
+    # Minutes to suppress repeat notifications on the same channel for the same rule
+    NOTIFICATION_THROTTLE_MINUTES: int = 1
+
     # Webhook URL base for integration setup instructions
     API_BASE_URL: str = "https://iot.gito.co.za"
 

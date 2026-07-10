@@ -146,7 +146,7 @@ class NotificationBackgroundTasks:
                             queue_item.tenant_id
                         )
                         
-                        notification_ids = dispatcher.process_alert_event(
+                        notification_ids = await dispatcher.process_alert_event(
                             queue_item.alert_event_id
                         )
                         
