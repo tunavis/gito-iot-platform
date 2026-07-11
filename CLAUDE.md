@@ -335,10 +335,13 @@ const { metric, unit, color, trend_period = "24h" } = configuration;
 - Dashboard Builder (95%)
 - Multi-tenancy (100%)
 
-⚠️ Minor Issues:
-- Alert preview returns empty (backend TODO)
-- User invitation email not sent (backend TODO)
-- 11 duplicate database indexes (optimization opportunity)
+⚠️ Minor Issues: none currently tracked. The three previously listed here
+(alert preview returning empty, invitation email not sent, "11 duplicate
+database indexes") were all stale or fixed as of 2026-07-11: alert preview
+already replays telemetry through `alarm_core` and works; invite emails now
+send for real with an honest `invitation_sent` result; and a real audit
+against the Postgres catalog (not the SQL source) found exactly 2 duplicate
+indexes, not 11 — both dropped in migration `023_drop_redundant_indexes`.
 
 ❌ Missing (Planned):
 - Grafana integration (Future) — provisioning config exists, no service deployed
