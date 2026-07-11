@@ -742,7 +742,7 @@ export default function DeviceDetailPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setRefreshKey(k => k + 1)}
-                  className="px-4 py-2 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors flex items-center gap-2"
+                  className={`${btn.secondary} flex items-center gap-2`}
                 >
                   <RefreshCw className={`w-4 h-4 ${telemetryLoading ? 'animate-spin' : ''}`} />
                   Refresh
@@ -750,7 +750,7 @@ export default function DeviceDetailPage() {
                 <button
                   onClick={exportTelemetry}
                   disabled={telemetryData.length === 0}
-                  className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`${btn.primary} flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1018,6 +1018,13 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
   const [formError, setFormError] = useState('');
   const [sendSuccess, setSendSuccess] = useState('');
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!confirmAction) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setConfirmAction(null); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirmAction]);
 
   const commandSchema = deviceType?.command_schema || {};
   const capabilities = deviceType?.capabilities || [];
@@ -1547,7 +1554,7 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
             <button
               onClick={handleFormSend}
               disabled={sending}
-              className="px-5 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-[var(--color-text-muted)] disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className={`${btn.primary} disabled:bg-[var(--color-text-muted)] disabled:cursor-not-allowed flex items-center gap-2`}
             >
               {sending ? (
                 <>
@@ -2092,14 +2099,14 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-th-primary">Device Information</h3>
           {!editing ? (
-            <button onClick={() => setEditing(true)} className="px-4 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors flex items-center gap-2">
+            <button onClick={() => setEditing(true)} className={`${btn.secondary} flex items-center gap-2`}>
               <Edit2 className="w-4 h-4" />
               Edit
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className="px-4 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors">Cancel</button>
-              <button onClick={saveDevice} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">Save Changes</button>
+              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className={btn.secondary}>Cancel</button>
+              <button onClick={saveDevice} className={btn.primary}>Save Changes</button>
             </div>
           )}
         </div>
@@ -2138,7 +2145,7 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
             <Bell className="w-5 h-5 text-primary-600" />
             Alert Rules
           </h3>
-          <button onClick={() => setShowNewRule(!showNewRule)} className="px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">+ Add Rule</button>
+          <button onClick={() => setShowNewRule(!showNewRule)} className={btn.primary}>+ Add Rule</button>
         </div>
 
         {showNewRule && <NewAlertRuleForm deviceId={deviceId} discoveredMetrics={discoveredMetrics} onCreated={(rule) => { setAlertRules(prev => [rule, ...prev]); setShowNewRule(false); }} onCancel={() => setShowNewRule(false)} />}
@@ -2209,7 +2216,7 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
           <button
             onClick={generateToken}
             disabled={generatingToken}
-            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+            className={`${btn.primary} disabled:opacity-50 whitespace-nowrap`}
           >
             {generatingToken ? 'Generating…' : '+ Generate Token'}
           </button>
@@ -2251,14 +2258,14 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
         </h3>
         <p className="text-sm text-th-secondary mb-4">Once you delete a device, there is no going back. All telemetry data, alarms, and configurations will be permanently removed.</p>
         {!deleting ? (
-          <button onClick={() => setDeleting(true)} className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
+          <button onClick={() => setDeleting(true)} className={`${btn.danger} flex items-center gap-2`}>
             <Trash2 className="w-4 h-4" />
             Delete Device
           </button>
         ) : (
           <div className="flex gap-2">
-            <button onClick={() => setDeleting(false)} className="px-4 py-2.5 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-panel transition-colors">Cancel</button>
-            <button onClick={deleteDevice} className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold">Confirm Delete</button>
+            <button onClick={() => setDeleting(false)} className={btn.secondary}>Cancel</button>
+            <button onClick={deleteDevice} className={`${btn.danger} font-semibold`}>Confirm Delete</button>
           </div>
         )}
       </div>
@@ -2344,7 +2351,7 @@ function NewAlertRuleForm({ deviceId, discoveredMetrics, onCreated, onCancel }: 
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="px-4 py-2 text-sm border border-[var(--color-input-border)] rounded-lg hover:bg-surface transition-colors">Cancel</button>
-        <button onClick={create} disabled={submitting || discoveredMetrics.length === 0} className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">
+        <button onClick={create} disabled={submitting || discoveredMetrics.length === 0} className={`${btn.primary} disabled:opacity-50`}>
           {submitting ? 'Creating...' : 'Create Rule'}
         </button>
       </div>
