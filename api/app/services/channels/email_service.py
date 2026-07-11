@@ -60,7 +60,7 @@ class EmailNotificationService:
 
             # Send via SMTP
             with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10) as server:
-                if self.settings.SMTP_TLS:
+                if self.settings.SMTP_USE_TLS:
                     server.starttls()
                 
                 if self.smtp_user and self.smtp_password:

@@ -1,5 +1,7 @@
 """User Management API - RBAC and user administration within tenants."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from datetime import datetime
 
 from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
+from app.services.channels.email_service import EmailNotificationService
 from app.models.base import User
 from app.schemas.user import (
     UserCreate,
@@ -21,6 +24,8 @@ from app.schemas.user import (
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.security import hash_password, verify_password
 from app.dependencies import get_current_tenant, get_current_user_info
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["users"])
 
@@ -233,18 +238,20 @@ async def invite_user(
             detail="User with this email already exists"
         )
 
-    # Generate temporary password (in production, send this via email)
+    # Generate temporary password, sent via email below
     import secrets
     temp_password = secrets.token_urlsafe(16)
 
-    # Create user with inactive status until they set password
+    # No self-service activation flow exists (login rejects any non-"active"
+    # user, and there's no activation-link endpoint) — status="active" is what
+    # actually makes the temp password usable.
     user = User(
         tenant_id=tenant_id,
         email=request.email.lower(),
         password_hash=hash_password(temp_password),
         full_name=request.full_name,
         role=request.role,
-        status="inactive",  # User must activate account via invitation link
+        status="active",
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
@@ -253,8 +260,21 @@ async def invite_user(
     await session.commit()
     await session.refresh(user)
 
-    # TODO: Send invitation email with temporary password or activation link
-    # For now, return success (in production, integrate with email service)
+    email_service = EmailNotificationService()
+    invitation_sent, email_error = email_service.send(
+        to_email=user.email,
+        subject="You've been invited to Gito IoT Platform",
+        body=(
+            f"Hi {user.full_name},\n\n"
+            f"An account has been created for you on Gito IoT Platform.\n\n"
+            f"Email: {user.email}\n"
+            f"Temporary password: {temp_password}\n\n"
+            f"Log in and change your password as soon as possible.\n\n"
+            f"---\nGito IoT Platform"
+        ),
+    )
+    if not invitation_sent:
+        logger.warning(f"Invitation email to {user.email} failed to send: {email_error}")
 
     return SuccessResponse(
         data=UserInviteResponse(
@@ -263,7 +283,7 @@ async def invite_user(
             full_name=user.full_name,
             role=user.role,
             status=user.status,
-            invitation_sent=True,  # Set to False if email fails
+            invitation_sent=invitation_sent,
             created_at=user.created_at,
         )
     )
