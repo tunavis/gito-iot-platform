@@ -161,7 +161,10 @@ services:
     image: nginx:1.27-alpine
     container_name: gito-nginx
     ports:
-      - "80:80"
+      # Host 80 collides with an nginx running inside the Ubuntu WSL distro
+      # (WSL2 shares localhost with Windows), so the app is published on 8088
+      # instead — open http://localhost:8088. See ADR/notes on WSL port-80 collision.
+      - "8088:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
