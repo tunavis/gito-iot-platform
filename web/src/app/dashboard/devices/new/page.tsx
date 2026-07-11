@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
+import LoadingState from '@/components/ui/LoadingState';
+import { btn, input } from '@/components/ui/buttonStyles';
 import {
   ArrowLeft, Plus, Cpu, Thermometer, Radio, ToggleRight, MapPin, Zap,
   Camera, Settings, Check, AlertCircle, ChevronRight, Tag,
@@ -74,15 +76,6 @@ const LORAWAN_STEPS: { id: StepId; label: string }[] = [
   { id: 'placement',   label: 'Placement'   },
   { id: 'review',      label: 'Review'      },
 ];
-
-// ─── Shared field styles ──────────────────────────────────────────────────────
-
-const INPUT = [
-  'w-full px-3.5 py-2.5 bg-surface border border-[var(--color-input-border)] rounded-lg',
-  'text-sm text-th-primary placeholder-[var(--color-text-muted)]',
-  'focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500',
-  'transition-colors',
-].join(' ');
 
 // ─── Small components ─────────────────────────────────────────────────────────
 
@@ -298,42 +291,29 @@ function NewDeviceForm() {
   // ── Loading skeleton ───────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-page">
-        <Sidebar />
-        <main className="flex-1 ml-64 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-th-default border-t-primary-500 rounded-full animate-spin" />
-        </main>
-      </div>
+      <PageShell title="Register New Device" subtitle="Add a device to your fleet and start ingesting telemetry">
+        <LoadingState message="Loading…" />
+      </PageShell>
     );
   }
 
   // ── Page ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen bg-page">
-      <Sidebar />
-      <main className="flex-1 ml-64">
+    <PageShell
+      title="Register New Device"
+      subtitle="Add a device to your fleet and start ingesting telemetry"
+      icon={<Cpu className="w-4 h-4" />}
+      action={
+        <button onClick={() => router.back()} className={`${btn.ghost} flex items-center gap-2`}>
+          <ArrowLeft className="w-4 h-4" /> Cancel
+        </button>
+      }
+    >
+      <div className="max-w-3xl -mx-6 -mt-6 mb-6">
+        <StepBar steps={steps} currentId={step} />
+      </div>
 
-        {/* Header */}
-        <div className="bg-surface border-b border-th-default px-8 py-5">
-          <div className="flex items-center gap-3 max-w-3xl">
-            <button onClick={() => router.back()}
-              className="p-1.5 rounded-lg text-th-muted hover:text-th-secondary hover:bg-panel transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h1 className="text-lg font-semibold text-th-primary">Register New Device</h1>
-              <p className="text-xs text-th-muted">Add a device to your fleet and start ingesting telemetry</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Step bar */}
-        <div className="max-w-3xl">
-          <StepBar steps={steps} currentId={step} />
-        </div>
-
-        {/* Content */}
-        <div className="px-8 py-8 max-w-3xl space-y-6">
+      <div className="max-w-3xl space-y-6">
 
           {fromBridge && prefillDevEui && (
             <div className="flex items-start gap-2 bg-indigo-950 border border-indigo-700 rounded-lg px-4 py-3 mb-4">
@@ -368,7 +348,7 @@ function NewDeviceForm() {
                   <p className="text-sm font-medium text-th-secondary mb-1">No device types yet</p>
                   <p className="text-xs text-th-muted mb-5">Create a device type to define the telemetry schema first.</p>
                   <button onClick={() => router.push('/dashboard/device-types')}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-lg transition-colors">
+                    className={`${btn.primary} inline-flex items-center gap-2`}>
                     <Plus className="w-4 h-4" /> Create Device Type
                   </button>
                 </div>
@@ -443,7 +423,7 @@ function NewDeviceForm() {
                       onChange={e => setInfo({ ...info, name: e.target.value })}
                       onKeyDown={e => e.key === 'Enter' && goNext()}
                       placeholder="e.g. Temp Sensor — Building A, Floor 3"
-                      className={INPUT} />
+                      className={input.base} />
                   </FormRow>
 
                   <FormRow label="Serial Number"
@@ -451,7 +431,7 @@ function NewDeviceForm() {
                     <input type="text" value={info.serial_number}
                       onChange={e => setInfo({ ...info, serial_number: e.target.value })}
                       placeholder="e.g. SN-2024-001234"
-                      className={INPUT} />
+                      className={input.base} />
                   </FormRow>
                 </div>
 
@@ -460,7 +440,7 @@ function NewDeviceForm() {
                     <textarea value={info.description}
                       onChange={e => setInfo({ ...info, description: e.target.value })}
                       placeholder="Purpose, location notes, maintenance contacts…"
-                      rows={3} className={INPUT + ' resize-none'} />
+                      rows={3} className={input.base + ' resize-none'} />
                   </FormRow>
 
                   <FormRow label="Tags" hint="Press Enter or + to add. Useful for filtering and bulk operations.">
@@ -484,7 +464,7 @@ function NewDeviceForm() {
                         onChange={e => setInfo({ ...info, newTag: e.target.value })}
                         onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
                         placeholder="e.g. production, hvac, floor-2"
-                        className={INPUT + ' flex-1'} />
+                        className={input.base + ' flex-1'} />
                       <button type="button" onClick={addTag}
                         className="px-3 bg-panel hover:bg-panel border border-th-default rounded-lg text-th-secondary transition-colors">
                         <Plus className="w-4 h-4" />
@@ -514,7 +494,7 @@ function NewDeviceForm() {
                   <input type="text" value={network.dev_eui}
                     onChange={e => setNetwork({ ...network, dev_eui: e.target.value.toUpperCase() })}
                     placeholder="70B3D57ED005XXXX"
-                    className={INPUT + ' font-mono tracking-wide'} maxLength={16} />
+                    className={input.base + ' font-mono tracking-wide'} maxLength={16} />
                 </FormRow>
 
                 <FormRow label="Application Key (AppKey)" required
@@ -522,7 +502,7 @@ function NewDeviceForm() {
                   <input type="password" value={network.app_key}
                     onChange={e => setNetwork({ ...network, app_key: e.target.value })}
                     placeholder="32-character hex key"
-                    className={INPUT + ' font-mono'} />
+                    className={input.base + ' font-mono'} />
                 </FormRow>
 
                 <FormRow label="Application ID"
@@ -530,7 +510,7 @@ function NewDeviceForm() {
                   <input type="text" value={network.ttn_app_id}
                     onChange={e => setNetwork({ ...network, ttn_app_id: e.target.value })}
                     placeholder="e.g. my-application-v3"
-                    className={INPUT} />
+                    className={input.base} />
                 </FormRow>
               </div>
 
@@ -554,7 +534,7 @@ function NewDeviceForm() {
                   <FormRow label="Site">
                     <select value={placement.site_id}
                       onChange={e => setPlacement({ ...placement, site_id: e.target.value, device_group_id: '' })}
-                      className={INPUT}>
+                      className={input.select}>
                       <option value="">No site assigned</option>
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -564,7 +544,7 @@ function NewDeviceForm() {
                     <FormRow label="Device Group">
                       <select value={placement.device_group_id}
                         onChange={e => setPlacement({ ...placement, device_group_id: e.target.value })}
-                        className={INPUT}>
+                        className={input.select}>
                         <option value="">No group assigned</option>
                         {deviceGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                       </select>
@@ -580,12 +560,12 @@ function NewDeviceForm() {
                     <FormRow label="Latitude">
                       <input type="number" step="any" value={placement.latitude}
                         onChange={e => setPlacement({ ...placement, latitude: e.target.value })}
-                        placeholder="-33.9249" className={INPUT + ' font-mono'} />
+                        placeholder="-33.9249" className={input.base + ' font-mono'} />
                     </FormRow>
                     <FormRow label="Longitude">
                       <input type="number" step="any" value={placement.longitude}
                         onChange={e => setPlacement({ ...placement, longitude: e.target.value })}
-                        placeholder="18.4241" className={INPUT + ' font-mono'} />
+                        placeholder="18.4241" className={input.base + ' font-mono'} />
                     </FormRow>
                   </div>
                 </div>
@@ -679,29 +659,27 @@ function NewDeviceForm() {
 
           {/* ── Navigation ────────────────────────────────────────────── */}
           <div className="flex items-center justify-between pt-6 border-t border-th-default">
-            <button onClick={goBack}
-              className="px-4 py-2.5 text-sm text-th-secondary hover:text-th-primary hover:bg-panel rounded-lg transition-colors">
+            <button onClick={goBack} className={btn.ghost}>
               {stepIndex === 0 ? 'Cancel' : '← Back'}
             </button>
 
             {isLastStep ? (
               <button onClick={handleCreate} disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
+                className={`${btn.primary} inline-flex items-center gap-2 disabled:opacity-60`}>
                 {saving
                   ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Provisioning…</>
                   : <><Bolt className="w-4 h-4" /> Provision Device</>}
               </button>
             ) : (
               <button onClick={goNext} disabled={!canAdvance()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-panel disabled:text-th-muted text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
+                className={`${btn.primary} inline-flex items-center gap-2 disabled:bg-panel disabled:text-th-muted`}>
                 Continue <ChevronRight className="w-4 h-4" />
               </button>
             )}
           </div>
 
         </div>
-      </main>
-    </div>
+    </PageShell>
   );
 }
 

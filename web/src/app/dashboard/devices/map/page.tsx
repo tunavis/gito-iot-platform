@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
+import { btn, input } from '@/components/ui/buttonStyles';
 import {
   MapPin,
   Filter,
@@ -174,50 +175,31 @@ export default function DeviceMapPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-page">
-      <Sidebar />
-      <main className="flex-1 ml-64 flex flex-col">
-        {/* Header */}
-        <div className="bg-surface border-b border-th-default px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-th-primary flex items-center gap-3">
-                <MapPin className="w-8 h-8 text-primary-600" />
-                Device Map
-              </h1>
-              <p className="text-th-secondary mt-1">Real-time visualization of device locations and status</p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`px-4 py-2.5 rounded-lg border font-medium transition-colors flex items-center gap-2 ${
-                  showFilters
-                    ? 'bg-primary-50 text-primary-700 border-primary-200'
-                    : 'bg-surface text-th-primary border-[var(--color-input-border)] hover:bg-page'
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                Filters
-              </button>
-              <button
-                onClick={exportLocations}
-                className="px-4 py-2.5 bg-surface border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-page transition-colors flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2.5 bg-surface border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-page transition-colors flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
-            </div>
-          </div>
-        </div>
-
+    <PageShell
+      title="Device Map"
+      subtitle="Real-time visualization of device locations and status"
+      icon={<MapPin className="w-4 h-4" />}
+      action={
+        <>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`${btn.secondary} flex items-center gap-2 ${showFilters ? 'bg-primary-50 text-primary-700 border-primary-200' : ''}`}
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+          </button>
+          <button onClick={exportLocations} className={`${btn.secondary} flex items-center gap-2`}>
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+          <button onClick={() => window.location.reload()} className={`${btn.secondary} flex items-center gap-2`}>
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </>
+      }
+    >
+      <div className="-m-6 h-full flex flex-col">
         {/* Stats Bar */}
         <div className="bg-surface border-b border-th-default px-8 py-4">
           <div className="grid grid-cols-5 gap-6">
@@ -286,7 +268,7 @@ export default function DeviceMapPage() {
                     placeholder="Search devices..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className={`${input.base} pl-10`}
                   />
                 </div>
               </div>
@@ -400,13 +382,13 @@ export default function DeviceMapPage() {
 
             <button
               onClick={() => router.push(`/dashboard/devices/${selectedDevice.id}`)}
-              className="w-full mt-4 px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+              className={`${btn.primary} w-full mt-4`}
             >
               View Details
             </button>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </PageShell>
   );
 }

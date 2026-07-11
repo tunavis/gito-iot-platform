@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { btn, input } from '@/components/ui/buttonStyles';
 import { useToast } from '@/components/ToastProvider';
 import {
-  ArrowLeft,
   Save,
   Cpu,
   Thermometer,
@@ -15,7 +17,6 @@ import {
   Zap,
   Camera,
   Settings,
-  AlertCircle,
   Loader2,
   Tag,
   Building,
@@ -316,46 +317,26 @@ export default function EditDevicePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-page">
-        <Sidebar />
-        <main className="flex-1 ml-64 p-8 flex items-center justify-center">
-          <div className="text-center">
-            <div className="inline-block animate-spin mb-4">
-              <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
-            </div>
-            <p className="text-th-secondary font-medium">Loading device...</p>
-          </div>
-        </main>
-      </div>
+      <PageShell title="Edit Device">
+        <LoadingState message="Loading device…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-page">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.back()}
-              className="p-2 hover:bg-panel rounded-lg transition-colors text-th-secondary"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-3xl font-bold text-th-primary">Edit Device</h1>
-              <p className="text-th-secondary mt-1">
-                Update settings for <span className="font-medium">{device?.name}</span>
-              </p>
-            </div>
-          </div>
-        </div>
-
+    <PageShell
+      title="Edit Device"
+      subtitle={device?.name ? `Update settings for ${device.name}` : undefined}
+      icon={<Settings className="w-4 h-4" />}
+      action={
+        <button onClick={() => router.back()} className={btn.ghost}>
+          Cancel
+        </button>
+      }
+    >
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            {error}
+          <div className="mb-6">
+            <ErrorBanner message={error} />
           </div>
         )}
 
@@ -370,7 +351,7 @@ export default function EditDevicePage() {
                   type="text"
                   value={form.name}
                   onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.base}
                 />
               </div>
 
@@ -381,7 +362,7 @@ export default function EditDevicePage() {
                     type="text"
                     value={form.serial_number}
                     onChange={e => setForm(prev => ({ ...prev, serial_number: e.target.value }))}
-                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className={input.base}
                   />
                 </div>
                 <div>
@@ -389,7 +370,7 @@ export default function EditDevicePage() {
                   <select
                     value={form.device_type_id}
                     onChange={e => setForm(prev => ({ ...prev, device_type_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className={input.base}
                   >
                     {deviceTypes.map(dt => (
                       <option key={dt.id} value={dt.id}>{dt.name}</option>
@@ -404,7 +385,7 @@ export default function EditDevicePage() {
                   value={form.description}
                   onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50 resize-none"
+                  className={input.base + " resize-none"}
                 />
               </div>
 
@@ -426,9 +407,9 @@ export default function EditDevicePage() {
                     onChange={e => setForm(prev => ({ ...prev, newTag: e.target.value }))}
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
                     placeholder="Add a tag..."
-                    className="flex-1 px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className={input.base + " flex-1"}
                   />
-                  <button type="button" onClick={addTag} className="px-3 py-2 bg-panel hover:bg-panel rounded-lg transition-colors">
+                  <button type="button" onClick={addTag} className={btn.secondary}>
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
@@ -447,7 +428,7 @@ export default function EditDevicePage() {
                   value={form.firmware_version}
                   onChange={e => setForm(prev => ({ ...prev, firmware_version: e.target.value }))}
                   placeholder="e.g., 1.2.3"
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.base + " font-mono"}
                 />
               </div>
               <div>
@@ -457,7 +438,7 @@ export default function EditDevicePage() {
                   value={form.hardware_version}
                   onChange={e => setForm(prev => ({ ...prev, hardware_version: e.target.value }))}
                   placeholder="e.g., rev2.1"
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.base + " font-mono"}
                 />
               </div>
             </div>
@@ -474,7 +455,7 @@ export default function EditDevicePage() {
                   value={form.dev_eui}
                   onChange={e => setForm(prev => ({ ...prev, dev_eui: e.target.value }))}
                   placeholder="70B3D57ED005XXXX"
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.base + " font-mono"}
                 />
                 <p className="text-xs text-th-secondary mt-1">16-character hexadecimal identifier for LoRaWAN devices</p>
               </div>
@@ -485,7 +466,7 @@ export default function EditDevicePage() {
                     type="text"
                     value={form.chirpstack_app_id}
                     onChange={e => setForm(prev => ({ ...prev, chirpstack_app_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className={input.base}
                   />
                 </div>
                 <div>
@@ -494,7 +475,7 @@ export default function EditDevicePage() {
                     type="text"
                     value={form.device_profile_id}
                     onChange={e => setForm(prev => ({ ...prev, device_profile_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                    className={input.base}
                   />
                 </div>
               </div>
@@ -513,7 +494,7 @@ export default function EditDevicePage() {
                 <select
                   value={form.organization_id}
                   onChange={e => setForm(prev => ({ ...prev, organization_id: e.target.value, site_id: '', device_group_id: '' }))}
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.select}
                   required
                 >
                   <option value="">Select organization...</option>
@@ -531,7 +512,7 @@ export default function EditDevicePage() {
                 <select
                   value={form.site_id}
                   onChange={e => setForm(prev => ({ ...prev, site_id: e.target.value, device_group_id: '' }))}
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.select}
                   disabled={!form.organization_id}
                   required
                 >
@@ -550,7 +531,7 @@ export default function EditDevicePage() {
                 <select
                   value={form.device_group_id}
                   onChange={e => setForm(prev => ({ ...prev, device_group_id: e.target.value }))}
-                  className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className={input.select}
                   disabled={!form.site_id}
                   required
                 >
@@ -574,7 +555,7 @@ export default function EditDevicePage() {
                       value={form.latitude}
                       onChange={e => setForm(prev => ({ ...prev, latitude: e.target.value }))}
                       placeholder="-33.9249"
-                      className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                      className={input.base}
                     />
                   </div>
                   <div>
@@ -585,7 +566,7 @@ export default function EditDevicePage() {
                       value={form.longitude}
                       onChange={e => setForm(prev => ({ ...prev, longitude: e.target.value }))}
                       placeholder="18.4241"
-                      className="w-full px-3 py-2 bg-surface border border-[var(--color-input-border)] rounded-lg text-th-primary placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                      className={input.base}
                     />
                   </div>
                 </div>
@@ -598,14 +579,14 @@ export default function EditDevicePage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-4 py-2 text-th-secondary hover:text-th-primary transition-colors"
+              className={btn.ghost}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white rounded-lg transition-colors font-medium"
+              className={`${btn.primary} flex items-center gap-2 disabled:opacity-60`}
             >
               {saving ? (
                 <>
@@ -621,7 +602,6 @@ export default function EditDevicePage() {
             </button>
           </div>
         </form>
-      </main>
-    </div>
+    </PageShell>
   );
 }

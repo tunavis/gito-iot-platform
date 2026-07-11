@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
+import PageShell from '@/components/ui/PageShell';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { btn, input } from '@/components/ui/buttonStyles';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import {
   Activity,
@@ -34,6 +37,7 @@ import {
   Package,
   ChevronDown,
   ChevronRight,
+  ArrowLeft,
   Terminal,
   Play,
   Send,
@@ -396,60 +400,44 @@ export default function DeviceDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-page">
-        <Sidebar />
-        <main className="flex-1 ml-64 p-8 flex items-center justify-center">
-          <div className="text-center">
-            <div className="inline-block animate-spin mb-4">
-              <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
-            </div>
-            <p className="text-th-secondary font-medium">Loading device...</p>
-          </div>
-        </main>
-      </div>
+      <PageShell title="Device Details">
+        <LoadingState message="Loading device…" />
+      </PageShell>
     );
   }
 
   if (!device) {
     return (
-      <div className="flex min-h-screen bg-page">
-        <Sidebar />
-        <main className="flex-1 ml-64 p-8">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
-            <XCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-            <p className="text-red-900 font-semibold mb-2">Device not found</p>
-            <p className="text-red-600 text-sm mb-4">The device you&apos;re looking for doesn&apos;t exist or you don&apos;t have access.</p>
-            <button
-              onClick={() => router.push('/dashboard/devices')}
-              className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Back to Devices
-            </button>
-          </div>
-        </main>
-      </div>
+      <PageShell title="Device Details">
+        <ErrorBanner message="Device not found. It may not exist, or you may not have access." />
+        <button
+          onClick={() => router.push('/dashboard/devices')}
+          className={`${btn.primary} mt-4`}
+        >
+          Back to Devices
+        </button>
+      </PageShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-page">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-8">
+    <PageShell
+      title="Device Details"
+      subtitle={device.device_type}
+      action={
+        <button onClick={() => router.push('/dashboard/devices')} className={`${btn.ghost} flex items-center gap-2`}>
+          <ArrowLeft className="w-4 h-4" /> Devices
+        </button>
+      }
+    >
         {/* Header */}
         <div className="mb-6">
-          <button
-            onClick={() => router.push('/dashboard/devices')}
-            className="text-sm text-th-muted hover:text-th-primary font-medium mb-4 transition-colors flex items-center gap-1.5"
-          >
-            ← Devices
-          </button>
-
           {/* Hero card */}
           <div className="bg-surface rounded-xl border border-th-default shadow-sm overflow-hidden">
             {/* Status stripe */}
             <div className={`h-1 w-full ${
-              device.status === 'online' ? 'bg-green-400' :
-              device.status === 'offline' ? 'bg-red-400' : 'bg-yellow-400'
+              device.status === 'online' ? 'bg-[var(--hmi-status-online)]' :
+              device.status === 'offline' ? 'bg-[var(--hmi-status-offline)]' : 'bg-[var(--hmi-status-idle)]'
             }`} />
 
             <div className="p-5">
@@ -458,17 +446,16 @@ export default function DeviceDetailPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
                     <h1 className="text-xl font-bold text-th-primary truncate">{device.name}</h1>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border flex-shrink-0 ${
-                      device.status === 'online'
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : device.status === 'offline'
-                        ? 'bg-red-50 text-red-700 border-red-200'
-                        : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        device.status === 'online' ? 'bg-green-500 animate-pulse' :
-                        device.status === 'offline' ? 'bg-red-500' : 'bg-yellow-500'
-                      }`} />
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border flex-shrink-0"
+                      style={{
+                        background: device.status === 'online' ? 'var(--hmi-status-ok-bg)' : device.status === 'offline' ? 'var(--hmi-status-offline-bg)' : 'var(--hmi-status-warn-bg)',
+                        color: device.status === 'online' ? 'var(--hmi-status-ok)' : device.status === 'offline' ? 'var(--hmi-status-offline)' : 'var(--hmi-status-warn)',
+                        borderColor: 'currentColor',
+                      }}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'animate-pulse' : ''}`}
+                        style={{ background: device.status === 'online' ? 'var(--hmi-status-ok)' : device.status === 'offline' ? 'var(--hmi-status-offline)' : 'var(--hmi-status-warn)' }} />
                       {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
                     </span>
                     {wsConnected && (
@@ -864,8 +851,7 @@ export default function DeviceDetailPage() {
         {activeTab === 'settings' && (
           <DeviceSettings device={device} deviceId={deviceId} onUpdate={setDevice} discoveredMetrics={discoveredMetrics} />
         )}
-      </main>
-    </div>
+    </PageShell>
   );
 }
 
