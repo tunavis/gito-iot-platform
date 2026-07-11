@@ -1,6 +1,12 @@
 ## Purpose
 The overall Gito IoT Platform system: a multi-tenant SaaS stack of a FastAPI backend, a standalone MQTT processor microservice, a Next.js 14 web frontend, and a Flutter mobile app, sharing one TimescaleDB/PostgreSQL database. This spec grounds the real tech stack versions, the two device-ingest data paths, the three communication protocols in use, and the actual staging deployment mechanism.
 
+> How the platform is meant to be *extended* beyond current behavior — the
+> Integrations (connectors) vs Modules (vertical solution packs) decision, and the
+> contract a new one must honor — is recorded in
+> [ADR-003](../../../docs/adr/003-modules-vs-integrations-extensibility.md). Nothing
+> there is built yet; it exists so future work slots in without hacking this core.
+
 ## Requirements
 
 ### Requirement: Confirmed tech stack versions
