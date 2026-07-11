@@ -62,6 +62,36 @@ export default function useDeviceMetrics(
 
   const getToken = useCallback(() => localStorage.getItem('auth_token'), []);
 
+  // ── Instant paint from the digital-twin cache (KeyDB, O(1)) ────────────────
+  // Fires alongside fetchLatest (a 30-day Postgres range scan) so the first
+  // paint doesn't wait on the slower query. Never overwrites once real data
+  // has landed, so it can only help, never cause a stale flicker.
+  const fetchCached = useCallback(async () => {
+    const token = getToken();
+    if (!token || !tenantId || !deviceId) return;
+    try {
+      const res = await fetch(
+        `/api/v1/tenants/${tenantId}/devices/${deviceId}/telemetry/cached`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.cached || !json.metrics) return;
+
+      setLatestValues(prev => {
+        if (Object.keys(prev).length > 0) return prev; // fetchLatest already landed
+        const values: Record<string, number | string | null> = {};
+        for (const [key, val] of Object.entries(json.metrics as Record<string, unknown>)) {
+          values[key] = parseValue(val);
+        }
+        return values;
+      });
+      setLastUpdated(prev => prev ?? json.updated_at ?? null);
+    } catch {
+      // Cache miss/failure is non-critical — fetchLatest is the source of truth
+    }
+  }, [deviceId, tenantId, getToken]);
+
   // ── Fetch latest telemetry ────────────────────────────────────────────────
   const fetchLatest = useCallback(async () => {
     const token = getToken();
@@ -214,8 +244,9 @@ export default function useDeviceMetrics(
   useEffect(() => {
     if (!enabled || !deviceId || !tenantId) return;
     setLoading(true);
+    fetchCached(); // instant paint; does not gate `loading`
     Promise.all([fetchLatest(), fetchAlarms()]).then(() => setLoading(false));
-  }, [enabled, deviceId, tenantId, fetchLatest, fetchAlarms]);
+  }, [enabled, deviceId, tenantId, fetchCached, fetchLatest, fetchAlarms]);
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   useEffect(() => {
