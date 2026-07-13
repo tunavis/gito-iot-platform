@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
 import {
-  User, Database, Save, Check, AlertCircle,
+  User, Database, Save, Check,
   Mail, Settings,
 } from 'lucide-react';
 
@@ -195,7 +197,7 @@ function NotificationsTab({
       <p className="text-sm text-[var(--color-text-secondary)]">
         Configure the SMTP server Gito uses to send alarm and notification emails.
         To configure device data connections (LoRaWAN, MQTT), visit the{' '}
-        <a href="/dashboard/connections" className="text-blue-400 hover:underline">Connections</a> page.
+        <a href="/dashboard/connections" className="text-primary-400 hover:underline">Connections</a> page.
       </p>
       <div>
         <div className="flex items-center gap-2 mb-3">
@@ -265,11 +267,11 @@ function RetentionTab({
             onClick={() => setSelected(opt.value)}
             className={`text-left p-4 rounded-xl border transition-colors ${
               selected === opt.value
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-[var(--color-border)] bg-[var(--color-panel)] hover:border-blue-400'
+                ? 'border-primary-500 bg-primary-500/10'
+                : 'border-[var(--color-border)] bg-[var(--color-panel)] hover:border-primary-400'
             }`}
           >
-            <p className={`text-sm font-semibold ${selected === opt.value ? 'text-blue-400' : 'text-[var(--color-text-primary)]'}`}>
+            <p className={`text-sm font-semibold ${selected === opt.value ? 'text-primary-400' : 'text-[var(--color-text-primary)]'}`}>
               {opt.label}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{opt.desc}</p>
@@ -350,17 +352,10 @@ export default function SettingsPage() {
       icon={<Settings className="w-5 h-5" />}
     >
     <div className="max-w-4xl mx-auto space-y-6">
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner message={error} />}
 
       {loading ? (
-        <div className="flex items-center justify-center h-48 text-[var(--color-text-secondary)] text-sm">
-          Loading settings…
-        </div>
+        <LoadingState message="Loading settings…" />
       ) : profile ? (
         <div className="gito-card rounded-xl overflow-hidden">
           {/* Tab bar */}
@@ -371,7 +366,7 @@ export default function SettingsPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-400'
+                    ? 'border-primary-600 text-primary-600'
                     : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
                 }`}
               >

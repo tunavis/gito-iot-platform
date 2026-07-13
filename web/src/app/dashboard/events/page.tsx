@@ -109,7 +109,7 @@ function EventRow({ event }: { event: IoTEvent }) {
           )}
           <div className="flex items-center gap-3 mt-1">
             {event.device_name && (
-              <span className="text-xs text-blue-400">{event.device_name}</span>
+              <span className="text-xs text-primary-400">{event.device_name}</span>
             )}
             <span className="text-xs text-[var(--color-text-secondary)]" title={formatExact(event.ts)}>
               {formatRelative(event.ts)}
@@ -153,7 +153,7 @@ function FilterBar({
       <select
         value={filters.severity}
         onChange={e => onChange({ severity: e.target.value })}
-        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-primary-500"
       >
         <option value="">All severities</option>
         <option value="INFO">INFO</option>
@@ -166,21 +166,21 @@ function FilterBar({
         value={filters.event_type}
         onChange={e => onChange({ event_type: e.target.value })}
         placeholder="Event type…"
-        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-primary-500 w-40"
       />
 
       <input
         type="datetime-local"
         value={filters.from}
         onChange={e => onChange({ from: e.target.value })}
-        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-primary-500"
       />
       <span className="text-xs text-[var(--color-text-secondary)]">to</span>
       <input
         type="datetime-local"
         value={filters.to}
         onChange={e => onChange({ to: e.target.value })}
-        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-primary-500"
       />
 
       {anyActive && (
@@ -291,7 +291,7 @@ export default function EventsPage() {
               key={sev}
               onClick={() => updateFilter({ severity: filters.severity === sev ? '' : sev })}
               className={`gito-card rounded-xl p-3 text-left transition-all ${
-                filters.severity === sev ? 'ring-2 ring-blue-500' : 'hover:border-[var(--color-border-hover)]'
+                filters.severity === sev ? 'ring-2 ring-primary-500' : 'hover:border-[var(--color-border-hover)]'
               }`}
             >
               <div className={`flex items-center gap-1.5 ${cfg.color}`}>

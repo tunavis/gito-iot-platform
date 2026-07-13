@@ -18,6 +18,9 @@ import {
   ChevronRight
 } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import EmptyState from '@/components/ui/EmptyState';
 import { AlarmSeverityBadge, AlarmStatusBadge } from '@/components/ui/Badge';
 import { btn, input } from '@/components/ui/buttonStyles';
 
@@ -198,22 +201,18 @@ export default function AlarmsPage() {
             </div>
             <div className="max-h-[calc(100vh-500px)] overflow-y-auto">
               {loading ? (
-                <div className="p-12 text-center">
-                  <div className="inline-block animate-spin mb-4">
-                    <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
-                  </div>
-                  <p className="text-th-secondary">Loading alarms...</p>
-                </div>
+                <LoadingState message="Loading alarms…" />
               ) : error ? (
-                <div className="p-8 text-center">
-                  <AlertOctagon className="w-12 h-12 text-red-600 mx-auto mb-4" />
-                  <p className="text-red-600 font-medium">{error}</p>
+                <div className="p-4">
+                  <ErrorBanner message={error} />
                 </div>
               ) : alarms.length === 0 ? (
-                <div className="p-12 text-center">
-                  <CheckCircle2 className="w-12 h-12 text-th-muted mx-auto mb-4" />
-                  <p className="text-th-secondary">No alarms found</p>
-                  <p className="text-th-secondary text-sm mt-2">Try adjusting your filters</p>
+                <div className="p-4">
+                  <EmptyState
+                    icon={<CheckCircle2 className="w-8 h-8" />}
+                    title="No alarms found"
+                    description="Try adjusting your filters"
+                  />
                 </div>
               ) : (
                 <ul className="divide-y divide-[var(--color-border-subtle)]">

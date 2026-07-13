@@ -20,6 +20,9 @@ import {
 } from 'lucide-react';
 import { Badge, CategoryBadge } from '@/components/ui/Badge';
 import StatCard from '@/components/ui/StatCard';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import EmptyState from '@/components/ui/EmptyState';
 import { btn, input } from '@/components/ui/buttonStyles';
 import {
   categoryIcons,
@@ -247,26 +250,22 @@ export default function DeviceTypesPage() {
 
         {/* Error State */}
         {error && (
-          <div className="mb-6 p-4 rounded-lg text-sm" style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#ef4444' }}>
-            {error}
+          <div className="mb-6">
+            <ErrorBanner message={error} />
           </div>
         )}
 
         {/* Loading State */}
         {loading ? (
-          <div className="gito-card p-12 text-center text-sm text-th-secondary">Loading device types...</div>
+          <LoadingState message="Loading device types…" />
         ) : filteredTypes.length === 0 ? (
           /* Empty State */
-          <div className="gito-card p-12 text-center flex flex-col items-center">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
-              <Package className="w-7 h-7 text-th-muted" />
-            </div>
-            <h3 className="text-base font-bold text-th-primary mb-1.5">No device types found</h3>
-            <p className="text-sm text-th-secondary mb-5">Create your first device type template to get started</p>
-            <button onClick={() => router.push('/dashboard/device-types/new')} className={`${btn.primary} flex items-center gap-2`}>
-              <Plus className="w-4 h-4" />Create Device Type
-            </button>
-          </div>
+          <EmptyState
+            icon={<Package className="w-8 h-8" />}
+            title="No device types found"
+            description="Create your first device type template to get started"
+            action={{ label: 'Create Device Type', onClick: () => router.push('/dashboard/device-types/new') }}
+          />
         ) : viewMode === 'grid' ? (
           /* Grid View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
