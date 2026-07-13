@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2 } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import { btn } from '@/components/ui/buttonStyles';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -115,45 +117,40 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {/* Confirm Dialog */}
-      {confirmState && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => handleConfirm(false)} />
-          <div className="relative bg-surface rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <div className="flex items-start gap-4 mb-5">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                confirmState.confirmVariant === 'danger' ? 'bg-red-100' : 'bg-amber-100'
-              }`}>
-                {confirmState.confirmVariant === 'danger'
-                  ? <Trash2 className="w-5 h-5 text-red-600" />
-                  : <AlertTriangle className="w-5 h-5 text-amber-600" />
-                }
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-th-primary">{confirmState.title}</h3>
-                <p className="text-sm text-th-secondary mt-1">{confirmState.message}</p>
-              </div>
-            </div>
+      <Modal
+        open={!!confirmState}
+        onClose={() => handleConfirm(false)}
+        size="sm"
+        zIndexClass="z-[200]"
+        title={confirmState?.title}
+        icon={confirmState && (
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+            confirmState.confirmVariant === 'danger' ? 'bg-red-100' : 'bg-amber-100'
+          }`}>
+            {confirmState.confirmVariant === 'danger'
+              ? <Trash2 className="w-5 h-5 text-red-600" />
+              : <AlertTriangle className="w-5 h-5 text-amber-600" />
+            }
+          </div>
+        )}
+      >
+        {confirmState && (
+          <>
+            <p className="text-sm text-th-secondary mb-5">{confirmState.message}</p>
             <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => handleConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-th-primary bg-surface border border-[var(--color-input-border)] rounded-lg hover:bg-page transition-colors"
-              >
+              <button onClick={() => handleConfirm(false)} className={btn.secondary}>
                 Cancel
               </button>
               <button
                 onClick={() => handleConfirm(true)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  confirmState.confirmVariant === 'danger'
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
+                className={confirmState.confirmVariant === 'danger' ? btn.danger : btn.primary}
               >
                 {confirmState.confirmLabel}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       {/* Toast Container - fixed bottom-right */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">

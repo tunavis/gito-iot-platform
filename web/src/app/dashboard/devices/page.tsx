@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import PageShell from '@/components/ui/PageShell';
+import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ToastProvider';
 import {
   Cpu,
@@ -801,16 +802,7 @@ function BulkAssignModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6">
-        <h3 className="text-lg font-semibold text-th-primary mb-4">
-          Assign Devices to Group
-        </h3>
-
-        <p className="text-sm text-th-secondary mb-4">
-          Assign {selectedCount} selected device{selectedCount !== 1 ? 's' : ''} to a device group.
-        </p>
-
+    <Modal open onClose={onCancel} title="Assign Devices to Group" subtitle={`Assign ${selectedCount} selected device${selectedCount !== 1 ? 's' : ''} to a device group.`}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-th-primary mb-1">
@@ -822,7 +814,7 @@ function BulkAssignModal({
               <select
                 value={selectedGroupId}
                 onChange={(e) => setSelectedGroupId(e.target.value)}
-                className="w-full px-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className={input.select}
               >
                 <option value="">No Group (Unassign)</option>
                 {deviceGroups.map((group) => (
@@ -839,20 +831,19 @@ function BulkAssignModal({
               type="button"
               onClick={onCancel}
               disabled={submitting}
-              className="flex-1 px-4 py-2.5 text-sm border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-panel transition-colors disabled:opacity-50"
+              className={`flex-1 ${btn.secondary} disabled:opacity-50`}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || loading}
-              className="flex-1 px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              className={`flex-1 ${btn.primary} disabled:opacity-50`}
             >
               {submitting ? 'Assigning...' : 'Assign'}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

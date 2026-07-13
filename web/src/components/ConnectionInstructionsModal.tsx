@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Modal from '@/components/ui/Modal';
+import { btn } from '@/components/ui/buttonStyles';
 import {
-  X,
   Copy,
   CheckCircle2,
   Wifi,
@@ -156,29 +157,34 @@ void loop() {
 `;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-surface/20 rounded-lg flex items-center justify-center">
-              <CheckCircle2 className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">Device Created Successfully!</h2>
-              <p className="text-primary-100 text-sm mt-0.5">Follow the instructions below to connect your device</p>
-            </div>
-          </div>
+    <Modal
+      open
+      onClose={onClose}
+      size="2xl"
+      scrollBody
+      headerVariant="gradient"
+      title="Device Created Successfully!"
+      subtitle="Follow the instructions below to connect your device"
+      icon={<CheckCircle2 className="w-7 h-7" />}
+      footer={
+        <div className="flex items-center justify-between">
           <button
             onClick={onClose}
-            className="text-white/80 hover:text-white transition-colors"
+            className="px-4 py-2 text-th-secondary hover:text-th-primary transition-colors"
           >
-            <X className="w-6 h-6" />
+            Close
+          </button>
+          <button
+            onClick={() => router.push(`/dashboard/devices/${device.id}`)}
+            className={`flex items-center gap-2 ${btn.primary}`}
+          >
+            View Device Dashboard
+            <ExternalLink className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      }
+    >
+          <div className="space-y-6">
           {/* Device Info */}
           <div className="bg-page border border-th-default rounded-lg p-4">
             <div className="grid grid-cols-2 gap-4">
@@ -449,25 +455,7 @@ mosquitto_pub -h ${mqttConfig.host} -p ${mqttConfig.port} \\
               </p>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-th-default px-6 py-4 bg-page flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-th-secondary hover:text-th-primary transition-colors"
-          >
-            Close
-          </button>
-          <button
-            onClick={() => router.push(`/dashboard/devices/${device.id}`)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium"
-          >
-            View Device Dashboard
-            <ExternalLink className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
+          </div>
+    </Modal>
   );
 }

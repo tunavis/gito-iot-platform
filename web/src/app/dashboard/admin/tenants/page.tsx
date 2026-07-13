@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
+import Modal from '@/components/ui/Modal';
+import { btn, input } from '@/components/ui/buttonStyles';
 import {
   Building2, Plus, Smartphone, Users, AlertTriangle,
-  CheckCircle2, XCircle, X, Eye, RefreshCw, Loader2,
+  CheckCircle2, XCircle, Eye, RefreshCw, Loader2,
 } from 'lucide-react';
 import { useTenant, TenantInfo } from '@/components/TenantContext';
 import { useRouter } from 'next/navigation';
@@ -101,19 +103,8 @@ function CreateTenantModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="gito-card rounded-2xl w-full max-w-md shadow-2xl" style={{ background: 'var(--color-panel)' }}>
-        <div className="flex items-center justify-between p-5 border-b border-[var(--color-border)]">
-          <div>
-            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">New Client Tenant</h2>
-            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">Creates a new isolated tenant with its own login</p>
-          </div>
-          <button onClick={onClose} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="p-5 space-y-4">
+    <Modal open onClose={onClose} title="New Client Tenant" subtitle="Creates a new isolated tenant with its own login">
+        <form onSubmit={submit} className="space-y-4">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
               <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
@@ -126,7 +117,7 @@ function CreateTenantModal({
               required value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: autoSlug(e.target.value) }))}
               placeholder="Sasol Ltd"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={input.base}
             />
           </div>
 
@@ -137,7 +128,7 @@ function CreateTenantModal({
               onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
               placeholder="sasol"
               pattern="^[a-z0-9-]+$"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={input.base + " font-mono"}
             />
           </div>
 
@@ -151,7 +142,7 @@ function CreateTenantModal({
                   required type="email" value={form.admin_email}
                   onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
                   placeholder="admin@sasol.co.za"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={input.base}
                 />
               </div>
 
@@ -161,7 +152,7 @@ function CreateTenantModal({
                   required value={form.admin_name}
                   onChange={e => setForm(f => ({ ...f, admin_name: e.target.value }))}
                   placeholder="Sasol Administrator"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={input.base}
                 />
               </div>
 
@@ -173,7 +164,7 @@ function CreateTenantModal({
                   type="password" value={form.admin_password}
                   onChange={e => setForm(f => ({ ...f, admin_password: e.target.value }))}
                   placeholder="Auto-generate"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={input.base}
                 />
               </div>
             </div>
@@ -182,21 +173,20 @@ function CreateTenantModal({
           <div className="flex gap-3 pt-2">
             <button
               type="button" onClick={onClose}
-              className="flex-1 px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+              className={`flex-1 ${btn.secondary}`}
             >
               Cancel
             </button>
             <button
               type="submit" disabled={saving}
-              className="flex-1 px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className={`flex-1 ${btn.primary} disabled:opacity-50 flex items-center justify-center gap-2`}
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               {saving ? 'Creating…' : 'Create Tenant'}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -208,18 +198,15 @@ function CredentialsModal({
   email: string; password: string; tenantName: string; onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="gito-card rounded-2xl w-full max-w-sm shadow-2xl" style={{ background: 'var(--color-panel)' }}>
-        <div className="p-5 border-b border-[var(--color-border)]">
-          <div className="flex items-center gap-2 text-emerald-400 mb-1">
-            <CheckCircle2 className="w-5 h-5" />
-            <span className="font-semibold text-[var(--color-text-primary)]">Tenant Created</span>
-          </div>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            <strong>{tenantName}</strong> is ready. Share these credentials with the client.
-          </p>
-        </div>
-        <div className="p-5 space-y-3">
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title="Tenant Created"
+      subtitle={<><strong>{tenantName}</strong> is ready. Share these credentials with the client.</>}
+      icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+    >
+        <div className="space-y-3">
           <div className="space-y-1">
             <p className="text-xs font-medium text-[var(--color-text-secondary)]">Login Email</p>
             <p className="text-sm font-mono text-[var(--color-text-primary)] bg-[var(--color-bg)] px-3 py-2 rounded-lg border border-[var(--color-border)]">{email}</p>
@@ -233,13 +220,12 @@ function CredentialsModal({
           </p>
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+            className={`w-full ${btn.primary}`}
           >
             Done
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

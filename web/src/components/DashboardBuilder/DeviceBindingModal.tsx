@@ -3,6 +3,8 @@
 import { X, Check, Loader2, Wifi, BookOpen, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { formatMetricLabel } from "@/lib/formatMetricLabel";
+import Modal from "@/components/ui/Modal";
+import { btn } from "@/components/ui/buttonStyles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -269,41 +271,38 @@ export default function DeviceBindingModal({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   const loadingMetric = loadingSchema || loadingTelemetry;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-th-default">
-          <div>
-            <h2 className="text-lg font-semibold text-th-primary">
-              Bind {multiDevice ? "Devices" : "Device"} to Widget
-            </h2>
-            <p className="text-xs text-th-secondary mt-0.5">
-              {multiDevice
-                ? "Select multiple devices and metrics to compare on the chart"
-                : "Select a device and the metric this widget will display"}
-            </p>
-          </div>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="xl"
+      scrollBody
+      title={`Bind ${multiDevice ? "Devices" : "Device"} to Widget`}
+      subtitle={multiDevice
+        ? "Select multiple devices and metrics to compare on the chart"
+        : "Select a device and the metric this widget will display"}
+      footer={
+        <div className="flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="p-2 text-th-muted hover:text-th-secondary hover:bg-panel rounded-lg transition-colors"
+            className={btn.ghost}
           >
-            <X className="w-5 h-5" />
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={bindings.length === 0}
+            className={`flex items-center gap-2 ${btn.primary} disabled:bg-[var(--color-input-border)] disabled:cursor-not-allowed`}
+          >
+            <Check className="w-4 h-4" />
+            Save {bindings.length > 0 ? `(${bindings.length})` : ""}
           </button>
         </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      }
+    >
+          <div className="space-y-6">
           {error && (
             <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
               <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
@@ -599,26 +598,7 @@ export default function DeviceBindingModal({
               )}
             </>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-th-default bg-page rounded-b-xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-th-primary hover:bg-panel rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={bindings.length === 0}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-[var(--color-input-border)] disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
-            <Check className="w-4 h-4" />
-            Save {bindings.length > 0 ? `(${bindings.length})` : ""}
-          </button>
-        </div>
-      </div>
-    </div>
+          </div>
+    </Modal>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
+import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ToastProvider';
 import { User, Clock, Search, Download, Eye, Activity, Plus, Edit2, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -282,18 +283,9 @@ export default function AuditLogsPage() {
           )}
         </div>
       {/* Detail Modal */}
-      {selectedLog && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="gito-card w-full max-w-2xl p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-th-primary">Audit Log Details</h3>
-              <button onClick={() => setSelectedLog(null)} className={btn.icon}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
+      <Modal open={!!selectedLog} onClose={() => setSelectedLog(null)} title="Audit Log Details" size="xl" scrollBody>
+        {selectedLog && (
+          <>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -342,9 +334,9 @@ export default function AuditLogsPage() {
             <div className="mt-6 flex justify-end">
               <button onClick={() => setSelectedLog(null)} className={btn.secondary}>Close</button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </PageShell>
   );
 }

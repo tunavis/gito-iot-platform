@@ -78,6 +78,7 @@ function getTenantFromToken(): string | null {
 // ============================================================================
 
 export default function AlertRulesPage() {
+  const toast = useToast();
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
@@ -93,7 +94,6 @@ export default function AlertRulesPage() {
   // Forms
   const [showNewRuleForm, setShowNewRuleForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const t = getTenantFromToken();
@@ -155,20 +155,24 @@ export default function AlertRulesPage() {
     }
   }, [tenant, loadRules, loadDevices]);
 
-  const deleteRule = async () => {
-    if (!deleteConfirm || !tenant) return;
+  const deleteRule = async (rule: AlertRule) => {
+    const confirmed = await toast.confirm(
+      `Are you sure you want to delete "${rule.name}"? This action cannot be undone.`,
+      { title: 'Delete Alert Rule', confirmLabel: 'Delete', variant: 'danger' }
+    );
+    if (!confirmed || !tenant) return;
+
     const token = localStorage.getItem('auth_token');
     if (!token) return;
 
-    const res = await fetch(`/api/v1/tenants/${tenant}/alert-rules/${deleteConfirm.id}`, {
+    const res = await fetch(`/api/v1/tenants/${tenant}/alert-rules/${rule.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
 
     if (res.ok) {
-      setRules(prev => prev.filter(r => r.id !== deleteConfirm.id));
+      setRules(prev => prev.filter(r => r.id !== rule.id));
     }
-    setDeleteConfirm(null);
   };
 
   const toggleRule = async (rule: AlertRule) => {
@@ -372,7 +376,7 @@ export default function AlertRulesPage() {
                     <button onClick={() => setEditingRule(rule)} className={btn.icon} title="Edit">
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setDeleteConfirm({ id: rule.id, name: rule.name })} className={btn.iconDanger} title="Delete">
+                    <button onClick={() => deleteRule(rule)} className={btn.iconDanger} title="Delete">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -417,24 +421,6 @@ export default function AlertRulesPage() {
                 </div>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* Delete Confirmation Modal */}
-        {deleteConfirm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="gito-card p-6 max-w-md w-full">
-              <h3 className="text-lg font-bold text-th-primary mb-1">Delete Alert Rule</h3>
-              <p className="text-sm text-th-secondary mb-5">
-                Are you sure you want to delete{' '}
-                <span className="font-semibold text-th-primary">&quot;{deleteConfirm.name}&quot;</span>?
-                This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setDeleteConfirm(null)} className={btn.secondary}>Cancel</button>
-                <button onClick={deleteRule} className={btn.danger}>Delete</button>
-              </div>
-            </div>
           </div>
         )}
     </PageShell>

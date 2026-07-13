@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import PageShell from '@/components/ui/PageShell';
+import Modal from '@/components/ui/Modal';
+import { btn, input } from '@/components/ui/buttonStyles';
 import {
   Link2, Plus, RefreshCw, Trash2, CheckCircle, XCircle,
   Copy, Check, AlertCircle, ExternalLink, Wifi, Server,
@@ -548,23 +550,20 @@ function AddConnectionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-[var(--color-panel)] border border-[var(--color-border)] shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-            {step === 'pick' ? 'Add Connection' : step === 'form' ? `New ${provider ? PROVIDERS[provider].label : ''} Connection` : 'Connection Created'}
-          </h2>
-          <button onClick={onClose} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xl leading-none">×</button>
-        </div>
-
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={step === 'pick' ? 'Add Connection' : step === 'form' ? `New ${provider ? PROVIDERS[provider].label : ''} Connection` : 'Connection Created'}
+    >
         {/* Step: provider picker */}
         {step === 'pick' && (
-          <div className="p-6 grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {(Object.entries(PROVIDERS) as [ProviderKey, typeof PROVIDERS[ProviderKey]][]).map(([key, meta]) => (
               <button
                 key={key}
                 onClick={() => { setProvider(key); setStep('form'); }}
-                className="flex items-start gap-3 p-4 rounded-xl border border-[var(--color-border)] hover:border-blue-500 hover:bg-blue-500/5 transition-colors text-left"
+                className="flex items-start gap-3 p-4 rounded-xl border border-[var(--color-border)] hover:border-primary-500 hover:bg-primary-500/5 transition-colors text-left"
               >
                 <span className={`mt-0.5 ${meta.color}`}>{meta.icon}</span>
                 <div>
@@ -578,7 +577,7 @@ function AddConnectionModal({
 
         {/* Step: form */}
         {step === 'form' && provider && (
-          <form onSubmit={handleCreate} className="p-6 space-y-4">
+          <form onSubmit={handleCreate} className="space-y-4">
             {error && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -592,7 +591,7 @@ function AddConnectionModal({
                 onChange={e => setName(e.target.value)}
                 placeholder={`My ${PROVIDERS[provider].label}`}
                 required
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={input.base}
               />
             </div>
 
@@ -608,7 +607,7 @@ function AddConnectionModal({
                     onChange={e => setBrokerUrl(e.target.value)}
                     placeholder="10.0.0.5"
                     required
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={input.base}
                   />
                 </div>
                 <div>
@@ -622,7 +621,7 @@ function AddConnectionModal({
                     type="number"
                     min={1}
                     max={65535}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={input.base}
                   />
                 </div>
                 <div>
@@ -633,7 +632,7 @@ function AddConnectionModal({
                     value={mqttUsername}
                     onChange={e => setMqttUsername(e.target.value)}
                     placeholder="admin"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={input.base}
                   />
                 </div>
                 <div>
@@ -645,7 +644,7 @@ function AddConnectionModal({
                     value={mqttPassword}
                     onChange={e => setMqttPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={input.base}
                   />
                 </div>
                 <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)] cursor-pointer">
@@ -674,7 +673,7 @@ function AddConnectionModal({
                     value={serverUrl}
                     onChange={e => setServerUrl(e.target.value)}
                     placeholder="https://chirpstack.example.com"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={input.base}
                   />
                 </div>
                 <div>
@@ -686,7 +685,7 @@ function AddConnectionModal({
                     value={apiKey}
                     onChange={e => setApiKey(e.target.value)}
                     placeholder="eyJ…"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={input.base}
                   />
                 </div>
               </>
@@ -696,7 +695,7 @@ function AddConnectionModal({
               <button type="button" onClick={() => setStep('pick')} className="flex-1 px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
                 Back
               </button>
-              <button type="submit" disabled={loading || !name.trim()} className="flex-1 px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors">
+              <button type="submit" disabled={loading || !name.trim()} className={`flex-1 ${btn.primary} disabled:opacity-60`}>
                 {loading ? 'Creating…' : 'Create connection'}
               </button>
             </div>
@@ -705,7 +704,7 @@ function AddConnectionModal({
 
         {/* Step: success — MQTT bridge */}
         {step === 'success' && createdMqtt && (
-          <div className="p-6 space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
               <CheckCircle className="w-4 h-4 shrink-0" />
               Bridge created — connecting to ChirpStack MQTT…
@@ -731,7 +730,7 @@ function AddConnectionModal({
               Uplinks will flow automatically once the bridge connects (typically within 60 seconds).
             </p>
 
-            <button onClick={onClose} className="w-full px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+            <button onClick={onClose} className={`w-full ${btn.primary}`}>
               Done
             </button>
           </div>
@@ -739,7 +738,7 @@ function AddConnectionModal({
 
         {/* Step: success — webhook */}
         {step === 'success' && created && (
-          <div className="p-6 space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
               <CheckCircle className="w-4 h-4 shrink-0" />
               Connection created. Copy your bearer key now — it will not be shown again.
@@ -779,13 +778,12 @@ function AddConnectionModal({
               )}
             </div>
 
-            <button onClick={onClose} className="w-full px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+            <button onClick={onClose} className={`w-full ${btn.primary}`}>
               Done
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -825,13 +823,8 @@ function RotateKeyModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-[var(--color-panel)] border border-[var(--color-border)] shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Rotate key</h2>
-          <button onClick={onClose} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xl leading-none">×</button>
-        </div>
-        <div className="p-6 space-y-4">
+    <Modal open onClose={onClose} title="Rotate key">
+        <div className="space-y-4">
           {!rotated ? (
             <>
               <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
@@ -845,7 +838,7 @@ function RotateKeyModal({
                 </div>
               )}
               <div className="flex gap-3">
-                <button onClick={onClose} className="flex-1 px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+                <button onClick={onClose} className={`flex-1 ${btn.secondary}`}>
                   Cancel
                 </button>
                 <button onClick={handleRotate} disabled={loading} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-60 transition-colors">
@@ -867,14 +860,13 @@ function RotateKeyModal({
                   <CopyButton value={rotated.key} />
                 </div>
               </div>
-              <button onClick={onClose} className="w-full px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+              <button onClick={onClose} className={`w-full ${btn.primary}`}>
                 Done
               </button>
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -959,7 +951,7 @@ export default function ConnectionsPage() {
       action={
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          className={`flex items-center gap-2 ${btn.primary}`}
         >
           <Plus className="w-4 h-4" />
           Add connection
@@ -987,7 +979,7 @@ export default function ConnectionsPage() {
             </p>
             <button
               onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+              className={`inline-flex items-center gap-2 ${btn.primary}`}
             >
               <Plus className="w-4 h-4" />
               Add connection

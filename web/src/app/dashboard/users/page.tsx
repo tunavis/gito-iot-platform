@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
+import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ToastProvider';
 import { Mail, Edit2, Trash2, UserPlus, Key, Search } from 'lucide-react';
 import { UserRoleBadge, UserStatusBadge } from '@/components/ui/Badge';
@@ -382,15 +383,12 @@ function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="gito-card w-full max-w-md p-6">
-        <h3 className="text-lg font-bold text-th-primary mb-1">
-          {user ? 'Edit User' : 'Invite New User'}
-        </h3>
-        <p className="text-sm text-th-secondary mb-5">
-          {user ? 'Update user details and permissions' : 'Add a new team member to your organization'}
-        </p>
-
+    <Modal
+      open
+      onClose={onCancel}
+      title={user ? 'Edit User' : 'Invite New User'}
+      subtitle={user ? 'Update user details and permissions' : 'Add a new team member to your organization'}
+    >
         {error && (
           <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#ef4444' }}>
             {error}
@@ -484,7 +482,6 @@ function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -58,6 +58,7 @@ function getTenantFromToken(): string | null {
 }
 
 export default function NotificationsPage() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'channels' | 'rules' | 'history'>('channels');
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [rules, setRules] = useState<NotificationRule[]>([]);
@@ -67,7 +68,6 @@ export default function NotificationsPage() {
   const [showNewChannelForm, setShowNewChannelForm] = useState(false);
   const [showNewRuleForm, setShowNewRuleForm] = useState(false);
   const [editingChannel, setEditingChannel] = useState<NotificationChannel | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'channel' | 'rule'; id: string; name: string } | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
 
   useEffect(() => {
@@ -131,29 +131,42 @@ export default function NotificationsPage() {
     setLoading(false);
   };
 
-  const confirmDelete = async () => {
-    if (!deleteConfirm || !tenant) return;
+  const deleteChannel = async (channel: NotificationChannel) => {
+    const confirmed = await toast.confirm(
+      `Are you sure you want to delete ${channel.channel_type}? This action cannot be undone.`,
+      { title: 'Delete Channel', confirmLabel: 'Delete', variant: 'danger' }
+    );
+    if (!confirmed || !tenant) return;
+
     const token = localStorage.getItem('auth_token');
     if (!token) return;
 
-    if (deleteConfirm.type === 'channel') {
-      const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels/${deleteConfirm.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setChannels(prev => prev.filter(c => c.id !== deleteConfirm.id));
-      }
-    } else {
-      const res = await fetch(`/api/v1/tenants/${tenant}/notification-rules/${deleteConfirm.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setRules(prev => prev.filter(r => r.id !== deleteConfirm.id));
-      }
+    const res = await fetch(`/api/v1/tenants/${tenant}/notifications/channels/${channel.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      setChannels(prev => prev.filter(c => c.id !== channel.id));
     }
-    setDeleteConfirm(null);
+  };
+
+  const deleteNotificationRule = async (rule: NotificationRule, name: string) => {
+    const confirmed = await toast.confirm(
+      `Are you sure you want to delete ${name}? This action cannot be undone.`,
+      { title: 'Delete Rule', confirmLabel: 'Delete', variant: 'danger' }
+    );
+    if (!confirmed || !tenant) return;
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    const res = await fetch(`/api/v1/tenants/${tenant}/notification-rules/${rule.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      setRules(prev => prev.filter(r => r.id !== rule.id));
+    }
   };
 
   const toggleChannel = async (id: string, enabled: boolean) => {
@@ -292,7 +305,7 @@ export default function NotificationsPage() {
                           <span className="text-xs font-bold">{channel.enabled ? 'ON' : 'OFF'}</span>
                         </button>
                         <button onClick={() => setEditingChannel(channel)} className={btn.icon} title="Edit"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => setDeleteConfirm({ type: 'channel', id: channel.id, name: channel.channel_type })} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => deleteChannel(channel)} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                   </div>
@@ -365,7 +378,7 @@ export default function NotificationsPage() {
                             <Badge variant={rule.enabled ? 'success' : 'neutral'} label={rule.enabled ? 'Enabled' : 'Disabled'} size="sm" />
                           </div>
                           <div className="col-span-2 flex justify-end">
-                            <button onClick={() => setDeleteConfirm({ type: 'rule', id: rule.id, name: linkedAlert?.name || 'rule' })} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => deleteNotificationRule(rule, linkedAlert?.name || 'rule')} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
                       </div>
@@ -421,22 +434,6 @@ export default function NotificationsPage() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Delete Confirmation Modal */}
-        {deleteConfirm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="gito-card p-6 max-w-md w-full">
-              <h3 className="text-lg font-bold text-th-primary mb-1">Delete {deleteConfirm.type === 'channel' ? 'Channel' : 'Rule'}</h3>
-              <p className="text-sm text-th-secondary mb-5">
-                Are you sure you want to delete <span className="font-semibold text-th-primary">{deleteConfirm.name}</span>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setDeleteConfirm(null)} className={btn.secondary}>Cancel</button>
-                <button onClick={confirmDelete} className={btn.danger}>Delete</button>
-              </div>
-            </div>
           </div>
         )}
     </PageShell>

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import PageShell from '@/components/ui/PageShell';
+import Modal from '@/components/ui/Modal';
+import { btn, input } from '@/components/ui/buttonStyles';
 import { useToast } from '@/components/ToastProvider';
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight, Shield, Mail, Globe } from 'lucide-react';
 
@@ -346,10 +348,7 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6">
-        <h3 className="text-lg font-semibold text-th-primary mb-4">Add Alert Route</h3>
-
+    <Modal open onClose={onCancel} title="Add Alert Route">
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
             {error}
@@ -363,7 +362,7 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
               required
               value={formData.alert_rule_id}
               onChange={(e) => setFormData({ ...formData, alert_rule_id: e.target.value })}
-              className="w-full px-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className={input.select}
             >
               <option value="">Select alert rule...</option>
               {alertRules.map(rule => (
@@ -380,7 +379,7 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
               required
               value={formData.channel_id}
               onChange={(e) => setFormData({ ...formData, channel_id: e.target.value })}
-              className="w-full px-4 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className={input.select}
             >
               <option value="">Select channel...</option>
               {channels.filter(c => c.enabled).map(channel => (
@@ -405,20 +404,19 @@ function RuleForm({ alertRules, channels, onSuccess, onCancel }: RuleFormProps) 
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-2.5 text-sm border border-[var(--color-input-border)] text-th-primary rounded-lg hover:bg-panel transition-colors"
+              className={`flex-1 ${btn.secondary}`}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              className={`flex-1 ${btn.primary} disabled:opacity-50`}
             >
               {submitting ? 'Creating...' : 'Create Route'}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
