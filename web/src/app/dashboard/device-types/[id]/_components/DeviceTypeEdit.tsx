@@ -14,9 +14,11 @@ import {
   CAPABILITIES,
   COLORS,
 } from '../../_constants';
-import type { DeviceTypeForm, DiscoveredMetric, UnifiedMetric } from '../../_types';
+import type { DeviceTypeForm, DiscoveredMetric, UnifiedMetric, CommandDef } from '../../_types';
+import { splitMetrics } from '../../_metrics';
 import DiscoveredMetricsPanel from './DiscoveredMetricsPanel';
 import MetricsTable from './MetricsTable';
+import CommandsTable from './CommandsTable';
 
 interface DeviceTypeEditProps {
   form: DeviceTypeForm;
@@ -43,6 +45,7 @@ export default function DeviceTypeEdit({
     basic: true,
     metrics: true,
     capabilities: true,
+    commands: true,
     settings: false,
     connectivity: false,
   });
@@ -226,6 +229,7 @@ export default function DeviceTypeEdit({
                 loading={discoveredLoading}
                 onRefresh={onRefreshDiscovered}
                 currentFieldNames={form.metrics.map((m) => m.name)}
+                renameMap={splitMetrics(form.metrics).key_mapping}
                 onAddField={(key) => {
                   setForm({
                     ...form,
@@ -233,6 +237,14 @@ export default function DeviceTypeEdit({
                       ...form.metrics,
                       { name: key, type: 'float', unit: '', description: '', required: false, source: { mode: 'direct' } },
                     ],
+                  });
+                }}
+                onMapField={(rawKey, canonical) => {
+                  setForm({
+                    ...form,
+                    metrics: form.metrics.map((m) =>
+                      m.name === canonical ? { ...m, source: { mode: 'rename', rawKey } } : m
+                    ),
                   });
                 }}
               />
@@ -276,6 +288,27 @@ export default function DeviceTypeEdit({
                 );
               })}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Commands — only meaningful once the "commands" capability is on, but
+          shown always so a definition can be prepared before enabling it. */}
+      <div className="gito-card overflow-hidden">
+        <SectionHeader sectionKey="commands" title="Commands" badge={`${form.commands.length} defined`} />
+        {expandedSections.commands && (
+          <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
+            {!form.capabilities.includes('commands') && (
+              <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                The &quot;Commands&quot; capability isn&apos;t enabled above — devices of this type
+                won&apos;t be able to receive any commands defined here until it is.
+              </div>
+            )}
+            <CommandsTable
+              commands={form.commands}
+              onChange={(commands: CommandDef[]) => setForm({ ...form, commands })}
+            />
           </div>
         )}
       </div>

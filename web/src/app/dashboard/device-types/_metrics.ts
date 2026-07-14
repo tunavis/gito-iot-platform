@@ -127,6 +127,7 @@ export function splitMetrics(
 // ── round-trip self-check (runs only under Node: `node --loader ... _metrics.ts`
 //    or via the ts test; harmless in the browser bundle where require is absent) ──
 declare const require: any;
+// eslint-disable-next-line @next/next/no-assign-module-variable -- declare, not assign; Node-only self-check guard
 declare const module: any;
 if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const assert = require('assert');

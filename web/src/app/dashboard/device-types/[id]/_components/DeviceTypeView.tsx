@@ -13,6 +13,7 @@ import {
 } from '../../_constants';
 import type { DeviceType, DiscoveredMetric, UnifiedMetric } from '../../_types';
 import { mergeMetrics } from '../../_metrics';
+import { mergeCommands } from '../../_commands';
 import { Binary, KeyRound } from 'lucide-react';
 import DiscoveredMetricsPanel from './DiscoveredMetricsPanel';
 
@@ -33,6 +34,7 @@ export default function DeviceTypeView({
 }: DeviceTypeViewProps) {
   const dt = deviceType;
   const metrics = mergeMetrics(dt.data_model || [], dt.decoder, dt.key_mapping || {});
+  const commands = mergeCommands(dt.command_schema);
 
   return (
     <div className="space-y-6">
@@ -161,6 +163,42 @@ export default function DeviceTypeView({
         </div>
       )}
 
+      {/* Commands */}
+      {commands.length > 0 && (
+        <div className="gito-card overflow-hidden">
+          <div className="px-6 py-4 border-b border-th-default flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-th-primary">Commands</h3>
+              <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary font-medium">
+                {commands.length} defined
+              </span>
+            </div>
+          </div>
+          <div className="divide-y divide-[var(--color-border-subtle)]">
+            {commands.map((cmd) => (
+              <div key={cmd.name} className="px-6 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-th-primary">{cmd.name}</span>
+                  {cmd.parameters.length === 0 && (
+                    <span className="px-1.5 py-0.5 bg-panel rounded text-[10px] text-th-secondary">Quick action</span>
+                  )}
+                </div>
+                {cmd.description && <p className="text-xs text-th-secondary mt-0.5">{cmd.description}</p>}
+                {cmd.parameters.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {cmd.parameters.map((p) => (
+                      <span key={p.name} className="px-2 py-0.5 bg-page border border-th-subtle rounded text-[10px] font-mono text-th-secondary">
+                        {p.name}: {p.type}{p.required ? '*' : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Default Settings */}
       <div className="gito-card p-6">
         <h3 className="text-base font-semibold text-th-primary mb-4">Default Settings</h3>
@@ -243,6 +281,7 @@ export default function DeviceTypeView({
           loading={discoveredLoading}
           onRefresh={onRefreshDiscovered}
           currentFieldNames={metrics.map((m) => m.name)}
+          renameMap={dt.key_mapping || {}}
         />
       )}
     </div>

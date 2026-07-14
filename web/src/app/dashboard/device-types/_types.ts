@@ -37,6 +37,22 @@ export interface PayloadDecoder {
   fields: DecoderField[];
 }
 
+export interface CommandParameter {
+  name: string;
+  type: 'float' | 'integer' | 'string' | 'boolean';
+  unit?: string;
+  min?: number;
+  max?: number;
+  enum?: string[];
+  required?: boolean;
+  description?: string;
+}
+
+export interface CommandSchemaEntry {
+  description: string;
+  parameters: CommandParameter[];
+}
+
 export interface DeviceType {
   id: string;
   name: string;
@@ -52,10 +68,19 @@ export interface DeviceType {
   connectivity?: ProtocolConfig;
   decoder?: PayloadDecoder | null;
   key_mapping?: Record<string, string>;
+  command_schema?: Record<string, CommandSchemaEntry>;
   is_active: boolean;
   device_count: number;
   created_at: string;
   updated_at: string;
+}
+
+/** Form-shaped command — same fields as CommandSchemaEntry, name pulled out of
+ * the dict key into a real field so it's editable like everything else. */
+export interface CommandDef {
+  name: string;
+  description: string;
+  parameters: CommandParameter[];
 }
 
 export interface DeviceTypeForm {
@@ -73,6 +98,8 @@ export interface DeviceTypeForm {
   capabilities: string[];
   default_settings: DefaultSettings;
   connectivity: ProtocolConfig;
+  // Merged from / split back into command_schema at load/save (see _commands.ts).
+  commands: CommandDef[];
   is_active: boolean;
 }
 

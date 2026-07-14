@@ -142,6 +142,7 @@ export const DEFAULT_FORM: DeviceTypeForm = {
   metrics: [],
   decoderFPort: null,
   capabilities: ['telemetry'],
+  commands: [],
   default_settings: {
     heartbeat_interval: 60,
     telemetry_interval: 300,

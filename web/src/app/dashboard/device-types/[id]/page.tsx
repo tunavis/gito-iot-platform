@@ -9,6 +9,7 @@ import { btn } from '@/components/ui/buttonStyles';
 import { categoryIcons, DEFAULT_FORM } from '../_constants';
 import type { DeviceType, DeviceTypeForm, DiscoveredMetric } from '../_types';
 import { mergeMetrics, splitMetrics } from '../_metrics';
+import { mergeCommands, splitCommands } from '../_commands';
 import DeviceTypeView from './_components/DeviceTypeView';
 import DeviceTypeEdit from './_components/DeviceTypeEdit';
 
@@ -78,6 +79,7 @@ export default function DeviceTypeDetailPage() {
       metrics: mergeMetrics(dt.data_model || [], dt.decoder, dt.key_mapping || {}),
       decoderFPort: dt.decoder?.f_port ?? null,
       capabilities: dt.capabilities || [],
+      commands: mergeCommands(dt.command_schema),
       default_settings: dt.default_settings || DEFAULT_FORM.default_settings,
       connectivity: dt.connectivity || DEFAULT_FORM.connectivity,
       is_active: dt.is_active ?? true,
@@ -134,9 +136,14 @@ export default function DeviceTypeDetailPage() {
         ? `/api/v1/tenants/${auth.tenant}/device-types`
         : `/api/v1/tenants/${auth.tenant}/device-types/${params.id}`;
 
-      // Split the unified metric list back into the three stored columns.
-      const { metrics, decoderFPort, ...rest } = form;
-      const body = { ...rest, ...splitMetrics(metrics, decoderFPort ?? undefined) };
+      // Split the unified metric list back into the three stored columns, and
+      // the commands array back into the command_schema dict.
+      const { metrics, decoderFPort, commands, ...rest } = form;
+      const body = {
+        ...rest,
+        ...splitMetrics(metrics, decoderFPort ?? undefined),
+        command_schema: splitCommands(commands),
+      };
 
       const response = await fetch(url, {
         method: isNew ? 'POST' : 'PUT',
