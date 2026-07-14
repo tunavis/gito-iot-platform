@@ -124,14 +124,25 @@ class NotificationListResponseSchema(BaseModel):
 
 
 class NotificationTemplateSchema(BaseModel):
-    """Create/update notification template."""
-    channel_type: str = Field(..., description="email, slack, webhook")
+    """Create notification template."""
+    channel_type: str = Field(..., pattern=r"^(email|slack|webhook)$")
     alert_type: Optional[str] = Field(None, description="Optional - specific alert type")
-    name: str
-    subject: Optional[str] = None
-    body: str
+    name: str = Field(..., min_length=1, max_length=255)
+    subject: Optional[str] = Field(None, max_length=500)
+    body: str = Field(..., min_length=1)
     variables: List[str] = Field(default_factory=list)
     enabled: bool = Field(default=True)
+
+
+class NotificationTemplateUpdateSchema(BaseModel):
+    """Update notification template - all fields optional, omitted fields are left untouched."""
+    channel_type: Optional[str] = Field(None, pattern=r"^(email|slack|webhook)$")
+    alert_type: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    subject: Optional[str] = Field(None, max_length=500)
+    body: Optional[str] = Field(None, min_length=1)
+    variables: Optional[List[str]] = None
+    enabled: Optional[bool] = None
 
 
 class NotificationTemplateResponseSchema(BaseModel):

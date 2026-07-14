@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
 import { Badge } from '@/components/ui/Badge';
 import { btn, input } from '@/components/ui/buttonStyles';
-import { Plus, Edit2, Trash2, Mail, Webhook, Smartphone, Bell } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Webhook, Smartphone, Bell, FileText } from 'lucide-react';
 
 interface NotificationChannel {
   id: string;
@@ -45,6 +45,21 @@ interface Notification {
   created_at: string;
 }
 
+interface NotificationTemplate {
+  id: string;
+  channel_type: 'email' | 'slack' | 'webhook';
+  alert_type: string | null;
+  name: string;
+  subject: string | null;
+  body: string;
+  variables: string[];
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+const TEMPLATE_VARIABLES = ['device_name', 'rule_name', 'metric_value', 'threshold', 'fired_at', 'alert_message'];
+
 // Helper to extract tenant_id from JWT token
 function getTenantFromToken(): string | null {
   const token = localStorage.getItem('auth_token');
@@ -59,15 +74,18 @@ function getTenantFromToken(): string | null {
 
 export default function NotificationsPage() {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<'channels' | 'rules' | 'history'>('channels');
+  const [activeTab, setActiveTab] = useState<'channels' | 'rules' | 'templates' | 'history'>('channels');
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [rules, setRules] = useState<NotificationRule[]>([]);
   const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewChannelForm, setShowNewChannelForm] = useState(false);
   const [showNewRuleForm, setShowNewRuleForm] = useState(false);
+  const [showNewTemplateForm, setShowNewTemplateForm] = useState(false);
   const [editingChannel, setEditingChannel] = useState<NotificationChannel | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,6 +136,14 @@ export default function NotificationsPage() {
         const json = await channelsRes.json();
         setChannels(Array.isArray(json.data) ? json.data : json);
       }
+    } else if (activeTab === 'templates') {
+      const res = await fetch(`/api/v1/tenants/${tenant}/notifications/templates`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setTemplates(Array.isArray(json.data) ? json.data : json);
+      }
     } else {
       const res = await fetch(`/api/v1/tenants/${tenant}/notifications?page=1&per_page=100`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -166,6 +192,28 @@ export default function NotificationsPage() {
     });
     if (res.ok) {
       setRules(prev => prev.filter(r => r.id !== rule.id));
+    }
+  };
+
+  const deleteTemplate = async (template: NotificationTemplate) => {
+    const confirmed = await toast.confirm(
+      `Are you sure you want to delete "${template.name}"? This action cannot be undone.`,
+      { title: 'Delete Template', confirmLabel: 'Delete', variant: 'danger' }
+    );
+    if (!confirmed || !tenant) return;
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    const res = await fetch(`/api/v1/tenants/${tenant}/notifications/templates/${template.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      setTemplates(prev => prev.filter(t => t.id !== template.id));
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error('Failed to delete template', err.detail || 'Please try again.');
     }
   };
 
@@ -221,6 +269,16 @@ export default function NotificationsPage() {
             }`}
           >
             Rules
+          </button>
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === 'templates'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-th-secondary hover:text-th-primary'
+            }`}
+          >
+            Templates
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -385,6 +443,87 @@ export default function NotificationsPage() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Templates Tab */}
+        {activeTab === 'templates' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-th-primary">Notification Templates</h2>
+                <p className="text-sm text-th-secondary mt-0.5">Customize the message sent for each channel type</p>
+              </div>
+              <button onClick={() => setShowNewTemplateForm(true)} className={`${btn.primary} flex items-center gap-2`}>
+                <Plus className="w-4 h-4" />Add Template
+              </button>
+            </div>
+
+            {showNewTemplateForm && (
+              <TemplateForm
+                tenant={tenant}
+                onSuccess={() => {
+                  setShowNewTemplateForm(false);
+                  loadData();
+                }}
+                onCancel={() => setShowNewTemplateForm(false)}
+              />
+            )}
+
+            {editingTemplate && (
+              <TemplateForm
+                template={editingTemplate}
+                tenant={tenant}
+                onSuccess={() => {
+                  setEditingTemplate(null);
+                  loadData();
+                }}
+                onCancel={() => setEditingTemplate(null)}
+              />
+            )}
+
+            {loading ? (
+              <div className="gito-card p-12 text-center text-sm text-th-secondary">Loading templates...</div>
+            ) : templates.length === 0 ? (
+              <div className="gito-card p-12 text-center flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 text-th-muted" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
+                  <FileText className="w-7 h-7" />
+                </div>
+                <h3 className="text-base font-bold text-th-primary mb-1.5">No notification templates yet</h3>
+                <p className="text-sm text-th-secondary mb-5">Without one, alerts send as a plain &quot;Device: Alert triggered&quot; message.</p>
+                <button onClick={() => setShowNewTemplateForm(true)} className={`${btn.primary} flex items-center gap-2`}>
+                  <Plus className="w-4 h-4" />Create First Template
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {templates.map(template => (
+                  <div key={template.id} className="gito-card p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-th-muted" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
+                          {getChannelTypeIcon(template.channel_type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                            <h3 className="font-semibold text-th-primary">{template.name}</h3>
+                            <Badge variant="neutral" label={template.channel_type} size="sm" />
+                            {template.alert_type && <Badge variant="info" label={template.alert_type} size="sm" />}
+                            <Badge variant={template.enabled ? 'success' : 'neutral'} label={template.enabled ? 'Enabled' : 'Disabled'} size="sm" />
+                          </div>
+                          {template.subject && <p className="text-xs text-th-secondary mt-1">Subject: {template.subject}</p>}
+                          <p className="text-xs text-th-muted font-mono mt-1 truncate">{template.body}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 ml-4 flex-shrink-0">
+                        <button onClick={() => setEditingTemplate(template)} className={btn.icon} title="Edit"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => deleteTemplate(template)} className={btn.iconDanger} title="Delete"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -558,6 +697,148 @@ function AddNotificationRuleForm({
         <div className="flex gap-3">
           <button type="button" onClick={onCancel} className={btn.secondary}>Cancel</button>
           <button type="submit" className={btn.primary}>Create Rule</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function TemplateForm({
+  template, tenant, onSuccess, onCancel,
+}: {
+  template?: NotificationTemplate;
+  tenant: string | null;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const toast = useToast();
+  const [formData, setFormData] = useState({
+    channel_type: template?.channel_type || 'email' as 'email' | 'slack' | 'webhook',
+    alert_type: template?.alert_type || '',
+    name: template?.name || '',
+    subject: template?.subject || '',
+    body: template?.body || '',
+    enabled: template?.enabled ?? true,
+  });
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertVariable = (name: string) => {
+    const el = bodyRef.current;
+    const token = `{{ ${name} }}`;
+    if (!el) {
+      setFormData(prev => ({ ...prev, body: prev.body + token }));
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = formData.body.slice(0, start) + token + formData.body.slice(end);
+    setFormData(prev => ({ ...prev, body: next }));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + token.length;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('auth_token');
+    if (!token || !tenant) return;
+
+    const payload = {
+      channel_type: formData.channel_type,
+      alert_type: formData.alert_type || null,
+      name: formData.name,
+      subject: formData.channel_type === 'email' ? (formData.subject || null) : null,
+      body: formData.body,
+      variables: TEMPLATE_VARIABLES.filter(v => formData.body.includes(`{{ ${v} }}`)),
+      enabled: formData.enabled,
+    };
+
+    const url = template
+      ? `/api/v1/tenants/${tenant}/notifications/templates/${template.id}`
+      : `/api/v1/tenants/${tenant}/notifications/templates`;
+    const method = template ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      onSuccess();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error('Failed to save template', err.detail || 'Please check your input and try again.');
+    }
+  };
+
+  return (
+    <div className="gito-card p-6 mb-6">
+      <h3 className="text-lg font-bold text-th-primary mb-1">{template ? 'Edit Template' : 'Add Notification Template'}</h3>
+      <p className="text-sm text-th-secondary mb-5">
+        Only one enabled template per channel type is used when an alert fires — Alert Type is stored for your own
+        organization but doesn&apos;t currently target specific alert types.
+      </p>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Template Name *</label>
+            <input type="text" required value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className={input.base} placeholder="e.g. Critical Alert Email" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Channel Type</label>
+            <select value={formData.channel_type} onChange={e => setFormData(prev => ({ ...prev, channel_type: e.target.value as any }))} className={input.select}>
+              <option value="email">Email</option>
+              <option value="slack">Slack</option>
+              <option value="webhook">Webhook</option>
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Alert Type (optional)</label>
+            <input type="text" value={formData.alert_type} onChange={e => setFormData(prev => ({ ...prev, alert_type: e.target.value }))} className={input.base} placeholder="e.g. high_temp — for your own reference" />
+          </div>
+          {formData.channel_type === 'email' && (
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Email Subject</label>
+              <input type="text" value={formData.subject} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} className={input.base} placeholder="{{ device_name }} alert" />
+            </div>
+          )}
+          <div className="col-span-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-th-muted uppercase tracking-wider">Message Body *</label>
+              <label className="flex items-center gap-1.5 text-xs text-th-secondary">
+                <input type="checkbox" checked={formData.enabled} onChange={e => setFormData(prev => ({ ...prev, enabled: e.target.checked }))} className="w-3.5 h-3.5 rounded border-[var(--color-input-border)] text-primary-600 focus:ring-primary-500" />
+                Enabled
+              </label>
+            </div>
+            <textarea
+              ref={el => { bodyRef.current = el; }}
+              required
+              value={formData.body}
+              onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
+              className={`${input.base} font-mono resize-none`}
+              rows={4}
+              placeholder="{{ device_name }} fired {{ rule_name }}: {{ metric_value }} crossed {{ threshold }}"
+            />
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <span className="text-[10px] font-bold text-th-muted uppercase tracking-wider mr-1 self-center">Insert:</span>
+              {TEMPLATE_VARIABLES.map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => insertVariable(v)}
+                  className="text-[11px] font-mono px-2 py-1 rounded-md border border-[var(--color-input-border)] text-th-secondary hover:text-primary-600 hover:border-primary-400 transition-colors"
+                >
+                  {`{{ ${v} }}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button type="button" onClick={onCancel} className={btn.secondary}>Cancel</button>
+          <button type="submit" className={btn.primary}>{template ? 'Update' : 'Create'} Template</button>
         </div>
       </form>
     </div>

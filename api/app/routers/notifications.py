@@ -1,6 +1,7 @@
 """Notification system routes - channels, templates, and history."""
 
 import logging
+from datetime import datetime
 from typing import List, Optional, Annotated
 from uuid import UUID
 
@@ -9,6 +10,11 @@ from sqlalchemy import select, and_, func
 
 from app.database import get_session, RLSSession
 from app.models import NotificationChannel, NotificationTemplate, Notification
+from app.schemas.notifications import (
+    NotificationTemplateSchema,
+    NotificationTemplateUpdateSchema,
+    NotificationTemplateResponseSchema,
+)
 from app.dependencies import get_current_tenant, get_current_user_id
 
 logger = logging.getLogger(__name__)
@@ -185,26 +191,91 @@ async def list_templates(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(NotificationTemplate).where(
             NotificationTemplate.tenant_id == current_tenant
-        )
+        ).order_by(NotificationTemplate.created_at.desc())
     )
     templates = result.scalars().all()
-    
-    return {"data": [
-        {
-            "id": str(t.id),
-            "channel_type": t.channel_type,
-            "alert_type": t.alert_type,
-            "name": t.name,
-            "subject": t.subject,
-            "body": t.body,
-            "enabled": t.enabled,
-        }
-        for t in templates
-    ]}
+
+    return {"data": [NotificationTemplateResponseSchema.model_validate(t, from_attributes=True) for t in templates]}
+
+
+@router.post("/templates", response_model=NotificationTemplateResponseSchema, status_code=status.HTTP_201_CREATED)
+async def create_template(
+    tenant_id: UUID,
+    body: NotificationTemplateSchema,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+):
+    """Create a notification template. Only one *enabled* template per channel_type is ever
+    used (see notification_dispatcher._send) - alert_type is stored but not currently used to
+    select between templates, so enabling a second template for the same channel just means
+    whichever one the query happens to return first is the one that gets used."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    await session.set_tenant_context(current_tenant)
+
+    template = NotificationTemplate(tenant_id=current_tenant, **body.model_dump())
+    session.add(template)
+    await session.commit()
+    await session.refresh(template)
+    return template
+
+
+@router.put("/templates/{template_id}", response_model=NotificationTemplateResponseSchema)
+async def update_template(
+    tenant_id: UUID,
+    template_id: UUID,
+    body: NotificationTemplateUpdateSchema,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+):
+    """Update a notification template."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    await session.set_tenant_context(current_tenant)
+
+    template = (await session.execute(
+        select(NotificationTemplate).where(
+            and_(NotificationTemplate.id == template_id, NotificationTemplate.tenant_id == current_tenant)
+        )
+    )).scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(template, field, value)
+    template.updated_at = datetime.utcnow()
+
+    await session.commit()
+    await session.refresh(template)
+    return template
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_template(
+    tenant_id: UUID,
+    template_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)],
+):
+    """Delete a notification template."""
+    if str(tenant_id) != str(current_tenant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    await session.set_tenant_context(current_tenant)
+
+    template = (await session.execute(
+        select(NotificationTemplate).where(
+            and_(NotificationTemplate.id == template_id, NotificationTemplate.tenant_id == current_tenant)
+        )
+    )).scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    await session.delete(template)
+    await session.commit()
 
 
 # ============================================================================

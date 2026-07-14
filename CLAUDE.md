@@ -346,24 +346,27 @@ indexes, not 11 — both dropped in migration `023_drop_redundant_indexes`.
 ❌ Missing (Planned):
 - Grafana integration (Future) — provisioning config exists, no service deployed
 - Config forms for `table`/`map`/`status_matrix`/`device_info` widgets (see Widget Types above)
-- **Notification template CRUD UI** — `NotificationTemplate` model exists with a real
-  `channel_type` CheckConstraint, but the router only implements `GET` (list); no
-  POST/PUT/DELETE, and no Templates tab on the Notifications page.
 
-Note: Gauge/Map/Table widgets, the device-type command schema editor, and the
-OTA firmware campaign UI (`web/src/app/dashboard/firmware/versions` +
-`.../firmware/campaigns`, nav entry in `Sidebar.tsx`) are implemented, not
-planned — this section previously listed them as future work after they'd
-already shipped.
+Note: Gauge/Map/Table widgets, the device-type command schema editor, the OTA
+firmware campaign UI (`web/src/app/dashboard/firmware/versions` +
+`.../firmware/campaigns`), and notification template CRUD (POST/PUT/DELETE on
+`/tenants/{id}/notifications/templates` + the Templates tab on the
+Notifications page) are implemented, not planned — this section previously
+listed them as future work after they'd already shipped. Note also that a
+template's `alert_type` is stored but not yet used to select between
+templates — only one *enabled* template per `channel_type` is ever used
+(`notification_dispatcher.py`), so it's for the author's own organization
+today, not per-alert-type routing.
 
 ---
 
 ## 🎯 Current Iteration
 
-12 widget types, the device-type command schema editor, and OTA firmware
-campaigns (versions list + campaign creation/execution wizard against the
-existing backend) are implemented (see Widget Types above). No active
-iteration is tracked here currently — check `openspec/changes/` for
+12 widget types, the device-type command schema editor, OTA firmware
+campaigns (versions list + campaign creation/execution wizard), and
+notification template CRUD (create/edit/delete UI, backed by real
+POST/PUT/DELETE endpoints) are implemented (see Widget Types above). No
+active iteration is tracked here currently — check `openspec/changes/` for
 in-flight work.
 
 ---
