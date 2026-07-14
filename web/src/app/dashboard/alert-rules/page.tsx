@@ -131,7 +131,7 @@ export default function AlertRulesPage() {
     if (!token || !tenant) return;
 
     const [devRes, dtRes] = await Promise.all([
-      fetch(`/api/v1/tenants/${tenant}/devices?page=1&per_page=500`, {
+      fetch(`/api/v1/tenants/${tenant}/devices?page=1&per_page=100`, {
         headers: { Authorization: `Bearer ${token}` }
       }),
       fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, {

@@ -113,6 +113,7 @@ const PROVIDERS: Record<ProviderKey, { label: string; description: string; icon:
 // ── Auth helper ────────────────────────────────────────────────────────────────
 
 function getAuth() {
+  if (typeof window === 'undefined') return null;
   const token = localStorage.getItem('auth_token');
   if (!token) return null;
   const payload = JSON.parse(atob(token.split('.')[1]));

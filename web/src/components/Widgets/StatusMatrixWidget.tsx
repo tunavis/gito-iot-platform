@@ -65,7 +65,7 @@ export default function StatusMatrixWidget({ config }: StatusMatrixWidgetProps) 
 
     try {
       const res = await fetch(
-        `/api/v1/tenants/${tid}/devices?per_page=200`,
+        `/api/v1/tenants/${tid}/devices?per_page=100`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) { setLoading(false); return; }
