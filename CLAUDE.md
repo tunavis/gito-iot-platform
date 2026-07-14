@@ -346,21 +346,34 @@ indexes, not 11 — both dropped in migration `023_drop_redundant_indexes`.
 ❌ Missing (Planned):
 - Grafana integration (Future) — provisioning config exists, no service deployed
 - Config forms for `table`/`map`/`status_matrix`/`device_info` widgets (see Widget Types above)
+- **OTA firmware campaign UI** — backend is fully built and tested (`api/app/routers/firmware.py`,
+  the processor's OTA progress handling, `openspec/specs/firmware-ota/spec.md`), but there is
+  no frontend surface at all: no page under `web/src/app/dashboard/`, no nav entry in
+  `Sidebar.tsx`. Currently only reachable via raw API calls. Verified 2026-07-14 (confirmed
+  directly, not just via a grep) — this corrects an earlier version of this note that claimed
+  OTA was fully implemented; that was true for the backend only.
+- **Notification template CRUD UI** — `NotificationTemplate` model exists with a real
+  `channel_type` CheckConstraint, but the router only implements `GET` (list); no
+  POST/PUT/DELETE, and no Templates tab on the Notifications page.
+- **Device type command schema editor** — device types can be flagged with the "Commands"
+  capability, but `command_schema` (the field that actually defines what commands exist) has
+  no editor anywhere in `DeviceTypeEdit.tsx`. Devices of such a type fall back to a raw
+  free-text command-name input with no guidance on what to type.
 
-Note: Gauge/Map/Table widgets and OTA firmware updates are implemented, not
-planned — this section previously listed them as future work after they'd
-already shipped.
+Note: Gauge/Map/Table widgets are implemented, not planned — this section
+previously listed them as future work after they'd already shipped.
 
 ---
 
 ## 🎯 Current Iteration
 
-12 widget types and OTA firmware campaigns are implemented (see Widget Types
-above and `openspec/specs/firmware-ota/spec.md`). No active iteration is
+12 widget types are implemented (see Widget Types above). OTA firmware
+campaigns have a fully-built backend (`openspec/specs/firmware-ota/spec.md`)
+but no frontend — see Production Status above. No active iteration is
 tracked here currently — check `openspec/changes/` for in-flight work.
 
 ---
 
-**Last Updated**: 2026-07-11
+**Last Updated**: 2026-07-14
 **Maintained By**: Claude (AI Assistant)
 **Project Status**: Active Development

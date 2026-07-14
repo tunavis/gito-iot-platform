@@ -9,6 +9,17 @@ import {
   Mail, Settings,
 } from 'lucide-react';
 
+// IANA timezone database via the browser's own Intl API — no fake vocabulary,
+// no dependency, always current. supportedValuesOf() doesn't include the
+// "UTC" alias itself, so it's prepended explicitly.
+const TIMEZONES: string[] = (() => {
+  try {
+    return ['UTC', ...Intl.supportedValuesOf('timeZone')];
+  } catch {
+    return ['UTC'];
+  }
+})();
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface IntegrationsConfig {
@@ -82,7 +93,7 @@ function Input({
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
-      className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
     />
   );
 }
@@ -146,7 +157,14 @@ function ProfileTab({
         <Input value={email} onChange={setEmail} placeholder="ops@company.com" type="email" />
       </FieldRow>
       <FieldRow label="Timezone" hint="Used for scheduled reports and event timestamps">
-        <Input value={tz} onChange={setTz} placeholder="Africa/Johannesburg" />
+        <select
+          value={tz}
+          onChange={e => setTz(e.target.value)}
+          className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">Not set</option>
+          {TIMEZONES.map(tzName => (<option key={tzName} value={tzName}>{tzName}</option>))}
+        </select>
       </FieldRow>
       <div className="pt-4 flex justify-end">
         <SaveButton loading={saving} saved={saved} />
