@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import PageShell from '@/components/ui/PageShell';
 import LoadingState from '@/components/ui/LoadingState';
-import { btn, input } from '@/components/ui/buttonStyles';
+import IconTile from '@/components/ui/IconTile';
+import { btn, input, tag } from '@/components/ui/buttonStyles';
 import {
   ArrowLeft, Plus, Cpu, Thermometer, Radio, ToggleRight, MapPin, Zap,
   Camera, Settings, Check, AlertCircle, ChevronRight, Tag,
@@ -116,26 +117,33 @@ function SummaryRow({ label, value, mono }: { label: string; value: string; mono
 function StepBar({ steps, currentId }: { steps: { id: StepId; label: string }[]; currentId: StepId }) {
   const currentIndex = steps.findIndex(s => s.id === currentId);
   return (
-    <div className="flex items-center gap-0 px-6 py-4 bg-surface border-b border-th-subtle">
+    <div className="flex items-center gap-0 px-8 py-5 bg-surface border-b border-th-subtle">
       {steps.map((s, i) => {
         const done    = i < currentIndex;
         const current = i === currentIndex;
         return (
           <React.Fragment key={s.id}>
-            <div className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all
-                ${done    ? 'bg-emerald-500 text-white'
-                : current ? 'bg-primary-600 text-white'
-                :           'bg-panel text-th-muted'}`}>
-                {done ? <Check className="w-3.5 h-3.5" /> : i + 1}
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all duration-300 ${
+                done
+                  ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_2px_8px_rgba(16,185,129,0.35)]'
+                  : current
+                  ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-glow-sm ring-4 ring-primary-500/15'
+                  : 'bg-panel text-th-muted border border-th-subtle'
+              }`}>
+                {done ? <Check className="w-4 h-4" /> : i + 1}
               </div>
-              <span className={`text-sm font-medium hidden sm:block ${
+              <span className={`text-sm font-semibold hidden sm:block transition-colors ${
                 current ? 'text-th-primary' : done ? 'text-emerald-600' : 'text-th-muted'}`}>
                 {s.label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className={`flex-1 h-px mx-3 transition-colors ${i < currentIndex ? 'bg-emerald-300' : 'bg-panel'}`} />
+              <div className="flex-1 h-[3px] mx-4 rounded-full bg-panel overflow-hidden">
+                <div className={`h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out ${
+                  i < currentIndex ? 'w-full' : 'w-0'
+                }`} />
+              </div>
             )}
           </React.Fragment>
         );
@@ -353,7 +361,7 @@ function NewDeviceForm() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {deviceTypes.map(dt => {
                     const selected   = selectedType?.id === dt.id;
                     const schemaKeys = dt.telemetry_schema
@@ -362,16 +370,18 @@ function NewDeviceForm() {
 
                     return (
                       <button key={dt.id} onClick={() => setSelectedType(dt)}
-                        className={`p-4 text-left rounded-xl border transition-all ${
-                          selected
-                            ? 'bg-primary-50 border-primary-300 ring-2 ring-primary-100 shadow-sm'
-                            : 'bg-surface border-th-default hover:border-[var(--color-input-border)] hover:shadow-sm'
-                        }`}>
+                        className={`gito-card relative p-4 text-left transition-all duration-200 hover:-translate-y-0.5 ${selected ? '-translate-y-0.5' : ''}`}
+                        style={selected ? {
+                          borderColor: 'var(--color-primary)',
+                          background: 'linear-gradient(180deg, rgba(37,99,235,0.07) 0%, var(--color-surface) 65%)',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 10px 28px rgba(37,99,235,0.18)',
+                        } : undefined}>
+                        {selected && (
+                          <span className="absolute inset-y-0 left-0 w-1 rounded-l-[0.875rem]"
+                            style={{ background: 'linear-gradient(180deg, var(--color-primary) 0%, #1d4ed8 100%)' }} />
+                        )}
                         <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                            style={{ background: `${dt.color}15`, color: dt.color }}>
-                            {categoryIcons[dt.category] ?? <Cpu className="w-5 h-5" />}
-                          </div>
+                          <IconTile color={dt.color} icon={categoryIcons[dt.category] ?? <Cpu className="w-5 h-5" />} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-semibold text-th-primary">{dt.name}</span>
@@ -384,18 +394,19 @@ function NewDeviceForm() {
                               <p className="text-xs text-th-secondary mt-2 line-clamp-2">{dt.description}</p>
                             )}
                             {schemaKeys.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
+                              <div className="flex flex-wrap gap-1.5 mt-2.5">
                                 {schemaKeys.slice(0, 4).map(k => (
-                                  <span key={k} className="px-1.5 py-0.5 bg-panel rounded text-[10px] text-th-secondary">{k}</span>
+                                  <span key={k} className={tag.base}>{k}</span>
                                 ))}
                                 {schemaKeys.length > 4 && (
-                                  <span className="px-1.5 py-0.5 bg-panel rounded text-[10px] text-th-muted">+{schemaKeys.length - 4} more</span>
+                                  <span className={tag.more}>+{schemaKeys.length - 4}</span>
                                 )}
                               </div>
                             )}
                           </div>
                           {selected && (
-                            <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 shadow-[0_2px_6px_rgba(37,99,235,0.45)]"
+                              style={{ background: 'linear-gradient(155deg, var(--color-primary) 0%, #1d4ed8 100%)' }}>
                               <Check className="w-3 h-3 text-white" />
                             </div>
                           )}
@@ -416,7 +427,7 @@ function NewDeviceForm() {
                 <p className="text-sm text-th-secondary mt-0.5">Name and label this device within your fleet.</p>
               </div>
 
-              <div className="bg-surface border border-th-default rounded-xl shadow-sm divide-y divide-[var(--color-border-subtle)]">
+              <div className="gito-card divide-y divide-[var(--color-border-subtle)]">
                 <div className="p-5 space-y-4">
                   <FormRow label="Device Name" required>
                     <input autoFocus type="text" value={info.name}
@@ -488,7 +499,7 @@ function NewDeviceForm() {
                 </p>
               </div>
 
-              <div className="bg-surface border border-th-default rounded-xl shadow-sm p-5 space-y-4">
+              <div className="gito-card p-5 space-y-4">
                 <FormRow label="Device EUI (DevEUI)" required
                   hint="16-character hex identifier — printed on the device label.">
                   <input type="text" value={network.dev_eui}
@@ -529,7 +540,7 @@ function NewDeviceForm() {
                 <p className="text-sm text-th-secondary mt-0.5">Assign to a site and group for fleet organisation. All fields are optional.</p>
               </div>
 
-              <div className="bg-surface border border-th-default rounded-xl shadow-sm divide-y divide-[var(--color-border-subtle)]">
+              <div className="gito-card divide-y divide-[var(--color-border-subtle)]">
                 <div className="p-5 space-y-4">
                   <FormRow label="Site">
                     <select value={placement.site_id}
@@ -581,15 +592,12 @@ function NewDeviceForm() {
                 <p className="text-sm text-th-secondary mt-0.5">Confirm the configuration before creating the device.</p>
               </div>
 
-              <div className="bg-surface border border-th-default rounded-xl shadow-sm overflow-hidden">
+              <div className="gito-card overflow-hidden">
 
                 {/* Device type header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-th-subtle">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center"
-                      style={{ background: `${selectedType.color}15`, color: selectedType.color }}>
-                      {categoryIcons[selectedType.category] ?? <Cpu className="w-5 h-5" />}
-                    </div>
+                    <IconTile color={selectedType.color} icon={categoryIcons[selectedType.category] ?? <Cpu className="w-5 h-5" />} />
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-th-primary">{selectedType.name}</span>

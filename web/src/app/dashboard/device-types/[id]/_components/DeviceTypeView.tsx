@@ -4,6 +4,8 @@ import React from 'react';
 import { Cpu, Radio, Clock, BarChart3, Database } from 'lucide-react';
 import { Badge, CategoryBadge } from '@/components/ui/Badge';
 import StatCard from '@/components/ui/StatCard';
+import IconTile from '@/components/ui/IconTile';
+import { tag } from '@/components/ui/buttonStyles';
 import {
   categoryIcons,
   capabilityColors,
@@ -41,12 +43,7 @@ export default function DeviceTypeView({
       {/* Hero Identity */}
       <div className="gito-card p-6">
         <div className="flex items-start gap-4">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: `${dt.color}20`, color: dt.color }}
-          >
-            {categoryIcons[dt.category] || <Cpu className="w-6 h-6" />}
-          </div>
+          <IconTile color={dt.color} icon={categoryIcons[dt.category] || <Cpu className="w-6 h-6" />} size="lg" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-xl font-bold text-th-primary">{dt.name}</h2>
@@ -105,9 +102,7 @@ export default function DeviceTypeView({
         <div className="px-6 py-4 border-b border-th-default flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-th-primary">Metrics</h3>
-            <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary font-medium">
-              {metrics.length} defined
-            </span>
+            <Badge variant="neutral" label={`${metrics.length} defined`} size="sm" />
           </div>
         </div>
         {metrics.length === 0 ? (
@@ -169,9 +164,7 @@ export default function DeviceTypeView({
           <div className="px-6 py-4 border-b border-th-default flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold text-th-primary">Commands</h3>
-              <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary font-medium">
-                {commands.length} defined
-              </span>
+              <Badge variant="neutral" label={`${commands.length} defined`} size="sm" />
             </div>
           </div>
           <div className="divide-y divide-[var(--color-border-subtle)]">
@@ -180,14 +173,14 @@ export default function DeviceTypeView({
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm font-semibold text-th-primary">{cmd.name}</span>
                   {cmd.parameters.length === 0 && (
-                    <span className="px-1.5 py-0.5 bg-panel rounded text-[10px] text-th-secondary">Quick action</span>
+                    <Badge variant="info" label="Quick action" size="sm" />
                   )}
                 </div>
                 {cmd.description && <p className="text-xs text-th-secondary mt-0.5">{cmd.description}</p>}
                 {cmd.parameters.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {cmd.parameters.map((p) => (
-                      <span key={p.name} className="px-2 py-0.5 bg-page border border-th-subtle rounded text-[10px] font-mono text-th-secondary">
+                      <span key={p.name} className={tag.base}>
                         {p.name}: {p.type}{p.required ? '*' : ''}
                       </span>
                     ))}

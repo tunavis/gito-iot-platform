@@ -23,7 +23,8 @@ import StatCard from '@/components/ui/StatCard';
 import LoadingState from '@/components/ui/LoadingState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import EmptyState from '@/components/ui/EmptyState';
-import { btn, input } from '@/components/ui/buttonStyles';
+import { btn, input, tag } from '@/components/ui/buttonStyles';
+import IconTile from '@/components/ui/IconTile';
 import {
   categoryIcons,
   categoryLabels,
@@ -277,16 +278,11 @@ export default function DeviceTypesPage() {
                 {/* Card Header */}
                 <div
                   className="p-4 border-b border-th-subtle"
-                  style={{ backgroundColor: `${deviceType.color}10` }}
+                  style={{ background: `linear-gradient(155deg, ${deviceType.color}14 0%, transparent 70%)` }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: `${deviceType.color}20`, color: deviceType.color }}
-                      >
-                        {categoryIcons[deviceType.category] || <Cpu className="w-5 h-5" />}
-                      </div>
+                      <IconTile color={deviceType.color} icon={categoryIcons[deviceType.category] || <Cpu className="w-5 h-5" />} />
                       <div>
                         <h3 className="font-semibold text-th-primary">{deviceType.name}</h3>
                         <p className="text-xs text-th-secondary">
@@ -358,17 +354,14 @@ export default function DeviceTypesPage() {
                     </h4>
                     <div className="flex flex-wrap gap-1.5">
                       {(deviceType.data_model || []).slice(0, 4).map((field) => (
-                        <span
-                          key={field.name}
-                          className="px-2 py-0.5 bg-panel rounded text-xs text-th-secondary"
-                        >
+                        <span key={field.name} className={tag.base}>
                           {field.name}
                           {field.unit && <span className="text-th-muted ml-1">({field.unit})</span>}
                         </span>
                       ))}
                       {(deviceType.data_model?.length || 0) > 4 && (
-                        <span className="px-2 py-0.5 bg-panel rounded text-xs text-th-muted">
-                          +{deviceType.data_model.length - 4} more
+                        <span className={tag.more}>
+                          +{deviceType.data_model.length - 4}
                         </span>
                       )}
                     </div>
@@ -386,7 +379,7 @@ export default function DeviceTypesPage() {
                           return (
                             <span
                               key={cap}
-                              className="px-2 py-0.5 rounded text-xs font-medium"
+                              className="px-2.5 py-1 rounded-full text-xs font-semibold"
                               style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}
                             >
                               {capabilityLabels[cap] || cap}
@@ -437,12 +430,7 @@ export default function DeviceTypesPage() {
                   <div className="grid grid-cols-12 gap-4 items-center">
                     <div className="col-span-3">
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: `${deviceType.color}20`, color: deviceType.color }}
-                        >
-                          {categoryIcons[deviceType.category] || <Cpu className="w-4 h-4" />}
-                        </div>
+                        <IconTile color={deviceType.color} icon={categoryIcons[deviceType.category] || <Cpu className="w-4 h-4" />} size="sm" />
                         <div>
                           <p className="text-sm font-semibold text-th-primary">{deviceType.name}</p>
                           <p className="text-xs text-th-muted">{deviceType.manufacturer || 'Generic'}</p>

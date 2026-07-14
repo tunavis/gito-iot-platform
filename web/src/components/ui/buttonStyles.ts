@@ -13,3 +13,10 @@ export const input = {
   base:   "w-full px-3 py-2 border border-[var(--color-input-border)] bg-[var(--color-input-bg)] text-th-primary rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all placeholder:text-th-muted",
   select: "w-full px-3 py-2 border border-[var(--color-input-border)] bg-[var(--color-input-bg)] text-th-primary rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500",
 } as const;
+
+/** Small data-tag pills (schema fields, capabilities) — a lighter-weight,
+ * monospace alternative to Badge for dense lists of technical identifiers. */
+export const tag = {
+  base: "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-panel border border-th-subtle text-th-secondary",
+  more: "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium border border-dashed border-th-subtle text-th-muted",
+} as const;
