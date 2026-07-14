@@ -62,7 +62,7 @@ interface Device {
   firmware_version?: string | null;
   hardware_version?: string | null;
   dev_eui?: string | null;
-  chirpstack_app_id?: string | null;
+  ttn_app_id?: string | null;
   device_profile_id?: string | null;
   organization_id: string;
   site_id: string;
@@ -108,7 +108,7 @@ export default function EditDevicePage() {
     tags: [] as string[],
     newTag: '',
     dev_eui: '',
-    chirpstack_app_id: '',
+    ttn_app_id: '',
     device_profile_id: '',
     organization_id: '',
     site_id: '',
@@ -174,7 +174,7 @@ export default function EditDevicePage() {
         tags: deviceData.attributes?.tags || [],
         newTag: '',
         dev_eui: deviceData.dev_eui || '',
-        chirpstack_app_id: deviceData.chirpstack_app_id || '',
+        ttn_app_id: deviceData.ttn_app_id || '',
         device_profile_id: deviceData.device_profile_id || '',
         organization_id: deviceData.organization_id || '',
         site_id: deviceData.site_id || '',
@@ -258,14 +258,14 @@ export default function EditDevicePage() {
         },
         firmware_version: form.firmware_version || undefined,
         hardware_version: form.hardware_version || undefined,
-        organization_id: form.organization_id,
-        site_id: form.site_id,
-        device_group_id: form.device_group_id,
+        organization_id: form.organization_id || null,
+        site_id: form.site_id || null,
+        device_group_id: form.device_group_id || null,
       };
 
       // LoRaWAN fields
       if (form.dev_eui) body.dev_eui = form.dev_eui;
-      if (form.chirpstack_app_id) body.chirpstack_app_id = form.chirpstack_app_id;
+      if (form.ttn_app_id) body.ttn_app_id = form.ttn_app_id;
       if (form.device_profile_id) body.device_profile_id = form.device_profile_id;
 
       const response = await fetch(
@@ -461,13 +461,15 @@ export default function EditDevicePage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-th-primary mb-1">ChirpStack App ID</label>
+                  <label className="block text-sm font-medium text-th-primary mb-1">Application ID</label>
                   <input
                     type="text"
-                    value={form.chirpstack_app_id}
-                    onChange={e => setForm(prev => ({ ...prev, chirpstack_app_id: e.target.value }))}
+                    value={form.ttn_app_id}
+                    onChange={e => setForm(prev => ({ ...prev, ttn_app_id: e.target.value }))}
+                    placeholder="e.g. my-application-v3"
                     className={input.base}
                   />
+                  <p className="text-xs text-th-secondary mt-1">Application ID from your TTN console or ChirpStack instance.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-th-primary mb-1">Device Profile ID</label>
@@ -477,6 +479,7 @@ export default function EditDevicePage() {
                     onChange={e => setForm(prev => ({ ...prev, device_profile_id: e.target.value }))}
                     className={input.base}
                   />
+                  <p className="text-xs text-th-secondary mt-1">ChirpStack device profile UUID that defines this device&apos;s codec and behavior (optional).</p>
                 </div>
               </div>
             </div>
@@ -486,56 +489,53 @@ export default function EditDevicePage() {
           <div className="bg-surface border border-th-default rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-th-primary mb-4">Placement</h2>
             <div className="space-y-4">
-              {/* Organization (required) */}
+              {/* Organization (optional) */}
               <div>
                 <label className="block text-sm font-medium text-th-primary mb-1">
-                  <Building className="w-4 h-4 inline mr-1" /> Organization <span className="text-red-500">*</span>
+                  <Building className="w-4 h-4 inline mr-1" /> Organization
                 </label>
                 <select
                   value={form.organization_id}
                   onChange={e => setForm(prev => ({ ...prev, organization_id: e.target.value, site_id: '', device_group_id: '' }))}
                   className={input.select}
-                  required
                 >
-                  <option value="">Select organization...</option>
+                  <option value="">No organization assigned</option>
                   {organizations.map(org => (
                     <option key={org.id} value={org.id}>{org.name}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Site (required, filtered by org) */}
+              {/* Site (optional, filtered by org) */}
               <div>
                 <label className="block text-sm font-medium text-th-primary mb-1">
-                  <Building className="w-4 h-4 inline mr-1" /> Site <span className="text-red-500">*</span>
+                  <Building className="w-4 h-4 inline mr-1" /> Site
                 </label>
                 <select
                   value={form.site_id}
                   onChange={e => setForm(prev => ({ ...prev, site_id: e.target.value, device_group_id: '' }))}
                   className={input.select}
                   disabled={!form.organization_id}
-                  required
                 >
-                  <option value="">{form.organization_id ? 'Select site...' : 'Select organization first'}</option>
+                  <option value="">{form.organization_id ? 'No site assigned' : 'Select organization first'}</option>
                   {sites.map(site => (
                     <option key={site.id} value={site.id}>{site.name}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Device Group (required, filtered by site) */}
+              {/* Device Group (optional, filtered by site) */}
               <div>
                 <label className="block text-sm font-medium text-th-primary mb-1">
-                  <Layers className="w-4 h-4 inline mr-1" /> Device Group <span className="text-red-500">*</span>
+                  <Layers className="w-4 h-4 inline mr-1" /> Device Group
                 </label>
                 <select
                   value={form.device_group_id}
                   onChange={e => setForm(prev => ({ ...prev, device_group_id: e.target.value }))}
                   className={input.select}
                   disabled={!form.site_id}
-                  required
                 >
-                  <option value="">{form.site_id ? 'Select device group...' : 'Select site first'}</option>
+                  <option value="">{form.site_id ? 'No group assigned' : 'Select site first'}</option>
                   {deviceGroups.map(group => (
                     <option key={group.id} value={group.id}>{group.name}</option>
                   ))}

@@ -26,6 +26,18 @@ interface Organization {
   name: string;
 }
 
+// IANA timezone database via the browser's own Intl API — no fake vocabulary,
+// no dependency, always current. supportedValuesOf() doesn't include the
+// "UTC" alias itself (only real zone names), but it's the field's own
+// default value, so it must always be a valid, selectable option.
+const TIMEZONES: string[] = (() => {
+  try {
+    return ['UTC', ...Intl.supportedValuesOf('timeZone')];
+  } catch {
+    return ['UTC'];
+  }
+})();
+
 export default function SitesPage() {
   const toast = useToast();
   const [sites, setSites] = useState<Site[]>([]);
@@ -214,6 +226,7 @@ function SiteForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [formData, setFormData] = useState({
     organization_id: site?.organization_id || '',
     parent_site_id: site?.parent_site_id || '',
@@ -262,9 +275,12 @@ function SiteForm({
       },
       body: JSON.stringify(payload)
     });
-    
+
     if (res.ok) {
       onSuccess();
+    } else {
+      const e = await res.json().catch(() => ({}));
+      toast.error('Failed to save site', e.detail || 'Please check your input and try again.');
     }
   };
 
@@ -293,8 +309,9 @@ function SiteForm({
             <input type="text" required value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className={input.base} placeholder="Building A" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Site Type</label>
-            <input type="text" value={formData.site_type} onChange={e => setFormData(prev => ({ ...prev, site_type: e.target.value }))} className={input.base} placeholder="warehouse, office, factory..." />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Category (optional)</label>
+            <input type="text" value={formData.site_type} onChange={e => setFormData(prev => ({ ...prev, site_type: e.target.value }))} className={input.base} placeholder="e.g. Warehouse" />
+            <p className="text-xs text-th-muted mt-1">Free-text label for your own organization — not used by anything else in Gito.</p>
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Address</label>
@@ -310,7 +327,9 @@ function SiteForm({
           </div>
           <div>
             <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Timezone</label>
-            <input type="text" value={formData.timezone} onChange={e => setFormData(prev => ({ ...prev, timezone: e.target.value }))} className={input.base} placeholder="UTC, America/New_York..." />
+            <select value={formData.timezone} onChange={e => setFormData(prev => ({ ...prev, timezone: e.target.value }))} className={input.select}>
+              {TIMEZONES.map(tz => (<option key={tz} value={tz}>{tz}</option>))}
+            </select>
           </div>
         </div>
         <div className="flex gap-3">

@@ -255,11 +255,15 @@ async def update_device(
         device.tags = device_data.tags
     if device_data.attributes is not None:
         device.attributes = device_data.attributes
-    if device_data.organization_id is not None:
+    # Hierarchy fields use model_fields_set (not "is not None") so an explicit
+    # null actually clears the assignment instead of being silently ignored —
+    # these are the only fields on this endpoint a client can legitimately
+    # want to unassign, since org/site/group are optional device attributes.
+    if "organization_id" in device_data.model_fields_set:
         device.organization_id = device_data.organization_id
-    if device_data.site_id is not None:
+    if "site_id" in device_data.model_fields_set:
         device.site_id = device_data.site_id
-    if device_data.device_group_id is not None:
+    if "device_group_id" in device_data.model_fields_set:
         device.device_group_id = device_data.device_group_id
     if device_data.dev_eui is not None:
         device.dev_eui = device_data.dev_eui

@@ -275,9 +275,12 @@ function DeviceGroupForm({
       },
       body: JSON.stringify(payload)
     });
-    
+
     if (res.ok) {
       onSuccess();
+    } else {
+      const e = await res.json().catch(() => ({}));
+      toast.error('Failed to save device group', e.detail || 'Please check your input and try again.');
     }
   };
 
@@ -292,8 +295,9 @@ function DeviceGroupForm({
             <input type="text" required value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} className={input.base} placeholder="Production Sensors" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Group Type</label>
-            <input type="text" value={formData.group_type} onChange={e => setFormData(prev => ({ ...prev, group_type: e.target.value }))} className={input.base} placeholder="static, dynamic, test..." />
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Category (optional)</label>
+            <input type="text" value={formData.group_type} onChange={e => setFormData(prev => ({ ...prev, group_type: e.target.value }))} className={input.base} placeholder="e.g. Production" />
+            <p className="text-xs text-th-muted mt-1">Free-text label for your own organization — not used by anything else in Gito.</p>
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">Description</label>

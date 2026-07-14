@@ -174,6 +174,7 @@ function OrganizationForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [formData, setFormData] = useState({
     name: organization?.name || '',
     slug: organization?.slug || '',
@@ -204,9 +205,12 @@ function OrganizationForm({
       },
       body: JSON.stringify(formData)
     });
-    
+
     if (res.ok) {
       onSuccess();
+    } else {
+      const e = await res.json().catch(() => ({}));
+      toast.error('Failed to save organization', e.detail || 'Please check your input and try again.');
     }
   };
 
@@ -264,14 +268,15 @@ function OrganizationForm({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">ChirpStack App ID</label>
+            <label className="block text-xs font-bold text-th-muted uppercase tracking-wider mb-1.5">ChirpStack App ID (optional)</label>
             <input
               type="text"
               value={formData.chirpstack_app_id}
               onChange={e => setFormData(prev => ({ ...prev, chirpstack_app_id: e.target.value }))}
               className={input.base}
-              placeholder="Optional"
+              placeholder="e.g. my-application-v3"
             />
+            <p className="text-xs text-th-muted mt-1">ChirpStack application ID this organization&apos;s devices sync to when provisioned.</p>
           </div>
           {organization && (
             <div>
