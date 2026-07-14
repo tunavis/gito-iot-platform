@@ -111,6 +111,15 @@ a {
 }
 a:hover { opacity: 0.8; }
 
+/* Lucide ships at stroke-width 2, which reads thin/generic at the small sizes
+   used throughout the app. CSS beats the SVG presentation attribute lucide
+   sets, so this is a single app-wide bump with no per-icon changes needed —
+   custom hand-drawn SVGs (gauges, dials) don't carry the .lucide class and
+   are unaffected. */
+svg.lucide {
+  stroke-width: 2.25;
+}
+
 button {
   font-family: inherit;
   font-size: 0.875rem;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Table as TableIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import IconTile from "@/components/ui/IconTile";
 
 interface ColumnConfig {
   field: string;
@@ -171,7 +172,7 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-th-secondary">
-          <TableIcon className="w-12 h-12 mx-auto mb-2 text-th-muted" />
+          <IconTile color="#64748b" icon={<TableIcon className="w-6 h-6" />} size="lg" className="mx-auto mb-3" />
           <p className="text-sm">No data available</p>
         </div>
       </div>

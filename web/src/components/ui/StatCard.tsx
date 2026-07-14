@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import IconTile from './IconTile';
 
 interface StatCardProps {
   label: string;
@@ -29,18 +30,7 @@ export default function StatCard({ label, value, icon, trend, color, accent }: S
         >
           {label}
         </span>
-        {icon && (
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{
-              background: `${accentColor}14`,
-              color: accentColor,
-              border: `1px solid ${accentColor}28`,
-            }}
-          >
-            {icon}
-          </div>
-        )}
+        {icon && <IconTile color={accentColor} icon={icon} size="sm" />}
       </div>
 
       <div className="flex items-end gap-2">

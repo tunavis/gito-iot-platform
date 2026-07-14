@@ -14,6 +14,7 @@ import {
   Battery,
   Radio,
 } from "lucide-react";
+import IconTile from "@/components/ui/IconTile";
 
 interface DeviceInfoConfig {
   show_image?: boolean;
@@ -301,7 +302,7 @@ export default function DeviceInfoWidget({
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-th-secondary">
-          <Activity className="w-12 h-12 mx-auto mb-2 text-th-muted" />
+          <IconTile color="#64748b" icon={<Activity className="w-6 h-6" />} size="lg" className="mx-auto mb-3" />
           <p className="text-sm">No device selected</p>
         </div>
       </div>

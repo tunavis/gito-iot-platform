@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { MapPin } from "lucide-react";
+import IconTile from "@/components/ui/IconTile";
 
 // Dynamically import Leaflet components to avoid SSR issues
 const MapContainer = dynamic(
@@ -160,7 +161,7 @@ export default function MapWidget({ config, dataSources }: MapWidgetProps) {
     return (
       <div className="flex items-center justify-center h-full bg-page p-4">
         <div className="text-center text-th-secondary max-w-xs">
-          <MapPin className="w-12 h-12 mx-auto mb-2 text-th-muted" />
+          <IconTile color="#64748b" icon={<MapPin className="w-6 h-6" />} size="lg" className="mx-auto mb-3" />
           <p className="text-sm font-medium text-th-primary mb-1">
             No Device Locations Set
           </p>
