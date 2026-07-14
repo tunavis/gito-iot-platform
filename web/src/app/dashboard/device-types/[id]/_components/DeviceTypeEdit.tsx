@@ -5,10 +5,12 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Download,
 } from 'lucide-react';
 import ProtocolSelector from '@/components/ProtocolSelector';
 import ProtocolConfigForm from '@/components/ProtocolConfigForm';
-import { input } from '@/components/ui/buttonStyles';
+import { btn, input } from '@/components/ui/buttonStyles';
+import { useToast } from '@/components/ToastProvider';
 import {
   CATEGORIES,
   CAPABILITIES,
@@ -16,7 +18,8 @@ import {
   UNIT_SUGGESTIONS,
 } from '../../_constants';
 import type { DeviceTypeForm, DiscoveredMetric, UnifiedMetric, CommandDef } from '../../_types';
-import { splitMetrics } from '../../_metrics';
+import { splitMetrics, mergeMetrics } from '../../_metrics';
+import { VENDOR_PRESETS } from '../../_vendorPresets';
 import DiscoveredMetricsPanel from './DiscoveredMetricsPanel';
 import MetricsTable from './MetricsTable';
 import CommandsTable from './CommandsTable';
@@ -42,6 +45,7 @@ export default function DeviceTypeEdit({
   discoveredLoading,
   onRefreshDiscovered,
 }: DeviceTypeEditProps) {
+  const toast = useToast();
   const [expandedSections, setExpandedSections] = React.useState({
     basic: true,
     metrics: true,
@@ -50,9 +54,36 @@ export default function DeviceTypeEdit({
     settings: false,
     connectivity: false,
   });
+  const [showPresetMenu, setShowPresetMenu] = React.useState(false);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections({ ...expandedSections, [section]: !expandedSections[section] });
+  };
+
+  const loadVendorPreset = async (presetId: string) => {
+    const preset = VENDOR_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setShowPresetMenu(false);
+
+    if (form.metrics.length > 0) {
+      const ok = await toast.confirm(
+        `This replaces the ${form.metrics.length} metric(s) already defined with ${preset.vendor} ${preset.model}'s preset. This can't be undone.`,
+        { title: 'Replace metrics with preset?', variant: 'danger', confirmLabel: 'Replace' }
+      );
+      if (!ok) return;
+    }
+
+    const metrics = mergeMetrics(preset.dataModel, { type: 'declarative', fields: preset.decoderFields }, {});
+    setForm({
+      ...form,
+      metrics,
+      manufacturer: preset.vendor,
+      model: preset.model,
+      category: preset.category,
+      description: form.description || preset.description,
+      connectivity: { ...form.connectivity, protocol: preset.protocol },
+    });
+    toast.success('Preset loaded', `${preset.vendor} ${preset.model} — ${metrics.length} metrics defined. Review and save.`);
   };
 
   const toggleCapability = (cap: string) => {
@@ -221,6 +252,34 @@ export default function DeviceTypeEdit({
         <SectionHeader sectionKey="metrics" title="Metrics" badge={`${form.metrics.length} defined`} />
         {expandedSections.metrics && (
           <div className="px-6 pb-6 border-t border-th-default pt-4 space-y-4">
+            <div className="relative flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPresetMenu((v) => !v)}
+                className={`${btn.secondary} flex items-center gap-2 text-sm`}
+              >
+                <Download className="w-3.5 h-3.5" />
+                Load Vendor Preset
+              </button>
+              {showPresetMenu && (
+                <div className="absolute right-0 top-full mt-1 w-72 bg-surface border border-th-default rounded-lg shadow-lg z-10 py-1">
+                  {VENDOR_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => loadVendorPreset(preset.id)}
+                      className="w-full px-3 py-2.5 text-left hover:bg-page transition-colors"
+                    >
+                      <p className="text-sm font-medium text-th-primary">{preset.vendor} {preset.model}</p>
+                      <p className="text-xs text-th-muted mt-0.5">
+                        {preset.category} · {preset.protocol.toUpperCase()} · {preset.dataModel.length} metrics
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <MetricsTable
               metrics={form.metrics}
               fPort={form.decoderFPort}

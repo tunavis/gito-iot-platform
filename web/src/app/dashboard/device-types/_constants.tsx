@@ -104,6 +104,7 @@ export const DECODER_FIELD_TYPES = [
   { value: 'uint32', label: 'uint32 (4 bytes)' },
   { value: 'int32', label: 'int32 (4 bytes)' },
   { value: 'float32', label: 'float32 (4 bytes)' },
+  { value: 'bcd', label: 'BCD (packed decimal)' },
 ];
 
 export const fieldTypeBadgeStyles: Record<string, { bg: string; color: string; border: string }> = {

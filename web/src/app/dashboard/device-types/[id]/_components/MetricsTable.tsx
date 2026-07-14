@@ -21,6 +21,7 @@ interface MetricsTableProps {
 
 const BYTE_LEN: Record<DecoderField['type'], number> = {
   uint8: 1, int8: 1, uint16: 2, int16: 2, uint32: 4, int32: 4, float32: 4,
+  bcd: 4, // packed decimal has no fixed size — 4 bytes (8 digits) covers the common counter case, freely editable
 };
 
 const NEW_METRIC: UnifiedMetric = {
@@ -184,10 +185,30 @@ export default function MetricsTable({ metrics, fPort, onChange, onFPortChange }
                     <option value="big">big</option>
                     <option value="little">little</option>
                   </select>
+                  {m.source.byteType === 'bcd' && (
+                    <p className="text-[10px] text-th-muted mt-1 w-[90px]">little = last byte most significant</p>
+                  )}
                 </Field>
+                {m.source.byteType !== 'bcd' && m.source.byteType !== 'float32' && (
+                  <Field label="Bit (optional)">
+                    <input
+                      type="number" min={0} max={7}
+                      value={m.source.bit ?? ''}
+                      onChange={(e) => updateDecode(i, { bit: e.target.value === '' ? undefined : Number(e.target.value) })}
+                      placeholder="whole field"
+                      className={`${inputCls} w-[90px]`}
+                    />
+                  </Field>
+                )}
                 <Field label="Scale"><input type="number" step="any" value={m.source.scale} onChange={(e) => updateDecode(i, { scale: Number(e.target.value) })} className={`${inputCls} w-[80px]`} /></Field>
                 <Field label="± Offset"><input type="number" step="any" value={m.source.value_offset} onChange={(e) => updateDecode(i, { value_offset: Number(e.target.value) })} className={`${inputCls} w-[80px]`} /></Field>
               </div>
+            )}
+            {m.source.mode === 'decode' && m.source.bit != null && (
+              <p className="text-xs text-th-muted mt-2">
+                Reads only bit {m.source.bit} of this byte as 0/1 — for pulling one flag out of a packed status byte
+                (e.g. bit 3 of an alarms byte). Leave blank to use the whole field&apos;s numeric value instead.
+              </p>
             )}
           </div>
         </div>

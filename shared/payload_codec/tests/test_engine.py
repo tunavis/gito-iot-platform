@@ -204,6 +204,85 @@ def test_one_bad_field_does_not_block_others():
     assert decode(spec, b64(">B", 3), 1) == {"good": 3.0}
 
 
+# ── BCD fields (packed decimal, e.g. B METERS IWM-LR3/LR4 volume counters) ──
+
+def test_decode_bcd_little_endian_matches_b_meters_manual_example():
+    # IWM-LR3/LR4 user manual worked example: bytes 74 20 01 00 -> 12074 liters
+    raw = bytes([0x74, 0x20, 0x01, 0x00])
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [field("total", 0, 4, "bcd", endian="little")]}
+    assert decode(spec, raw_b64, None) == {"total": 12074.0}
+
+
+def test_decode_bcd_big_endian():
+    raw = bytes([0x00, 0x01, 0x20, 0x74])
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [field("total", 0, 4, "bcd", endian="big")]}
+    assert decode(spec, raw_b64, None) == {"total": 12074.0}
+
+
+def test_decode_bcd_invalid_nibble_is_skipped():
+    raw = bytes([0xFA])  # 0xF is not a valid decimal digit
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [field("v", 0, 1, "bcd")]}
+    assert decode(spec, raw_b64, None) == {}
+
+
+def test_bcd_scale_applied():
+    raw = bytes([0x74, 0x20, 0x01, 0x00])
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [
+        field("total_m3", 0, 4, "bcd", endian="little", scale=0.001)
+    ]}
+    assert decode(spec, raw_b64, None)["total_m3"] == pytest.approx(12.074)
+
+
+def test_bcd_out_of_bounds_is_skipped():
+    spec = {"type": "declarative", "fields": [field("v", 0, 4, "bcd")]}
+    assert decode(spec, b64(">B", 1), None) == {}
+
+
+# ── Single-bit extraction (e.g. reading one flag out of a packed alarm byte) ─
+
+def test_decode_single_bit_set():
+    spec = {"type": "declarative", "fields": [field("leak", 0, 1, "uint8", bit=3)]}
+    assert decode(spec, b64(">B", 0b00001000), 1) == {"leak": 1.0}
+
+
+def test_decode_single_bit_unset():
+    spec = {"type": "declarative", "fields": [field("leak", 0, 1, "uint8", bit=3)]}
+    assert decode(spec, b64(">B", 0b00000000), 1) == {"leak": 0.0}
+
+
+def test_decode_multiple_bits_from_same_byte():
+    # B METERS alarms byte 0x02 -> bit 1 (removal) set, others clear
+    spec = {"type": "declarative", "fields": [
+        field("magnetic_alarm", 12, 1, "uint8", bit=0),
+        field("removal_alarm", 12, 1, "uint8", bit=1),
+        field("leakage_alarm", 12, 1, "uint8", bit=3),
+    ]}
+    raw = bytes([0] * 12 + [0x02])
+    raw_b64 = base64.b64encode(raw).decode()
+    assert decode(spec, raw_b64, None) == {
+        "magnetic_alarm": 0.0, "removal_alarm": 1.0, "leakage_alarm": 0.0,
+    }
+
+
+def test_bit_out_of_range_is_skipped():
+    spec = {"type": "declarative", "fields": [field("v", 0, 1, "uint8", bit=8)]}
+    assert decode(spec, b64(">B", 255), 1) == {}
+
+
+def test_bit_on_float32_is_skipped():
+    spec = {"type": "declarative", "fields": [field("v", 0, 4, "float32", bit=0)]}
+    assert decode(spec, b64(">f", 1.5), 1) == {}
+
+
+def test_bit_omitted_decodes_whole_field_unchanged():
+    spec = {"type": "declarative", "fields": [field("v", 0, 1, "uint8")]}
+    assert decode(spec, b64(">B", 0b00001000), 1) == {"v": 8.0}
+
+
 # ── fPort filtering ───────────────────────────────────────────────────────────
 
 def test_f_port_match_decodes():

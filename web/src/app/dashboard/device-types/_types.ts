@@ -21,10 +21,14 @@ export interface DecoderField {
   name: string;
   offset: number;
   length: number;
-  type: 'uint8' | 'int8' | 'uint16' | 'int16' | 'uint32' | 'int32' | 'float32';
+  type: 'uint8' | 'int8' | 'uint16' | 'int16' | 'uint32' | 'int32' | 'float32' | 'bcd';
   endian?: 'big' | 'little';
   scale?: number;
   value_offset?: number;
+  /** Extract a single bit (0-7) from the unpacked field instead of its whole
+   * numeric value — e.g. reading one flag out of a packed alarm byte. Not
+   * valid on 'bcd' or 'float32' fields. */
+  bit?: number;
 }
 
 /**
@@ -126,6 +130,7 @@ export type MetricSource =
       endian: 'big' | 'little';
       scale: number;
       value_offset: number;
+      bit?: number;
     }
   | { mode: 'rename'; rawKey: string };
 
