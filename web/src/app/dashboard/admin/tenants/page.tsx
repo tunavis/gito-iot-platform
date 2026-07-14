@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import Modal from '@/components/ui/Modal';
+import IconTile from '@/components/ui/IconTile';
 import { btn, input } from '@/components/ui/buttonStyles';
 import {
   Building2, Plus, Smartphone, Users, AlertTriangle,
@@ -388,7 +389,7 @@ export default function AdminTenantsPage() {
           </div>
         ) : tenants.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
-            <Building2 className="w-10 h-10 mb-3 opacity-30" />
+            <IconTile color="#64748b" icon={<Building2 className="w-5 h-5" />} className="mb-3" />
             <p className="text-sm font-medium">No client tenants yet</p>
             <p className="text-xs mt-1 opacity-60">Create your first client tenant to get started</p>
             <button

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import PageShell from '@/components/ui/PageShell';
 import Modal from '@/components/ui/Modal';
+import EmptyState from '@/components/ui/EmptyState';
 import { btn, input } from '@/components/ui/buttonStyles';
 import {
   Link2, Plus, RefreshCw, Trash2, CheckCircle, XCircle,
@@ -971,20 +972,12 @@ export default function ConnectionsPage() {
             Loading connections…
           </div>
         ) : integrations.length === 0 ? (
-          <div className="gito-card rounded-xl p-12 text-center">
-            <Link2 className="w-10 h-10 mx-auto mb-3 text-[var(--color-text-secondary)] opacity-40" />
-            <p className="text-sm font-medium text-[var(--color-text-primary)]">No connections yet</p>
-            <p className="text-xs text-[var(--color-text-secondary)] mt-1 mb-4">
-              Add your first connection to start receiving device data from ChirpStack, TTN, or MQTT.
-            </p>
-            <button
-              onClick={() => setShowAdd(true)}
-              className={`inline-flex items-center gap-2 ${btn.primary}`}
-            >
-              <Plus className="w-4 h-4" />
-              Add connection
-            </button>
-          </div>
+          <EmptyState
+            icon={<Link2 className="w-8 h-8" />}
+            title="No connections yet"
+            description="Add your first connection to start receiving device data from ChirpStack, TTN, or MQTT."
+            action={{ label: 'Add connection', onClick: () => setShowAdd(true) }}
+          />
         ) : (
           <div className="space-y-3">
             {integrations.map(integration => (

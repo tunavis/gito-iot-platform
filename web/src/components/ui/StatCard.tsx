@@ -8,9 +8,12 @@ interface StatCardProps {
   trend?: { value: number; direction: 'up' | 'down' };
   color?: string;
   accent?: string;
+  /** Small descriptive line under the value, e.g. "56% of fleet". */
+  caption?: string;
+  captionColor?: string;
 }
 
-export default function StatCard({ label, value, icon, trend, color, accent }: StatCardProps) {
+export default function StatCard({ label, value, icon, trend, color, accent, caption, captionColor }: StatCardProps) {
   const accentColor = accent || '#2563eb';
 
   return (
@@ -56,6 +59,11 @@ export default function StatCard({ label, value, icon, trend, color, accent }: S
           </span>
         )}
       </div>
+      {caption && (
+        <p className="text-xs mt-1" style={captionColor ? { color: captionColor } : { color: 'var(--color-text-muted)' }}>
+          {caption}
+        </p>
+      )}
     </div>
   );
 }

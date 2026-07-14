@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import PageShell from '@/components/ui/PageShell';
+import IconTile from '@/components/ui/IconTile';
 import {
   Building2, MapPin, Layers, Cpu, ChevronRight, ChevronDown,
   Bell, Wifi, Search, GitBranch, AlertTriangle, CheckCircle2,
@@ -208,7 +209,7 @@ function DetailPanel({ node }: { node: SelectedNode | null }) {
   if (!node) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--color-text-muted)' }}>
-        <GitBranch className="w-10 h-10 opacity-20" />
+        <IconTile color="#64748b" icon={<GitBranch className="w-5 h-5" />} />
         <p className="text-sm">Select a node to see details</p>
       </div>
     );
@@ -227,10 +228,7 @@ function DetailPanel({ node }: { node: SelectedNode | null }) {
     return (
       <div className="p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)' }}>
-            <Building2 className="w-5 h-5" style={{ color: 'var(--color-text-secondary)' }} />
-          </div>
+          <IconTile color="#64748b" icon={<Building2 className="w-5 h-5" />} />
           <div>
             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>{org.name}</h2>
             <span className="text-[11px] px-2 py-0.5 rounded-full font-medium"
@@ -271,10 +269,7 @@ function DetailPanel({ node }: { node: SelectedNode | null }) {
     return (
       <div className="p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)' }}>
-            <MapPin className="w-5 h-5" style={{ color: 'var(--color-text-secondary)' }} />
-          </div>
+          <IconTile color="#64748b" icon={<MapPin className="w-5 h-5" />} />
           <div>
             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>{site.name}</h2>
             {site.site_type && (
@@ -310,10 +305,7 @@ function DetailPanel({ node }: { node: SelectedNode | null }) {
     return (
       <div className="p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)' }}>
-            <Layers className="w-5 h-5" style={{ color: 'var(--color-text-secondary)' }} />
-          </div>
+          <IconTile color="#64748b" icon={<Layers className="w-5 h-5" />} />
           <div>
             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>{group.name}</h2>
             {group.group_type && (
@@ -364,10 +356,7 @@ function SummaryBar({ orgs }: { orgs: OrgNode[] }) {
         { label: 'Active Alarms',value: totalAlarms,  icon: <Bell className="w-4 h-4" />,            color: totalAlarms > 0 ? '#ef4444' : '#22c55e' },
       ].map(({ label, value, icon, color }) => (
         <div key={label} className="gito-card p-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: `${color}18`, color }}>
-            {icon}
-          </div>
+          <IconTile color={color} icon={icon} size="sm" />
           <div>
             <p className="text-xl font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{value}</p>
             <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
@@ -463,7 +452,7 @@ export default function HierarchyPage() {
               <div className="flex-1 overflow-y-auto p-3 space-y-1">
                 {filteredOrgs.length === 0 ? (
                   <div className="text-center py-8">
-                    <Building2 className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: 'var(--color-text-muted)' }} />
+                    <IconTile color="#64748b" icon={<Building2 className="w-4 h-4" />} size="sm" className="mx-auto mb-2" />
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       {search ? 'No matches found' : 'No clients configured'}
                     </p>

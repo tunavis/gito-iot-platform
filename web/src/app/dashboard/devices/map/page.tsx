@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import PageShell from '@/components/ui/PageShell';
+import IconTile from '@/components/ui/IconTile';
 import { btn, input } from '@/components/ui/buttonStyles';
 import {
   MapPin,
@@ -204,9 +205,7 @@ export default function DeviceMapPage() {
         <div className="bg-surface border-b border-th-default px-8 py-4">
           <div className="grid grid-cols-5 gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-primary-600" />
-              </div>
+              <IconTile color="#2563eb" icon={<MapPin className="w-5 h-5" />} />
               <div>
                 <p className="text-xs text-th-secondary">Total Devices</p>
                 <p className="text-2xl font-bold text-th-primary">{stats.total}</p>
@@ -214,9 +213,7 @@ export default function DeviceMapPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-              </div>
+              <IconTile color="#16a34a" icon={<CheckCircle2 className="w-5 h-5" />} />
               <div>
                 <p className="text-xs text-th-secondary">Online</p>
                 <p className="text-2xl font-bold text-green-600">{stats.online}</p>
@@ -224,9 +221,7 @@ export default function DeviceMapPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <XCircle className="w-5 h-5 text-red-600" />
-              </div>
+              <IconTile color="#dc2626" icon={<XCircle className="w-5 h-5" />} />
               <div>
                 <p className="text-xs text-th-secondary">Offline</p>
                 <p className="text-2xl font-bold text-red-600">{stats.offline}</p>
@@ -234,9 +229,7 @@ export default function DeviceMapPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Activity className="w-5 h-5 text-yellow-600" />
-              </div>
+              <IconTile color="#ca8a04" icon={<Activity className="w-5 h-5" />} />
               <div>
                 <p className="text-xs text-th-secondary">Idle</p>
                 <p className="text-2xl font-bold text-yellow-600">{stats.idle}</p>
@@ -244,9 +237,7 @@ export default function DeviceMapPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-orange-600" />
-              </div>
+              <IconTile color="#ea580c" icon={<AlertTriangle className="w-5 h-5" />} />
               <div>
                 <p className="text-xs text-th-secondary">With Issues</p>
                 <p className="text-2xl font-bold text-orange-600">{stats.withIssues}</p>

@@ -424,11 +424,13 @@ export default function DevicesPage() {
         {loading ? (
           <LoadingState message="Loading devices…" />
         ) : error ? (
-          <div className="gito-card p-8 text-center">
-            <AlertTriangle className="w-10 h-10 mx-auto mb-3" style={{ color: '#dc2626' }} />
-            <p className="text-th-secondary mb-4">{error}</p>
-            <button onClick={() => window.location.reload()} className={btn.danger}>Retry</button>
-          </div>
+          <EmptyState
+            icon={<AlertTriangle className="w-8 h-8" />}
+            color="#dc2626"
+            title="Couldn't load devices"
+            description={error}
+            action={{ label: 'Retry', onClick: () => window.location.reload() }}
+          />
         ) : filteredDevices.length === 0 ? (
           searchQuery || statusFilter !== 'all' ? (
             <EmptyState

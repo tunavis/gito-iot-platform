@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PageShell from '@/components/ui/PageShell';
+import IconTile from '@/components/ui/IconTile';
 import {
   Activity, Wifi, WifiOff, Bell, BellOff, Zap, AlertTriangle,
   Info, ChevronDown, ChevronRight, RefreshCw, Filter, X,
@@ -343,7 +344,7 @@ export default function EventsPage() {
           </div>
         ) : events.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-[var(--color-text-secondary)]">
-            <Activity className="w-8 h-8 mb-2 opacity-40" />
+            <IconTile color="#64748b" icon={<Activity className="w-5 h-5" />} className="mb-2" />
             <p className="text-sm">No events found</p>
             <p className="text-xs mt-1">Events are generated automatically as devices connect and alarms fire</p>
           </div>

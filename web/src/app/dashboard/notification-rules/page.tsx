@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import Modal from '@/components/ui/Modal';
+import StatCard from '@/components/ui/StatCard';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { useToast } from '@/components/ToastProvider';
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight, Shield, Mail, Globe } from 'lucide-react';
@@ -162,41 +163,21 @@ export default function NotificationRulesPage() {
       <div className="mb-8">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            <div className="bg-surface rounded-xl p-6 border border-primary-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-th-secondary text-sm font-medium mb-1">Total Routes</p>
-                  <p className="text-3xl font-bold text-th-primary">{rules.length}</p>
-                </div>
-                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-primary-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-surface rounded-xl p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-th-secondary text-sm font-medium mb-1">Enabled</p>
-                  <p className="text-3xl font-bold text-green-600">{rules.filter(r => r.enabled).length}</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <ToggleRight className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-surface rounded-xl p-6 border border-primary-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-th-secondary text-sm font-medium mb-1">Channels</p>
-                  <p className="text-3xl font-bold text-primary-600">{channels.filter(c => c.enabled).length}</p>
-                </div>
-                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <Bell className="w-6 h-6 text-primary-600" />
-                </div>
-              </div>
-            </div>
+            <StatCard label="Total Routes" value={rules.length} icon={<Shield className="w-5 h-5" />} accent="#2563eb" />
+            <StatCard
+              label="Enabled"
+              value={rules.filter(r => r.enabled).length}
+              icon={<ToggleRight className="w-5 h-5" />}
+              accent="#16a34a"
+              color="#16a34a"
+            />
+            <StatCard
+              label="Channels"
+              value={channels.filter(c => c.enabled).length}
+              icon={<Bell className="w-5 h-5" />}
+              accent="#2563eb"
+              color="#2563eb"
+            />
           </div>
         </div>
 

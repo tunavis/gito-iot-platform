@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import ErrorBanner from '@/components/ui/ErrorBanner';
+import StatCard from '@/components/ui/StatCard';
+import IconTile from '@/components/ui/IconTile';
 import {
   TrendingUp,
   Activity,
@@ -199,55 +201,39 @@ export default function AnalyticsPage() {
             Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
           ) : fleet ? (
             <>
-              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-th-secondary font-medium">Total Devices</p>
-                  <div className="w-9 h-9 bg-primary-50 rounded-lg flex items-center justify-center">
-                    <Cpu className="w-5 h-5 text-primary-600" />
-                  </div>
-                </div>
-                <p className="text-3xl font-bold text-th-primary">{fleet.total_devices}</p>
-                <p className="text-xs text-th-muted mt-1">{deviceTypeData.length} device types</p>
-              </div>
-
-              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-th-secondary font-medium">Online Now</p>
-                  <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  </div>
-                </div>
-                <p className="text-3xl font-bold text-green-600">{fleet.status_distribution.online || 0}</p>
-                <p className="text-xs text-th-muted mt-1">
-                  {fleet.total_devices > 0
-                    ? `${Math.round(((fleet.status_distribution.online || 0) / fleet.total_devices) * 100)}% of fleet`
-                    : '—'}
-                </p>
-              </div>
-
-              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-th-secondary font-medium">Offline</p>
-                  <div className="w-9 h-9 bg-red-50 rounded-lg flex items-center justify-center">
-                    <XCircle className="w-5 h-5 text-red-600" />
-                  </div>
-                </div>
-                <p className="text-3xl font-bold text-red-600">{fleet.status_distribution.offline || 0}</p>
-                <p className="text-xs text-th-muted mt-1">
-                  {fleet.status_distribution.idle ? `${fleet.status_distribution.idle} idle` : 'None idle'}
-                </p>
-              </div>
-
-              <div className="bg-surface rounded-xl border border-th-default shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-th-secondary font-medium">Avg Battery</p>
-                  <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center">
-                    <Battery className="w-5 h-5 text-amber-600" />
-                  </div>
-                </div>
-                <p className="text-3xl font-bold text-th-primary">{fleet.average_battery_level.toFixed(0)}%</p>
-                <p className="text-xs text-red-500 mt-1">{fleet.low_battery_devices} below 20%</p>
-              </div>
+              <StatCard
+                label="Total Devices"
+                value={fleet.total_devices}
+                icon={<Cpu className="w-5 h-5" />}
+                accent="#2563eb"
+                caption={`${deviceTypeData.length} device types`}
+              />
+              <StatCard
+                label="Online Now"
+                value={fleet.status_distribution.online || 0}
+                icon={<CheckCircle2 className="w-5 h-5" />}
+                accent="#16a34a"
+                color="#16a34a"
+                caption={fleet.total_devices > 0
+                  ? `${Math.round(((fleet.status_distribution.online || 0) / fleet.total_devices) * 100)}% of fleet`
+                  : '—'}
+              />
+              <StatCard
+                label="Offline"
+                value={fleet.status_distribution.offline || 0}
+                icon={<XCircle className="w-5 h-5" />}
+                accent="#dc2626"
+                color="#dc2626"
+                caption={fleet.status_distribution.idle ? `${fleet.status_distribution.idle} idle` : 'None idle'}
+              />
+              <StatCard
+                label="Avg Battery"
+                value={`${fleet.average_battery_level.toFixed(0)}%`}
+                icon={<Battery className="w-5 h-5" />}
+                accent="#d97706"
+                caption={`${fleet.low_battery_devices} below 20%`}
+                captionColor="#ef4444"
+              />
             </>
           ) : null}
         </div>
@@ -378,7 +364,7 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="h-56 flex flex-col items-center justify-center text-th-muted">
-                <BarChart3 className="w-10 h-10 mb-2 opacity-30" />
+                <IconTile color="#64748b" icon={<BarChart3 className="w-5 h-5" />} className="mb-2" />
                 <p className="text-sm">No alarms in this period</p>
               </div>
             )}
@@ -423,7 +409,7 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="h-56 flex flex-col items-center justify-center text-th-muted">
-                <Cpu className="w-10 h-10 mb-2 opacity-30" />
+                <IconTile color="#64748b" icon={<Cpu className="w-5 h-5" />} className="mb-2" />
                 <p className="text-sm">No device data</p>
               </div>
             )}
