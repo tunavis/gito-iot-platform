@@ -6,6 +6,7 @@ import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import { Badge, SeverityBadge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { Plus, Edit2, Trash2, Bell } from 'lucide-react';
 
@@ -333,16 +334,12 @@ export default function AlertRulesPage() {
         {loading ? (
           <div className="gito-card p-12 text-center text-sm text-th-secondary">Loading rules...</div>
         ) : rules.length === 0 ? (
-          <div className="gito-card p-12 text-center flex flex-col items-center">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
-              <Bell className="w-7 h-7 text-th-muted" />
-            </div>
-            <h3 className="text-base font-bold text-th-primary mb-1.5">No alert rules configured</h3>
-            <p className="text-sm text-th-secondary mb-5">Create your first rule to monitor device metrics</p>
-            <button onClick={() => setShowNewRuleForm(true)} className={`${btn.primary} flex items-center gap-2`}>
-              <Plus className="w-4 h-4" />Create First Rule
-            </button>
-          </div>
+          <EmptyState
+            icon={<Bell className="w-8 h-8" />}
+            title="No alert rules configured"
+            description="Create your first rule to monitor device metrics"
+            action={{ label: 'Create First Rule', onClick: () => setShowNewRuleForm(true) }}
+          />
         ) : (
           <div className="grid gap-4">
             {rules.map(rule => (

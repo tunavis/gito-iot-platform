@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
 import { Badge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import IconTile from '@/components/ui/IconTile';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { Plus, Edit2, Trash2, Mail, Webhook, Smartphone, Bell, FileText } from 'lucide-react';
 
@@ -331,25 +333,19 @@ export default function NotificationsPage() {
             {loading ? (
               <div className="gito-card p-12 text-center text-sm text-th-secondary">Loading channels...</div>
             ) : channels.length === 0 ? (
-              <div className="gito-card p-12 text-center flex flex-col items-center">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 text-th-muted" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
-                  <Bell className="w-7 h-7" />
-                </div>
-                <h3 className="text-base font-bold text-th-primary mb-1.5">No notification channels configured</h3>
-                <p className="text-sm text-th-secondary mb-5">Add an email, SMS, or webhook channel to receive alerts</p>
-                <button onClick={() => setShowNewChannelForm(true)} className={`${btn.primary} flex items-center gap-2`}>
-                  <Plus className="w-4 h-4" />Create First Channel
-                </button>
-              </div>
+              <EmptyState
+                icon={<Bell className="w-8 h-8" />}
+                title="No notification channels configured"
+                description="Add an email, SMS, or webhook channel to receive alerts"
+                action={{ label: 'Create First Channel', onClick: () => setShowNewChannelForm(true) }}
+              />
             ) : (
               <div className="grid gap-4">
                 {channels.map(channel => (
                   <div key={channel.id} className="gito-card p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-th-muted" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
-                          {getChannelTypeIcon(channel.channel_type)}
-                        </div>
+                        <IconTile color="#2563eb" icon={getChannelTypeIcon(channel.channel_type)} />
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             <h3 className="font-semibold text-th-primary capitalize">{channel.channel_type}</h3>
@@ -487,25 +483,19 @@ export default function NotificationsPage() {
             {loading ? (
               <div className="gito-card p-12 text-center text-sm text-th-secondary">Loading templates...</div>
             ) : templates.length === 0 ? (
-              <div className="gito-card p-12 text-center flex flex-col items-center">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 text-th-muted" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
-                  <FileText className="w-7 h-7" />
-                </div>
-                <h3 className="text-base font-bold text-th-primary mb-1.5">No notification templates yet</h3>
-                <p className="text-sm text-th-secondary mb-5">Without one, alerts send as a plain &quot;Device: Alert triggered&quot; message.</p>
-                <button onClick={() => setShowNewTemplateForm(true)} className={`${btn.primary} flex items-center gap-2`}>
-                  <Plus className="w-4 h-4" />Create First Template
-                </button>
-              </div>
+              <EmptyState
+                icon={<FileText className="w-8 h-8" />}
+                title="No notification templates yet"
+                description='Without one, alerts send as a plain "Device: Alert triggered" message.'
+                action={{ label: 'Create First Template', onClick: () => setShowNewTemplateForm(true) }}
+              />
             ) : (
               <div className="grid gap-4">
                 {templates.map(template => (
                   <div key={template.id} className="gito-card p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-th-muted" style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.15)' }}>
-                          {getChannelTypeIcon(template.channel_type)}
-                        </div>
+                        <IconTile color="#2563eb" icon={getChannelTypeIcon(template.channel_type)} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                             <h3 className="font-semibold text-th-primary">{template.name}</h3>

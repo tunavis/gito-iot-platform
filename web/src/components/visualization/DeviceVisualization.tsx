@@ -13,6 +13,7 @@
 
 import React, { useMemo } from 'react';
 import { Wifi, WifiOff, Clock, Bell } from 'lucide-react';
+import IconTile from '@/components/ui/IconTile';
 import useDeviceMetrics from './useDeviceMetrics';
 import MetricRenderer from './MetricRenderer';
 import { buildMetricSchema, inferMetricDefinition } from './effects';
@@ -140,7 +141,7 @@ export default function DeviceVisualization({
   if (resolvedMetrics.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-48 gap-3 rounded-xl border gito-card">
-        <WifiOff className="w-8 h-8" style={{ color: 'var(--color-text-muted)' }} />
+        <IconTile color="#64748b" icon={<WifiOff className="w-5 h-5" />} />
         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>No telemetry received yet</p>
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Waiting for data from device…</p>
       </div>

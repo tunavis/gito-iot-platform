@@ -352,7 +352,7 @@ function NewDeviceForm() {
 
               {deviceTypes.length === 0 ? (
                 <div className="flex flex-col items-center py-16 bg-surface border border-dashed border-[var(--color-input-border)] rounded-xl text-center">
-                  <Cpu className="w-10 h-10 text-gray-300 mb-3" />
+                  <IconTile color="#64748b" icon={<Cpu className="w-5 h-5" />} className="mb-3" />
                   <p className="text-sm font-medium text-th-secondary mb-1">No device types yet</p>
                   <p className="text-xs text-th-muted mb-5">Create a device type to define the telemetry schema first.</p>
                   <button onClick={() => router.push('/dashboard/device-types')}

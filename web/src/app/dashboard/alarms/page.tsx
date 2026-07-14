@@ -21,6 +21,7 @@ import StatCard from '@/components/ui/StatCard';
 import LoadingState from '@/components/ui/LoadingState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import EmptyState from '@/components/ui/EmptyState';
+import IconTile from '@/components/ui/IconTile';
 import { AlarmSeverityBadge, AlarmStatusBadge } from '@/components/ui/Badge';
 import { btn, input } from '@/components/ui/buttonStyles';
 
@@ -278,7 +279,7 @@ export default function AlarmsPage() {
           <div className="lg:col-span-2 gito-card p-8">
             {!selectedAlarm ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
-                <Bell className="w-14 h-14 text-th-muted mb-4 opacity-40" />
+                <IconTile color="#64748b" icon={<Bell className="w-7 h-7" />} size="lg" className="mb-4" />
                 <p className="text-th-secondary text-base font-semibold">Select an alarm to view details</p>
                 <p className="text-th-muted text-sm mt-1">Choose an alarm from the list</p>
               </div>

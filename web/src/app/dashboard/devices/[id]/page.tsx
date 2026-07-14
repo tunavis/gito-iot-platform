@@ -5,6 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import PageShell from '@/components/ui/PageShell';
 import LoadingState from '@/components/ui/LoadingState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
+import IconTile from '@/components/ui/IconTile';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import {
@@ -679,7 +680,7 @@ export default function DeviceDetailPage() {
               <div className="space-y-3">
                 {telemetryData.length === 0 ? (
                   <div className="text-center py-8 text-th-secondary">
-                    <BarChart3 className="w-12 h-12 mx-auto mb-3 text-th-muted" />
+                    <IconTile color="#64748b" icon={<BarChart3 className="w-6 h-6" />} size="lg" className="mx-auto mb-3" />
                     <p className="font-medium">No telemetry data available</p>
                     <p className="text-sm mt-1">This device hasn&apos;t sent any data yet.</p>
                   </div>
@@ -767,7 +768,7 @@ export default function DeviceDetailPage() {
               </div>
             ) : telemetryData.length === 0 ? (
               <div className="bg-surface rounded-xl border border-th-default shadow-sm p-12 text-center">
-                <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <IconTile color="#64748b" icon={<BarChart3 className="w-6 h-6" />} size="lg" className="mx-auto mb-4" />
                 <p className="text-th-primary font-semibold mb-2">No telemetry data available</p>
                 <p className="text-th-secondary text-sm">
                   This device hasn&apos;t sent any telemetry data in the selected time range.
@@ -896,9 +897,7 @@ function TelemetryChartCard({
   if (chartData.length === 0) {
     return (
       <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6 flex flex-col items-center justify-center min-h-[320px]">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: `${color}15` }}>
-          <BarChart3 className="w-6 h-6" style={{ color }} />
-        </div>
+        <IconTile color={color} icon={<BarChart3 className="w-6 h-6" />} size="lg" className="mb-3" />
         <p className="text-sm font-medium text-th-primary">{title}</p>
         <p className="text-xs text-th-muted mt-1">No data in selected range</p>
       </div>
@@ -1613,7 +1612,7 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
           </div>
         ) : commands.length === 0 ? (
           <div className="text-center py-12">
-            <Terminal className="w-10 h-10 text-th-muted mx-auto mb-3" />
+            <IconTile color="#64748b" icon={<Terminal className="w-5 h-5" />} className="mx-auto mb-3" />
             <p className="text-sm text-th-secondary">No commands sent yet</p>
             <p className="text-xs text-th-muted mt-1">
               {hasCommandsCapability
@@ -1859,7 +1858,7 @@ function DeviceAlarms({ deviceId }: { deviceId: string }) {
             <div className="p-6 text-center text-red-600">{error}</div>
           ) : alarms.length === 0 ? (
             <div className="p-6 text-center text-th-secondary">
-              <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <IconTile color="#64748b" icon={<AlertTriangle className="w-6 h-6" />} size="lg" className="mx-auto mb-3" />
               <p className="font-medium">No alarms for this device</p>
             </div>
           ) : (
