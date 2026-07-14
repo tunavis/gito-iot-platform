@@ -104,7 +104,7 @@ function CreateTenantModal({
   }
 
   return (
-    <Modal open onClose={onClose} title="New Client Tenant" subtitle="Creates a new isolated tenant with its own login">
+    <Modal open onClose={onClose} title="New Client Tenant" subtitle="Creates a new isolated tenant with its own login" scrollBody>
         <form onSubmit={submit} className="space-y-4">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -117,7 +117,7 @@ function CreateTenantModal({
             <input
               required value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: autoSlug(e.target.value) }))}
-              placeholder="Sasol Ltd"
+              placeholder="e.g. Sasol Ltd"
                   className={input.base}
             />
           </div>
@@ -127,7 +127,7 @@ function CreateTenantModal({
             <input
               required value={form.slug}
               onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
-              placeholder="sasol"
+              placeholder="e.g. sasol"
               pattern="^[a-z0-9-]+$"
                   className={input.base + " font-mono"}
             />
@@ -142,7 +142,7 @@ function CreateTenantModal({
                 <input
                   required type="email" value={form.admin_email}
                   onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
-                  placeholder="admin@sasol.co.za"
+                  placeholder="e.g. admin@sasol.co.za"
                   className={input.base}
                 />
               </div>
@@ -152,7 +152,7 @@ function CreateTenantModal({
                 <input
                   required value={form.admin_name}
                   onChange={e => setForm(f => ({ ...f, admin_name: e.target.value }))}
-                  placeholder="Sasol Administrator"
+                  placeholder="e.g. Sasol Administrator"
                   className={input.base}
                 />
               </div>
