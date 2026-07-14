@@ -19,6 +19,7 @@ import {
   Check,
   Users,
   Link2,
+  Rocket,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useTenant, TenantInfo } from '@/components/TenantContext';
@@ -209,6 +210,14 @@ export default function Sidebar() {
     },
     { label: 'Device Types', href: '/dashboard/device-types', icon: <LayoutGrid className="w-4 h-4" />, single: true },
     { label: 'Connections', href: '/dashboard/connections', icon: <Link2 className="w-4 h-4" />, single: true },
+    {
+      label: 'Firmware',
+      icon: <Rocket className="w-4 h-4" />,
+      items: [
+        { label: 'Versions',  href: '/dashboard/firmware/versions' },
+        { label: 'Campaigns', href: '/dashboard/firmware/campaigns' },
+      ],
+    },
     {
       label: 'Management',
       icon: <Settings className="w-4 h-4" />,

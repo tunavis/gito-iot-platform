@@ -164,6 +164,29 @@ export function SeverityBadge({ severity }: { severity: string }) {
   return <Badge variant={map[severity] ?? 'neutral'} label={severity} />;
 }
 
+export function OTACampaignStatusBadge({ status }: { status: string }) {
+  const map: Record<string, BadgeVariant> = {
+    draft:        'neutral',
+    scheduled:    'info',
+    in_progress:  'warning',
+    completed:    'success',
+    failed:       'danger',
+    rolled_back:  'danger',
+  };
+  return <Badge variant={map[status] ?? 'neutral'} label={status.replace(/_/g, ' ')} dot={status === 'in_progress'} />;
+}
+
+export function OTADeviceStatusBadge({ status }: { status: string }) {
+  const map: Record<string, BadgeVariant> = {
+    pending:      'neutral',
+    in_progress:  'warning',
+    completed:    'success',
+    failed:       'danger',
+    skipped:      'neutral',
+  };
+  return <Badge variant={map[status] ?? 'neutral'} label={status.replace(/_/g, ' ')} size="sm" />;
+}
+
 export function CategoryBadge({ category }: { category: string }) {
   const map: Record<string, BadgeVariant> = {
     sensor:     'success',
