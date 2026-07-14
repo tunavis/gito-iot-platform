@@ -154,6 +154,7 @@ export default function CommandsTable({ commands, onChange }: CommandsTableProps
                     <div className="w-[80px]">
                       <label className="block text-[10px] font-bold uppercase tracking-widest text-th-muted mb-1">Unit</label>
                       <input
+                        list="unit-suggestions"
                         value={p.unit || ''}
                         onChange={(e) => updateParam(ci, pi, { unit: e.target.value || undefined })}
                         placeholder="e.g. s"

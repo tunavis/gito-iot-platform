@@ -70,7 +70,8 @@ export default function MetricsTable({ metrics, fPort, onChange, onFPortChange }
     <div className="space-y-4">
       <p className="text-sm text-th-secondary">
         Define each metric this device sends — its name, unit, and how it arrives. Decoding
-        runs only when the network server hasn&apos;t already decoded the uplink.
+        runs only when the network server hasn&apos;t already decoded the uplink. For Unit,
+        start typing to pick from common units (°C, m³/h, Ω…) or enter your own.
       </p>
 
       {metrics.map((m, i) => (
@@ -95,7 +96,14 @@ export default function MetricsTable({ metrics, fPort, onChange, onFPortChange }
             </div>
             <div className="w-[90px]">
               <label className="block text-[10px] font-bold uppercase tracking-widest text-th-muted mb-1">Unit</label>
-              <input type="text" value={m.unit} onChange={(e) => update(i, { unit: e.target.value })} placeholder="m³/h" className={`${inputCls} w-full`} />
+              <input
+                type="text"
+                list="unit-suggestions"
+                value={m.unit}
+                onChange={(e) => update(i, { unit: e.target.value })}
+                placeholder="e.g. °C"
+                className={`${inputCls} w-full`}
+              />
             </div>
             <label className="flex items-center gap-1.5 pb-2 text-xs text-th-secondary cursor-pointer">
               <input type="checkbox" checked={m.required} onChange={(e) => update(i, { required: e.target.checked })} className="w-4 h-4 rounded" />

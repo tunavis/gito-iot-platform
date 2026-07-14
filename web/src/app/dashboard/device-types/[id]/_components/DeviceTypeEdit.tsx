@@ -13,6 +13,7 @@ import {
   CATEGORIES,
   CAPABILITIES,
   COLORS,
+  UNIT_SUGGESTIONS,
 } from '../../_constants';
 import type { DeviceTypeForm, DiscoveredMetric, UnifiedMetric, CommandDef } from '../../_types';
 import { splitMetrics } from '../../_metrics';
@@ -95,6 +96,12 @@ export default function DeviceTypeEdit({
 
   return (
     <div className="max-w-4xl space-y-6">
+      {/* Shared autocomplete for the Unit fields in MetricsTable / CommandsTable —
+          one instance since both editors can be open on this page at once. */}
+      <datalist id="unit-suggestions">
+        {UNIT_SUGGESTIONS.map((u) => <option key={u} value={u} />)}
+      </datalist>
+
       {error && (
         <div
           className="p-4 rounded-lg flex items-center gap-2 text-sm"

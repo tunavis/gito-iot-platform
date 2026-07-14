@@ -116,6 +116,24 @@ export const fieldTypeBadgeStyles: Record<string, { bg: string; color: string; b
   array:     { bg: 'rgba(100,116,139,0.1)', color: '#64748b', border: 'rgba(100,116,139,0.2)' },
 };
 
+// --- Unit suggestions ---
+// Free-text field, not an enum — this only powers the <datalist> autocomplete so
+// units with characters that are awkward to type on a standard keyboard (°, ³, Ω)
+// can be picked instead of hand-typed. Any other value is still accepted.
+
+export const UNIT_SUGGESTIONS = [
+  '°C', '°F', 'K',
+  '%', '%RH',
+  'V', 'A', 'W', 'kW', 'kWh', 'VA', 'VAR', 'Hz', 'Ω',
+  'bar', 'Pa', 'kPa', 'hPa', 'psi',
+  'L', 'mL', 'm³', 'm³/h', 'L/min', 'L/h', 'gal',
+  'm', 'cm', 'mm', 'km', 'ft', 'in',
+  'm/s', 'km/h', 'mph',
+  'kg', 'g', 'lb', 't',
+  'lux', 'ppm', 'dB', 'dBm', 'rpm',
+  'ms', 's', 'min', 'h',
+];
+
 // --- Colors ---
 
 export const COLORS = [
