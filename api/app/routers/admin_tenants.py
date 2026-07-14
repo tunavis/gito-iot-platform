@@ -120,10 +120,7 @@ async def list_tenants(
     management_tenant_id, _ = current
 
     # Set context so management tenant can query tenants table
-    await session.execute(
-        text("SET LOCAL app.current_tenant_id = :tid"),
-        {"tid": str(management_tenant_id)},
-    )
+    await session.set_tenant_context(management_tenant_id)
 
     # Fetch all tenants where parent_tenant_id = management tenant
     result = await session.execute(
@@ -146,10 +143,7 @@ async def create_tenant(
     """Create a new client tenant and its first admin user."""
     management_tenant_id, _ = current
 
-    await session.execute(
-        text("SET LOCAL app.current_tenant_id = :tid"),
-        {"tid": str(management_tenant_id)},
-    )
+    await session.set_tenant_context(management_tenant_id)
 
     # Check slug uniqueness
     existing = await session.execute(select(Tenant).where(Tenant.slug == body.slug))
@@ -211,10 +205,7 @@ async def get_tenant(
     """Get details for a specific client tenant."""
     management_tenant_id, _ = current
 
-    await session.execute(
-        text("SET LOCAL app.current_tenant_id = :tid"),
-        {"tid": str(management_tenant_id)},
-    )
+    await session.set_tenant_context(management_tenant_id)
 
     result = await session.execute(
         select(Tenant).where(
@@ -244,10 +235,7 @@ async def update_tenant(
     """Update a client tenant's name or status."""
     management_tenant_id, _ = current
 
-    await session.execute(
-        text("SET LOCAL app.current_tenant_id = :tid"),
-        {"tid": str(management_tenant_id)},
-    )
+    await session.set_tenant_context(management_tenant_id)
 
     result = await session.execute(
         select(Tenant).where(

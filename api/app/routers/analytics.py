@@ -5,7 +5,7 @@ from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -246,10 +246,10 @@ async def get_device_uptime(
     online_devices = len([d for d in devices if _is_effectively_online(d)])
 
     # Calculate how many devices were seen in the last N days
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     active_devices = len([
         d for d in devices
-        if d.last_seen and d.last_seen >= cutoff_date
+        if d.last_seen and (d.last_seen if d.last_seen.tzinfo else d.last_seen.replace(tzinfo=timezone.utc)) >= cutoff_date
     ])
 
     uptime_percentage = (online_devices / total_devices * 100) if total_devices > 0 else 0
