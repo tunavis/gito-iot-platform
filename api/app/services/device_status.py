@@ -22,15 +22,20 @@ DEFAULT_OFFLINE_THRESHOLD_SECONDS = 900  # 15 minutes
 
 
 def is_effectively_offline(status: str, last_seen: datetime | None, threshold_seconds: int) -> bool:
-    """True if a device reported as 'online' should actually show as offline.
+    """True if this device should show as offline right now.
 
-    Only overrides the 'online' status — idle/error/provisioning are
-    intentional operator states and are never overridden here.
+    online/offline are derived purely from last_seen vs threshold — this can both
+    downgrade a stale 'online' row AND upgrade a stale 'offline' row, since the
+    stored column only self-corrects to 'online' on the next ingested uplink and
+    otherwise lags reality (e.g. right after an operator raises a device type's
+    threshold for a slow-reporting device, the stored row is still 'offline' from
+    before). idle/error/provisioning are intentional operator states and are
+    never overridden here.
     """
-    if status != "online":
+    if status not in ("online", "offline"):
         return False
     if last_seen is None:
-        return True  # provisioned online but never reported — not actually online
+        return True  # never reported — not actually online
     last = last_seen if last_seen.tzinfo else last_seen.replace(tzinfo=UTC)
     return (datetime.now(UTC) - last).total_seconds() > threshold_seconds
 

@@ -50,6 +50,7 @@ class DeviceUpdate(BaseModel):
     serial_number: Optional[str] = Field(None, max_length=255)
     tags: Optional[List[str]] = None
     attributes: Optional[dict] = None
+    device_type_id: Optional[UUID] = Field(None, description="Device type template UUID")
     # Hierarchy fields
     organization_id: Optional[UUID] = Field(None, description="Organization ID")
     site_id: Optional[UUID] = Field(None, description="Site ID")
@@ -93,13 +94,23 @@ class DeviceResponse(BaseModel):
 
     @model_validator(mode="after")
     def compute_effective_status(self) -> "DeviceResponse":
-        """Override ONLINE → OFFLINE when last_seen is missing or stale.
+        """Derive ONLINE/OFFLINE from last_seen vs threshold; other statuses pass through untouched.
+
+        Bidirectional for the online/offline pair — a stale 'online' row reads as
+        offline, and a stale 'offline' row reads as online again once last_seen is
+        within threshold (e.g. after an operator raises a slow-reporting device
+        type's threshold, without waiting for the next uplink to self-correct it).
+        idle/error/provisioning are intentional operator states, never touched.
 
         See app/services/device_status.py — the single shared definition of
         "effectively offline", also used by the analytics endpoints so uptime/
         fleet-overview numbers can't diverge from what the device list shows.
         """
-        threshold = self.offline_threshold or DEFAULT_OFFLINE_THRESHOLD_SECONDS
-        if is_effectively_offline(self.status.value, self.last_seen, threshold):
-            self.status = DeviceStatus.OFFLINE
+        if self.status in (DeviceStatus.ONLINE, DeviceStatus.OFFLINE):
+            threshold = self.offline_threshold or DEFAULT_OFFLINE_THRESHOLD_SECONDS
+            self.status = (
+                DeviceStatus.OFFLINE
+                if is_effectively_offline(self.status.value, self.last_seen, threshold)
+                else DeviceStatus.ONLINE
+            )
         return self

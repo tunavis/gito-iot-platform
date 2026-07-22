@@ -39,12 +39,27 @@ class TestIsEffectivelyOffline:
         recent_naive = datetime.utcnow() - timedelta(seconds=10)
         assert is_effectively_offline("online", recent_naive, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is False
 
-    def test_non_online_status_never_overridden(self):
+    def test_operator_status_never_overridden(self):
         # idle/error/provisioning are intentional operator states, not computed.
-        for status in ("idle", "error", "provisioning", "offline"):
+        for status in ("idle", "error", "provisioning"):
             assert is_effectively_offline(status, None, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is False
 
     def test_custom_threshold_respected(self):
         last_seen = datetime.now(timezone.utc) - timedelta(seconds=30)
         assert is_effectively_offline("online", last_seen, threshold_seconds=60) is False
         assert is_effectively_offline("online", last_seen, threshold_seconds=10) is True
+
+    def test_stored_offline_recovers_when_last_seen_is_within_threshold(self):
+        # Bidirectional: a device stuck at 'offline' in the DB (e.g. the background
+        # sweep flagged it under an old, tighter threshold) must read as online again
+        # once last_seen is within the *current* threshold — it shouldn't have to
+        # wait for another uplink just to self-correct the stored column.
+        recent = datetime.now(timezone.utc) - timedelta(seconds=10)
+        assert is_effectively_offline("offline", recent, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is False
+
+    def test_stored_offline_stays_offline_when_stale(self):
+        stale = datetime.now(timezone.utc) - timedelta(seconds=DEFAULT_OFFLINE_THRESHOLD_SECONDS + 1)
+        assert is_effectively_offline("offline", stale, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is True
+
+    def test_stored_offline_stays_offline_when_never_reported(self):
+        assert is_effectively_offline("offline", None, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is True

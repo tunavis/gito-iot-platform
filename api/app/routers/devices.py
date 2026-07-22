@@ -255,6 +255,8 @@ async def update_device(
         device.tags = device_data.tags
     if device_data.attributes is not None:
         device.attributes = device_data.attributes
+    if device_data.device_type_id is not None:
+        device.device_type_id = device_data.device_type_id
     # Hierarchy fields use model_fields_set (not "is not None") so an explicit
     # null actually clears the assignment instead of being silently ignored —
     # these are the only fields on this endpoint a client can legitimately

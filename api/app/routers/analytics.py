@@ -235,7 +235,7 @@ async def get_device_uptime(
     total_devices = len(devices)
 
     def _is_effectively_online(d) -> bool:
-        if d.status != "online":
+        if d.status not in ("online", "offline"):
             return False
         threshold = (
             type_thresholds.get(str(d.device_type_id), DEFAULT_OFFLINE_THRESHOLD_SECONDS)
