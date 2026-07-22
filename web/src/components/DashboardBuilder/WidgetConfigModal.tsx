@@ -77,20 +77,51 @@ export default function WidgetConfigModal({
       setTitle(generateTitle(bindings));
     }
 
-    // Auto-populate config from schema metadata (unit, min/max)
+    // Auto-populate config from schema metadata (unit, min/max, columns)
     if (bindings.length === 1) {
       const b = bindings[0];
       const updates: Record<string, any> = {};
+      // A schema field with no declared range reports min/max as null, not
+      // undefined — `!= null` catches both, so a real 0 or a genuine bound
+      // still comes through instead of leaking a stale library default.
+      const hasMin = typeof b.min === 'number';
+      const hasMax = typeof b.max === 'number';
 
       if (b.unit) updates.unit = b.unit;
+
       if (widgetType === 'gauge') {
-        if (b.min !== undefined) updates.min = b.min;
-        if (b.max !== undefined) updates.max = b.max;
+        // Only carry over a bound if the metric actually has one — leaving the
+        // library default (0/100) in place is safer than writing an explicit
+        // null, which breaks the widget's range math outright.
+        if (hasMin) updates.min = b.min;
+        if (hasMax) updates.max = b.max;
+      }
+
+      if (widgetType === 'kpi_card' && !hasMax) {
+        // No declared upper bound (e.g. a cumulative counter) — the library's
+        // generic 75/85 "percentage-shaped" thresholds would trivially trigger
+        // on any six-figure reading and permanently color it as critical.
+        updates.threshold_warning = undefined;
+        updates.threshold_critical = undefined;
+      }
+
+      if (widgetType === 'table') {
+        updates.columns = ['timestamp', b.metric];
       }
 
       if (Object.keys(updates).length > 0) {
-        setConfig((prev: any) => ({ ...prev, ...updates }));
+        setConfig((prev: any) => {
+          const next = { ...prev, ...updates };
+          if (updates.threshold_warning === undefined) delete next.threshold_warning;
+          if (updates.threshold_critical === undefined) delete next.threshold_critical;
+          return next;
+        });
       }
+    } else if (bindings.length > 1 && widgetType === 'table') {
+      setConfig((prev: any) => ({
+        ...prev,
+        columns: ['timestamp', ...bindings.map((b) => b.metric)],
+      }));
     }
   };
 

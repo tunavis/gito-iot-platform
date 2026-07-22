@@ -18,6 +18,7 @@ import React, { useMemo } from 'react';
 import FlowLine from './FlowLine';
 import type { MetricDefinition } from './types';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
+import { formatNumeric } from '@/lib/formatNumeric';
 
 export interface MetricRendererProps {
   /** The metric key (e.g. "flow_rate", "temperature") */
@@ -31,13 +32,6 @@ export interface MetricRendererProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-
-function formatNumeric(val: number): string {
-  if (Math.abs(val) >= 1000) return val.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (Math.abs(val) >= 10)   return val.toFixed(1);
-  return val.toFixed(2);
-}
 
 function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
@@ -135,21 +129,31 @@ function LevelRenderer({ value, definition }: { value: number; definition: Metri
   );
 }
 
-function StateRenderer({ value }: { value: string }) {
+function StateRenderer({ value, inverted }: { value: string; inverted?: boolean }) {
   const lower = value.toLowerCase();
+  const isGoodWord = ['online', 'running', 'active', 'open', 'on', 'true', '1'].includes(lower);
+  const isBadWord = ['offline', 'stopped', 'inactive', 'closed', 'off', 'false', '0'].includes(lower);
+  // For alarm/fault-style metrics, 0/false is the good state and 1/true means triggered — flip the mapping.
   const { bg, text } =
-    ['online', 'running', 'active', 'open', 'on', 'true', '1'].includes(lower)
+    (inverted ? isBadWord : isGoodWord)
       ? { bg: 'bg-emerald-500/20', text: 'text-emerald-400' }
-    : ['offline', 'stopped', 'inactive', 'closed', 'off', 'false', '0'].includes(lower)
+    : (inverted ? isGoodWord : isBadWord)
       ? { bg: 'bg-red-500/20', text: 'text-red-400' }
     : ['warning', 'idle', 'standby', 'partial'].includes(lower)
       ? { bg: 'bg-amber-500/20', text: 'text-amber-400' }
     : { bg: 'bg-slate-500/15', text: 'text-slate-500' };
 
+  // A bare "0"/"1" (a raw boolean flag, not an inherent word like "online") means
+  // nothing to a non-technical user — say what it means instead of the digit.
+  const displayText =
+    value === '1' ? (inverted ? 'Triggered' : 'Active')
+    : value === '0' ? (inverted ? 'Clear' : 'Inactive')
+    : value;
+
   return (
     <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${bg} ${text}`}>
       <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-80" />
-      {value}
+      {displayText}
     </span>
   );
 }
@@ -171,12 +175,12 @@ export default function MetricRenderer({ metricKey, value, definition, label }: 
 
     // State: string or state category
     if (category === 'state' || typeof value === 'string') {
-      return <StateRenderer value={String(value)} />;
+      return <StateRenderer value={String(value)} inverted={definition.inverted} />;
     }
 
     const numVal = typeof value === 'number' ? value : Number(value);
     if (isNaN(numVal)) {
-      return <StateRenderer value={String(value)} />;
+      return <StateRenderer value={String(value)} inverted={definition.inverted} />;
     }
 
     switch (category) {
@@ -193,7 +197,11 @@ export default function MetricRenderer({ metricKey, value, definition, label }: 
 
   return (
     <div className="flex flex-col gap-2 p-4 rounded-xl gito-card">
-      <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+      <span
+        className="text-xs font-medium uppercase tracking-wider"
+        style={{ color: 'var(--color-text-muted)' }}
+        title={definition.description}
+      >
         {displayLabel}
       </span>
       {content}

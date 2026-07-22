@@ -3,6 +3,7 @@
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import WidgetWrapper from "./WidgetWrapper";
 import { useEffect, useState, useCallback } from "react";
+import { formatNumeric } from "@/lib/formatNumeric";
 
 interface KPICardConfig {
   metric?: string;
@@ -48,7 +49,6 @@ export default function KPICard({
   const {
     metric = "value",
     unit = "",
-    decimal_places = 2,
     show_trend = true,
     trend_period = "24h",
     color = "#3b82f6",
@@ -218,7 +218,7 @@ export default function KPICard({
               className="text-4xl font-bold mb-1"
               style={{ color: valueColor }}
             >
-              {value !== null ? value.toFixed(decimal_places) : "0"}
+              {value !== null ? formatNumeric(value) : "0"}
               {unit && <span className="text-2xl ml-1">{unit}</span>}
             </div>
 

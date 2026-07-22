@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { formatNumeric } from "@/lib/formatNumeric";
 
 interface GaugeConfig {
   min?: number;
@@ -28,11 +29,13 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
   const [value, setValue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // A stored config can hold explicit `null` (e.g. auto-filled from a metric with
+  // no declared range) — default params only catch `undefined`, so `??` is required
+  // here or a null min/max silently turns every arithmetic op below into NaN/Infinity.
   const {
-    min = 0,
-    max = 100,
+    min: configMin,
+    max: configMax,
     unit = "%",
-    decimal_places = 1,
     threshold_warning = 70,
     threshold_critical = 90,
     color_safe = "#10b981",
@@ -103,6 +106,13 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // A meaningful range needs both bounds actually configured (not null/undefined)
+  // and distinct — without one, "% of range" and its threshold colors are meaningless
+  // for an arbitrary-scale metric (e.g. a cumulative counter in the millions).
+  const hasRange = configMin != null && configMax != null && configMax !== configMin;
+  const min = configMin ?? 0;
+  const max = configMax ?? 100;
+
   // SVG gauge parameters
   const size = 180;
   const strokeWidth = 18;
@@ -112,12 +122,15 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
   // 270-degree arc, gap at bottom
   const arcLength = (270 / 360) * circumference;
 
-  const percentage = value !== null ? ((value - min) / (max - min)) * 100 : 0;
+  // No configured range: show the arc as always "full" (this metric has no
+  // sense of empty/full) rather than an arbitrary, misleading percentage.
+  const percentage = !hasRange ? 100 : value !== null ? ((value - min) / (max - min)) * 100 : 0;
   const clampedPct = Math.max(0, Math.min(100, percentage));
   const offset = circumference - (clampedPct / 100) * arcLength;
 
   const getColor = () => {
-    if (value === null) return "#e5e7eb";
+    if (value === null) return "var(--color-border)";
+    if (!hasRange) return color_safe; // no range configured — don't imply a false alarm
     const pct = ((value - min) / (max - min)) * 100;
     if (pct >= threshold_critical) return color_critical;
     if (pct >= threshold_warning) return color_warning;
@@ -126,6 +139,14 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
 
   const currentColor = getColor();
   const center = size / 2;
+
+  // A cumulative counter can run into 8+ digits — shrink the font so it stays
+  // inside the ring instead of overflowing past its edges.
+  const formattedValue = value !== null ? formatNumeric(value) : "";
+  const valueFontClass =
+    formattedValue.length > 9 ? "text-lg" :
+    formattedValue.length > 6 ? "text-xl" :
+    "text-3xl";
 
   if (!dataSources || dataSources.length === 0) {
     return (
@@ -153,7 +174,7 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
             cy={center}
             r={radius}
             fill="none"
-            stroke="#e5e7eb"
+            stroke="var(--color-border)"
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={`${arcLength} ${circumference - arcLength}`}
@@ -165,7 +186,7 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
             cy={center}
             r={radius}
             fill="none"
-            stroke={value !== null ? currentColor : "#e5e7eb"}
+            stroke={value !== null ? currentColor : "var(--color-border)"}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={`${arcLength} ${circumference - arcLength}`}
@@ -178,8 +199,8 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             {value !== null ? (
               <>
-                <span className="text-3xl font-bold leading-none" style={{ color: currentColor }}>
-                  {value.toFixed(decimal_places)}
+                <span className={`${valueFontClass} font-bold leading-none px-2 text-center`} style={{ color: currentColor }}>
+                  {formattedValue}
                 </span>
                 <span className="text-xs text-th-secondary mt-0.5">{unit}</span>
               </>
@@ -190,23 +211,27 @@ export default function GaugeWidget({ config, dataSources }: GaugeWidgetProps) {
         )}
       </div>
 
-      {/* Min / Max labels */}
-      <div className="flex justify-between w-full max-w-[180px] text-xs text-th-muted -mt-3">
-        <span>{min}{unit}</span>
-        <span>{max}{unit}</span>
-      </div>
+      {/* Min / Max labels — only meaningful when a real range is configured */}
+      {hasRange && (
+        <div className="flex justify-between w-full max-w-[180px] text-xs text-th-muted -mt-3">
+          <span>{formatNumeric(min)}{unit}</span>
+          <span>{formatNumeric(max)}{unit}</span>
+        </div>
+      )}
 
-      {/* Threshold legend */}
-      <div className="flex gap-3 text-xs">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color_warning }} />
-          <span className="text-th-secondary">Warn {threshold_warning}%</span>
+      {/* Threshold legend — same: meaningless without a configured range */}
+      {hasRange && (
+        <div className="flex gap-3 text-xs">
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color_warning }} />
+            <span className="text-th-secondary">Warn {threshold_warning}%</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color_critical }} />
+            <span className="text-th-secondary">Crit {threshold_critical}%</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color_critical }} />
-          <span className="text-th-secondary">Crit {threshold_critical}%</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

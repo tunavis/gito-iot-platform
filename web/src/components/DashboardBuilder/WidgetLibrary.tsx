@@ -77,7 +77,9 @@ const WIDGET_TYPES: WidgetType[] = [
     icon: <LayoutGrid className="w-6 h-6" />,
     category: "Metrics & KPIs",
     defaultWidth: 4,
-    defaultHeight: 2,
+    // A 2x2 grid of stat tiles needs more headroom than a single KPI number —
+    // height 2 clipped the bottom row.
+    defaultHeight: 3,
     defaultConfig: {
       unit: "",
       time_range: "24h",

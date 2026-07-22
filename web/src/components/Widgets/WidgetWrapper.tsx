@@ -22,14 +22,14 @@ export default function WidgetWrapper({
 }: WidgetWrapperProps) {
   return (
     <div
-      className={`bg-surface rounded border border-th-default shadow-sm h-full flex flex-col ${
+      className={`gito-card h-full flex flex-col overflow-hidden ${
         isEditMode ? "cursor-move hover:border-blue-400" : ""
       } ${className}`}
     >
-      {/* Widget Header */}
+      {/* Widget Header — quiet label, part of the card surface (no divider bar) */}
       {(title || isEditMode) && (
-        <div className="px-4 py-3 border-b border-th-default flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-th-primary uppercase tracking-wide">
+        <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-2">
+          <h2 className="text-[13px] font-semibold text-th-secondary truncate" title={title}>
             {title || "Widget"}
           </h2>
 

@@ -162,6 +162,39 @@ export default function DashboardPage() {
     }
   };
 
+  /** First-fit placement on the 12-column grid: scans row by row for the first
+   * gap the new widget's w×h actually fits in, instead of always stacking new
+   * widgets at x=0 and wasting the rest of the row's width. */
+  const findNextPosition = (
+    existing: { position_x: number; position_y: number; width: number; height: number }[],
+    width: number,
+    height: number,
+    cols = 12
+  ): { x: number; y: number } => {
+    const occupied = new Set<string>();
+    let maxY = 0;
+    for (const w of existing) {
+      maxY = Math.max(maxY, w.position_y + w.height);
+      for (let yy = w.position_y; yy < w.position_y + w.height; yy++) {
+        for (let xx = w.position_x; xx < w.position_x + w.width; xx++) {
+          occupied.add(`${xx},${yy}`);
+        }
+      }
+    }
+    for (let y = 0; y <= maxY; y++) {
+      for (let x = 0; x <= cols - width; x++) {
+        let fits = true;
+        for (let yy = y; fits && yy < y + height; yy++) {
+          for (let xx = x; xx < x + width; xx++) {
+            if (occupied.has(`${xx},${yy}`)) { fits = false; break; }
+          }
+        }
+        if (fits) return { x, y };
+      }
+    }
+    return { x: 0, y: maxY }; // grid is full — start a fresh row at the bottom
+  };
+
   const handleAddWidget = async (widgetType: any) => {
     if (!dashboard) return;
 
@@ -174,6 +207,10 @@ export default function DashboardPage() {
     }
 
     try {
+      const width = (widgetType as any).defaultWidth ?? 3;
+      const height = (widgetType as any).defaultHeight ?? 2;
+      const { x, y } = findNextPosition(dashboard.widgets, width, height);
+
       const response = await fetch(
         `/api/v1/tenants/${auth.tenant}/dashboards/${dashboard.id}/widgets`,
         {
@@ -185,10 +222,10 @@ export default function DashboardPage() {
           body: JSON.stringify({
             widget_type: widgetType.id,
             title: widgetType.name,
-            position_x: 0,
-            position_y: dashboard.widgets.length * 2,
-            width: (widgetType as any).defaultWidth ?? 3,
-            height: (widgetType as any).defaultHeight ?? 2,
+            position_x: x,
+            position_y: y,
+            width,
+            height,
             configuration: widgetType.defaultConfig,
             data_sources: [],
           }),

@@ -119,8 +119,8 @@ export default function PieChartWidget({ config, dataSources }: PieChartWidgetPr
                 name,
               ]}
               contentStyle={{
-                backgroundColor: "#fff",
-                border: "1px solid #e5e7eb",
+                backgroundColor: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
                 borderRadius: "0.375rem",
                 fontSize: "12px",
               }}

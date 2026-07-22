@@ -139,13 +139,13 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis
               dataKey="x"
               type="number"
               name={xLabel}
-              label={{ value: xLabel, position: "insideBottom", offset: -10, fontSize: 11, fill: "#9ca3af" }}
-              stroke="#9ca3af"
+              label={{ value: xLabel, position: "insideBottom", offset: -10, fontSize: 11, fill: "var(--color-text-muted)" }}
+              stroke="var(--color-text-muted)"
               fontSize={11}
               tickLine={false}
               domain={["auto", "auto"]}
@@ -154,8 +154,8 @@ export default function ScatterPlotWidget({ config, dataSources }: ScatterPlotWi
               dataKey="y"
               type="number"
               name={yLabel}
-              label={{ value: yLabel, angle: -90, position: "insideLeft", fontSize: 11, fill: "#9ca3af" }}
-              stroke="#9ca3af"
+              label={{ value: yLabel, angle: -90, position: "insideLeft", fontSize: 11, fill: "var(--color-text-muted)" }}
+              stroke="var(--color-text-muted)"
               fontSize={11}
               tickLine={false}
               domain={["auto", "auto"]}

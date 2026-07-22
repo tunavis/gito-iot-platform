@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatMetricLabel } from "@/lib/formatMetricLabel";
+import { formatNumeric } from "@/lib/formatNumeric";
 
 interface StatGroupConfig {
   unit?: string;
@@ -20,16 +21,15 @@ function parseHours(range: string): number {
   return parseInt(range) || 24;
 }
 
-function fmt(val: number | null, dp: number, unit: string): string {
+function fmt(val: number | null, unit: string): string {
   if (val === null) return "—";
-  return `${val.toFixed(dp)}${unit ? " " + unit : ""}`;
+  return `${formatNumeric(val)}${unit ? " " + unit : ""}`;
 }
 
 export default function StatGroupWidget({ config, dataSources }: StatGroupWidgetProps) {
   const {
     unit = "",
     time_range = "24h",
-    decimal_places = 2,
     color = "#3b82f6",
   } = config;
 
@@ -135,16 +135,16 @@ export default function StatGroupWidget({ config, dataSources }: StatGroupWidget
             key={label}
             className="rounded-lg border flex flex-col items-center justify-center p-3 min-h-0"
             style={{
-              borderColor: accent ? color : "#e5e7eb",
-              backgroundColor: accent ? `${color}10` : "#f9fafb",
+              borderColor: accent ? color : "var(--color-border)",
+              backgroundColor: accent ? `${color}10` : "var(--color-panel)",
             }}
           >
             <div className="text-xs text-th-secondary font-medium mb-1">{label}</div>
             <div
               className="text-lg font-bold truncate max-w-full"
-              style={{ color: accent ? color : "#374151" }}
+              style={{ color: accent ? color : "var(--color-text-primary)" }}
             >
-              {fmt(value, decimal_places, unit)}
+              {fmt(value, unit)}
             </div>
           </div>
         ))}

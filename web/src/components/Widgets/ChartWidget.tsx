@@ -21,6 +21,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { formatNumeric } from "@/lib/formatNumeric";
 
 interface ChartWidgetProps {
   config: {
@@ -310,21 +311,24 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis
                 dataKey="time"
-                stroke="#9ca3af"
+                stroke="var(--color-text-muted)"
                 fontSize={12}
                 tickLine={false}
               />
-              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} tickLine={false} tickFormatter={formatNumeric} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
                   fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}
+                formatter={(value: number) => formatNumeric(value)}
               />
               {effectiveKeys.length > 1 && (
                 <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -347,21 +351,24 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         return (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis
                 dataKey="time"
-                stroke="#9ca3af"
+                stroke="var(--color-text-muted)"
                 fontSize={12}
                 tickLine={false}
               />
-              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} tickLine={false} tickFormatter={formatNumeric} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
                   fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}
+                formatter={(value: number) => formatNumeric(value)}
               />
               {effectiveKeys.length > 1 && (
                 <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -382,16 +389,19 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         return (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} tickLine={false} />
-              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+              <XAxis dataKey="time" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} tickLine={false} tickFormatter={formatNumeric} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
                   fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}
+                formatter={(value: number) => formatNumeric(value)}
               />
               {effectiveKeys.length > 1 && <Legend wrapperStyle={{ fontSize: "12px" }} />}
               {effectiveKeys.map((key, index) => (
@@ -411,16 +421,19 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         return (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} tickLine={false} />
-              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+              <XAxis dataKey="time" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} tickLine={false} tickFormatter={formatNumeric} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
                   fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}
+                formatter={(value: number) => formatNumeric(value)}
               />
               {effectiveKeys.length > 1 && <Legend wrapperStyle={{ fontSize: "12px" }} />}
               {effectiveKeys.map((key, index) =>
@@ -451,16 +464,19 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         return (
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={chartData} margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
-              <PolarGrid stroke="#e5e7eb" />
-              <PolarAngleAxis dataKey="time" stroke="#9ca3af" fontSize={10} />
-              <PolarRadiusAxis stroke="#9ca3af" fontSize={10} />
+              <PolarGrid stroke="var(--color-border)" />
+              <PolarAngleAxis dataKey="time" stroke="var(--color-text-muted)" fontSize={10} />
+              <PolarRadiusAxis stroke="var(--color-text-muted)" fontSize={10} tickFormatter={formatNumeric} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
                   fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}
+                formatter={(value: number) => formatNumeric(value)}
               />
               {effectiveKeys.length > 1 && <Legend wrapperStyle={{ fontSize: "12px" }} />}
               {effectiveKeys.map((key, index) => (
@@ -482,21 +498,24 @@ export default function ChartWidget({ config, dataSources }: ChartWidgetProps) {
         return (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis
                 dataKey="time"
-                stroke="#9ca3af"
+                stroke="var(--color-text-muted)"
                 fontSize={12}
                 tickLine={false}
               />
-              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} tickLine={false} tickFormatter={formatNumeric} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
                   fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}
+                formatter={(value: number) => formatNumeric(value)}
               />
               {effectiveKeys.length > 1 && (
                 <Legend wrapperStyle={{ fontSize: "12px" }} />

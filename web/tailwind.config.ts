@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 const config: Config = {
   darkMode: 'class',
@@ -17,6 +18,7 @@ const config: Config = {
         card: {
           DEFAULT: 'var(--color-card)',
           hover: 'var(--color-card-hover)',
+          foreground: 'var(--card-foreground)', // shadcn
         },
         sidebar: {
           bg: 'var(--color-sidebar-bg)',
@@ -38,6 +40,8 @@ const config: Config = {
           700: '#1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
+          DEFAULT: 'var(--primary)', // shadcn — bg-primary/text-primary (scale above is unaffected)
+          foreground: 'var(--primary-foreground)', // shadcn
         },
         accent: {
           50:  '#ecfeff',
@@ -50,6 +54,8 @@ const config: Config = {
           700: '#0e7490',
           800: '#155e75',
           900: '#164e63',
+          DEFAULT: 'var(--accent)', // shadcn
+          foreground: 'var(--accent-foreground)', // shadcn
         },
         gito: {
           dark: '#001F3F',
@@ -63,6 +69,34 @@ const config: Config = {
           value: '#0d1422',
           muted: '#7c9bc2',
         },
+        // shadcn/ui — no Gito equivalent existed for these, so they're new
+        // top-level keys rather than additions to an existing scale.
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
+        },
+        secondary: {
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)',
+        },
+        muted: {
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
+        },
+        destructive: {
+          DEFAULT: 'var(--destructive)',
+          foreground: 'var(--destructive-foreground)',
+        },
+        border: 'var(--border)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
       },
       textColor: {
         'th-primary': 'var(--color-text-primary)',
@@ -114,7 +148,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 };
 
 export default config;

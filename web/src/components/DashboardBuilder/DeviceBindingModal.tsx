@@ -394,7 +394,7 @@ export default function DeviceBindingModal({
                             const compatible = isMetricCompatible(field.type);
                             return (
                               <option key={key} value={key} disabled={!compatible}>
-                                {field.description || formatMetricLabel(key)}
+                                {formatMetricLabel(key, { [key]: field })}
                                 {field.unit ? ` (${field.unit})` : ""}
                                 {live ? " ✓" : ""}
                                 {!compatible ? " — not numeric" : ""}

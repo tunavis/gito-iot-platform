@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Table as TableIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import IconTile from "@/components/ui/IconTile";
+import { formatNumeric } from "@/lib/formatNumeric";
 
 interface ColumnConfig {
   field: string;
@@ -141,7 +142,7 @@ export default function TableWidget({ config, dataSources }: TableWidgetProps) {
   const formatValue = (value: any) => {
     if (value === null || value === undefined) return "-";
     if (typeof value === "number") {
-      return value.toFixed(2);
+      return formatNumeric(value);
     }
     if (typeof value === "boolean") {
       return value ? "Yes" : "No";

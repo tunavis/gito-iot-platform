@@ -35,6 +35,10 @@ export interface MetricDefinition {
   effect?: FlowEffect;
   /** Display label — defaults to the metric key if absent */
   label?: string;
+  /** Longer explanation from the schema (e.g. an alarm's trigger condition) — shown as a tooltip, never as the label itself */
+  description?: string;
+  /** Only used when category === 'state': true when 0/false/off is the GOOD state, e.g. alarm/fault flags where 1 means triggered */
+  inverted?: boolean;
 }
 
 /** Map of metric key → MetricDefinition (derived from device type schema) */

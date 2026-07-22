@@ -79,17 +79,6 @@ export default function DeviceVisualization({
   // When no schema is declared, fall back to showing every non-null metric.
   const schemaKeys = useMemo(() => Object.keys(telemetrySchema), [telemetrySchema]);
 
-  // Metrics rendered inside the illustration (display slots + status pill) —
-  // exclude from the grid. Everything else stays in the grid, so every metric
-  // is always visible somewhere and never floats over the artwork.
-  const overlayMetricKeys = useMemo(
-    () => new Set(
-      (templateConfig?.boundMetrics ?? [])
-        .filter(k => latestValues[k] !== null && latestValues[k] !== undefined)
-    ),
-    [templateConfig, latestValues]
-  );
-
   const resolvedMetrics = useMemo<Array<{ key: string; def: MetricDefinition }>>(() => {
     return Object.entries(latestValues)
       .filter(([key, val]) => {
@@ -107,14 +96,11 @@ export default function DeviceVisualization({
   // self-pause their animations at zero activity.
   const showTemplate = templateConfig !== null && resolvedMetrics.length > 0;
 
-  // When a template is active and has live overlays, only the metrics NOT already
-  // shown as overlays appear in the right-hand grid — avoids showing the same value twice.
-  const gridMetrics = useMemo(
-    () => showTemplate
-      ? resolvedMetrics.filter(({ key }) => !overlayMetricKeys.has(key))
-      : resolvedMetrics,
-    [resolvedMetrics, overlayMetricKeys, showTemplate]
-  );
+  // Every metric appears in the grid, even ones also bound to an illustration
+  // overlay slot — the overlay is a small thematic touch (e.g. a meter's tiny
+  // odometer register) that can't reliably display an arbitrary-length reading,
+  // so the grid card is the one place a value is always fully readable.
+  const gridMetrics = resolvedMetrics;
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
@@ -165,7 +151,7 @@ export default function DeviceVisualization({
         <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
           <span className={`flex items-center gap-1.5 ${wsConnected ? 'text-emerald-500' : ''}`} style={wsConnected ? {} : { color: 'var(--color-text-muted)' }}>
             {wsConnected
-              ? <><Wifi className="w-3.5 h-3.5" /> Live</>
+              ? <><Wifi className="w-3.5 h-3.5" /> Connected</>
               : <><WifiOff className="w-3.5 h-3.5" /> Polling 15s</>
             }
           </span>

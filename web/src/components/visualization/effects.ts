@@ -60,8 +60,12 @@ export function getEffectStyle(effect: FlowEffect): EffectStyle {
 
 /** Keywords that indicate each metric category (checked against key.toLowerCase()) */
 const FLOW_KEYWORDS   = ['flow', 'rate', 'throughput', 'discharge', 'flux'];
-const LEVEL_KEYWORDS  = ['level', 'fill', 'tank', 'volume', 'capacity', 'depth', 'battery', 'charge'];
+// 'volume' deliberately excluded: a cumulative counter ("total_volume") is unbounded,
+// not a 0–max fill level — 'tank'/'capacity' below still catch genuine bounded tank levels.
+const LEVEL_KEYWORDS  = ['level', 'fill', 'tank', 'capacity', 'depth', 'battery', 'charge'];
 const STATE_KEYWORDS  = ['state', 'status', 'mode', 'alarm', 'active', 'enable', 'fault', 'flag'];
+/** Subset of state metrics where 0/false is the GOOD state — triggered (1) is what's bad, so the usual green=1/red=0 polarity must flip */
+const ALARM_KEYWORDS  = ['alarm', 'fault', 'leak', 'tamper', 'fraud'];
 
 /** Keywords that map to a flow effect (checked in order) */
 const WATER_KEYWORDS  = ['water', 'hydro', 'liquid', 'coolant', 'sewage', 'drain'];
@@ -106,16 +110,19 @@ export function classifyMetric(
 ): MetricDefinition {
   const k = key.toLowerCase();
   const unit = schema.unit ?? '';
-  const label = schema.description || undefined;
+  // The description is a tooltip, never the label — a full alarm-trigger sentence
+  // ("Continuous minimum flow detected for 12+ consecutive hours...") is not a title.
+  // Label always comes from the metric key itself (title-cased by the renderer).
+  const description = schema.description || undefined;
 
   // State metrics: string type OR state-like keywords
   if (schema.type === 'string' || schema.type === 'boolean' || matchesAny(k, STATE_KEYWORDS)) {
-    return { category: 'state', unit, label };
+    return { category: 'state', unit, description, inverted: matchesAny(k, ALARM_KEYWORDS) };
   }
 
   // Level metrics
   if (matchesAny(k, LEVEL_KEYWORDS)) {
-    return { category: 'level', unit, min: schema.min, max: schema.max ?? 100, label };
+    return { category: 'level', unit, min: schema.min, max: schema.max ?? 100, description };
   }
 
   // Flow metrics
@@ -126,12 +133,12 @@ export function classifyMetric(
       min: schema.min,
       max: schema.max,
       effect: inferEffect(key, unit),
-      label,
+      description,
     };
   }
 
   // Default: scalar
-  return { category: 'scalar', unit, min: schema.min, max: schema.max, label };
+  return { category: 'scalar', unit, min: schema.min, max: schema.max, description };
 }
 
 /**

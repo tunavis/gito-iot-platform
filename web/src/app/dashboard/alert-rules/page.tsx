@@ -684,7 +684,7 @@ function NewRuleForm({
                     const s = deviceSchema[m];
                     return (
                       <option key={m} value={m}>
-                        {s?.description || formatMetricLabel(m)}{s?.unit ? ` (${s.unit})` : ''}
+                        {formatMetricLabel(m, deviceSchema)}{s?.unit ? ` (${s.unit})` : ''}
                       </option>
                     );
                   })}
@@ -795,7 +795,7 @@ function NewRuleForm({
                         const s = deviceSchema[m];
                         return (
                           <option key={m} value={m}>
-                            {s?.description || formatMetricLabel(m)}{s?.unit ? ` (${s.unit})` : ''}
+                            {formatMetricLabel(m, deviceSchema)}{s?.unit ? ` (${s.unit})` : ''}
                           </option>
                         );
                       })}

@@ -72,6 +72,36 @@
   --dot-color: rgba(59, 130, 246, 0.05);
 }
 
+/* ─── shadcn/ui token bridge ──────────────────────────────────────────────
+   Maps shadcn's expected variable names onto the Gito tokens above instead
+   of a separate palette — every shadcn component added later is Gito-blue
+   and theme-aware from the first render, in both light and dark, with
+   nothing new to keep in sync. Only genuinely new concepts (destructive,
+   ring, radius) get their own value; everything else re-points at an
+   existing --color-* variable and inherits its light/dark switch for free. */
+:root {
+  --background: var(--color-page);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-card);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-panel);
+  --secondary-foreground: var(--color-text-primary);
+  --muted: var(--color-panel);
+  --muted-foreground: var(--color-text-muted);
+  --accent: var(--color-accent);
+  --accent-foreground: var(--color-text-primary);
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: var(--color-border);
+  --input: var(--color-input-border);
+  --ring: var(--color-primary);
+  --radius: 0.5rem;
+}
+
 /* ─── Global Styles ───────────────────────────────────────────────────────── */
 html {
   scroll-behavior: smooth;

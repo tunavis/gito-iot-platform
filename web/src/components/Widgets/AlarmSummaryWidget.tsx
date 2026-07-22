@@ -7,7 +7,7 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; order: number
   MAJOR:    { color: "#f97316", bg: "#fff7ed", order: 1 },
   MINOR:    { color: "#f59e0b", bg: "#fffbeb", order: 2 },
   WARNING:  { color: "#3b82f6", bg: "#eff6ff", order: 3 },
-  INFO:     { color: "#6b7280", bg: "#f9fafb", order: 4 },
+  INFO:     { color: "#6b7280", bg: "var(--color-panel)", order: 4 },
 };
 
 interface AlarmSummaryWidgetProps {
@@ -96,7 +96,7 @@ export default function AlarmSummaryWidget({ config: _config, dataSources: _ds }
       {/* Per-severity rows */}
       <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto">
         {sortedEntries.map(([sev, count]) => {
-          const cfg = SEVERITY_CONFIG[sev] || { color: "#6b7280", bg: "#f9fafb" };
+          const cfg = SEVERITY_CONFIG[sev] || { color: "#6b7280", bg: "var(--color-panel)" };
           return (
             <div
               key={sev}
