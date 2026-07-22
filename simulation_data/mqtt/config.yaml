@@ -2,8 +2,8 @@
 
 # Database connection (read devices from here)
 database:
-  host: localhost
-  port: 5432
+  host: 127.0.0.1
+  port: 5433
   database: gito
   user: gito
   password: dev-password
