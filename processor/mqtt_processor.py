@@ -61,6 +61,9 @@ MAX_TELEMETRY_VALUE = 1e10
 MIN_TELEMETRY_VALUE = -1e10
 
 SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id", "time", "datetime"}
+# Keys some ChirpStack device-profile codecs emit as a raw-byte passthrough when
+# they have no real decode for the payload — not an actual decode result.
+NS_PLACEHOLDER_KEYS = {"original_data"}
 
 # Command response keys — when present in telemetry, correlate with device_commands table
 COMMAND_RESPONSE_KEYS = {"command_id", "command_status", "command_result", "command_error"}
@@ -1595,15 +1598,19 @@ class MQTTProcessor:
                 return
 
             # 5. Extract decoded sensor data from the 'object' field. NS-decoded
-            # output always wins — never double-decode. Every uplink's raw bytes
-            # are persisted regardless of outcome so a decoder authored later can
-            # be replayed over history (raw_uplinks table).
+            # output wins when it's real — never double-decode. But some ChirpStack
+            # device profiles fall back to a generic raw-byte-passthrough codec that
+            # reports only 'original_data': that's NS *failing* to decode, not a
+            # result, so treat it the same as no object at all and use our own
+            # declarative decoder. Every uplink's raw bytes are persisted regardless
+            # of outcome so a decoder authored later can be replayed over history
+            # (raw_uplinks table).
             raw_b64 = cs_msg.get("data")
             f_port  = cs_msg.get("fPort")
             sensor_data = cs_msg.get("object")
             codec_used: str | None = None
 
-            if sensor_data and isinstance(sensor_data, dict):
+            if sensor_data and isinstance(sensor_data, dict) and set(sensor_data) - NS_PLACEHOLDER_KEYS:
                 codec_used = "ns"
             else:
                 decoder_spec = await self.db_service.get_decoder(device_id)
