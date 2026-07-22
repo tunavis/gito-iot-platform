@@ -148,8 +148,10 @@ services:
     container_name: gito-nginx-staging
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      # Host 80/443 are already held by nginx-proxy-manager on this box, which
+      # is meant to be the public-facing TLS terminator in front of this
+      # container (see nginx/nginx.conf: it only listens on plain 80 itself).
+      - "8090:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
