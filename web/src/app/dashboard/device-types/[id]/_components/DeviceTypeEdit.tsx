@@ -15,6 +15,7 @@ import {
   CATEGORIES,
   CAPABILITIES,
   COLORS,
+  ICON_OPTIONS,
   UNIT_SUGGESTIONS,
 } from '../../_constants';
 import type { DeviceTypeForm, DiscoveredMetric, UnifiedMetric, CommandDef } from '../../_types';
@@ -80,6 +81,8 @@ export default function DeviceTypeEdit({
       manufacturer: preset.vendor,
       model: preset.model,
       category: preset.category,
+      color: preset.color,
+      icon: preset.icon,
       description: form.description || preset.description,
       connectivity: { ...form.connectivity, protocol: preset.protocol },
     });
@@ -226,6 +229,33 @@ export default function DeviceTypeEdit({
                     }`}
                     style={{ backgroundColor: color }}
                   />
+                ))}
+              </div>
+            </div>
+
+            {/* Icon Picker */}
+            <div>
+              <label className="block text-sm font-medium text-th-primary mb-2">Icon</label>
+              <div className="flex flex-wrap gap-2">
+                {ICON_OPTIONS.map(({ value, label, Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    title={label}
+                    onClick={() => setForm({ ...form, icon: value })}
+                    className={`w-9 h-9 rounded-lg border-2 flex items-center justify-center transition-all ${
+                      form.icon === value
+                        ? 'scale-110 ring-2 ring-offset-2 ring-primary-400'
+                        : 'border-th-subtle hover:scale-105'
+                    }`}
+                    style={{
+                      borderColor: form.icon === value ? form.color : undefined,
+                      background: form.icon === value ? `${form.color}14` : undefined,
+                      color: form.icon === value ? form.color : 'var(--color-text-secondary)',
+                    }}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
                 ))}
               </div>
             </div>

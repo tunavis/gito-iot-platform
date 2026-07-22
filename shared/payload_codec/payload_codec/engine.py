@@ -24,6 +24,18 @@ from an already-unpacked integer field — for reading individual flags out of
 a packed status/alarm byte. The raw value becomes 0 or 1 before scale/
 value_offset are applied.
 
+"scale_exponent_ref" (optional) names another field in this same spec whose
+decoded value is a wM-Bus-style VIF exponent byte — a companion field that
+says what power-of-ten unit THIS field's count is actually in (common in
+metering protocols where a counter that overflows its range steps up a unit
+instead of resetting, e.g. B METERS: litres -> decalitres -> hectolitres ->
+m³). After every field decodes normally, this field's value is additionally
+multiplied by 10 ** (ref_field_value - scale_exponent_base) — e.g. B METERS'
+VIF byte is 0x13/19=litres, 0x14/20=decalitres, ... so scale_exponent_base=19
+turns a raw count already expressed in whatever unit VIF currently says into
+a value always expressed in the base (litres) unit. Silently skipped (no
+extra scaling) if the ref field didn't decode.
+
 Contract (mirrors alarm_core): decode() never raises. A malformed spec returns
 {}; a malformed individual field is skipped, the rest still decode.
 """
@@ -137,4 +149,21 @@ def decode(
         value = _unpack_field(raw, field)
         if value is not None:
             result[field["name"]] = value
+
+    # Second pass: apply cross-field VIF-style exponent scaling now that every
+    # field (including whatever the ref points at) has decoded once.
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        ref_name = field.get("scale_exponent_ref")
+        name = field.get("name")
+        if not ref_name or name not in result or ref_name not in result:
+            continue
+        try:
+            base = int(field.get("scale_exponent_base", 0))
+            exponent = int(result[ref_name]) - base
+        except (TypeError, ValueError):
+            continue
+        result[name] *= 10 ** exponent
+
     return result

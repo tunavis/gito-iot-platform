@@ -29,6 +29,13 @@ export interface DecoderField {
    * numeric value — e.g. reading one flag out of a packed alarm byte. Not
    * valid on 'bcd' or 'float32' fields. */
   bit?: number;
+  /** Name of another field in this same decoder whose value is a wM-Bus-style
+   * VIF exponent byte — multiplies this field's value by 10 ** (that field's
+   * value - scale_exponent_base). For counters that step to a coarser unit on
+   * overflow instead of resetting (e.g. B METERS: litres -> decalitres -> ...). */
+  scale_exponent_ref?: string;
+  /** The ref field's value that means "no extra scaling" (10**0). */
+  scale_exponent_base?: number;
 }
 
 /**
@@ -131,6 +138,8 @@ export type MetricSource =
       scale: number;
       value_offset: number;
       bit?: number;
+      scale_exponent_ref?: string;
+      scale_exponent_base?: number;
     }
   | { mode: 'rename'; rawKey: string };
 

@@ -8,6 +8,7 @@ import ErrorBanner from '@/components/ui/ErrorBanner';
 import IconTile from '@/components/ui/IconTile';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
+import { formatNumeric } from '@/lib/formatNumeric';
 import {
   Activity,
   Battery,
@@ -95,6 +96,7 @@ interface Device {
   id: string;
   name: string;
   device_type: string;
+  device_type_id?: string | null;
   status: 'online' | 'offline' | 'idle';
   last_seen: string | null;
   battery_level: number | null;
@@ -134,6 +136,7 @@ interface DeviceType {
     min?: number;
     max?: number;
     description?: string;
+    required?: boolean;
   }>;
   connectivity?: {
     protocol?: string;
@@ -160,7 +163,6 @@ export default function DeviceDetailPage() {
   const [device, setDevice] = useState<Device | null>(null);
   const [deviceType, setDeviceType] = useState<DeviceType | null>(null);
   const [loading, setLoading] = useState(true);
-  const [wsConnected, setWsConnected] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>([]);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
@@ -226,6 +228,15 @@ export default function DeviceDetailPage() {
       } else {
         undeclared.push(metric);
       }
+    });
+
+    // Required fields are the primary reading (e.g. a flow meter's total_volume) —
+    // surface them first so the most important chart isn't buried below diagnostic
+    // fields. Stable sort: everything else keeps its original relative order.
+    declared.sort((a, b) => {
+      const aRequired = deviceType?.telemetry_schema?.[a]?.required ? 1 : 0;
+      const bRequired = deviceType?.telemetry_schema?.[b]?.required ? 1 : 0;
+      return bRequired - aRequired;
     });
 
     return { declaredMetrics: declared, undeclaredMetrics: undeclared };
@@ -459,12 +470,6 @@ export default function DeviceDetailPage() {
                         style={{ background: device.status === 'online' ? 'var(--hmi-status-ok)' : device.status === 'offline' ? 'var(--hmi-status-offline)' : 'var(--hmi-status-warn)' }} />
                       {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
                     </span>
-                    {wsConnected && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 flex-shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        Live
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-th-muted flex-wrap">
                     <span className="font-mono bg-page border border-th-subtle px-2 py-0.5 rounded">{deviceId.substring(0, 16)}…</span>
@@ -541,12 +546,18 @@ export default function DeviceDetailPage() {
                 </div>
               </div>
 
-              {/* Live metrics strip — schema-declared numeric metrics with real-time /latest values */}
-              {(() => {
+              {/* Live metrics strip — schema-declared numeric metrics with real-time /latest values.
+                  Hidden on the Monitor tab: DeviceVisualization already shows every metric there
+                  (including these) in more detail, so showing the strip too just duplicates them. */}
+              {activeTab !== 'live' && (() => {
                 // Prefer schema-declared metrics; fall back to what we've seen in live data
                 const schemaKeys = deviceType?.telemetry_schema
                   ? Object.entries(deviceType.telemetry_schema)
                       .filter(([, s]) => !s.type || ['float', 'integer', 'number'].includes(s.type))
+                      // Required fields are the primary reading — keep them ahead of the
+                      // slice(0, 6) cut so e.g. a flow meter's total_volume can't be pushed
+                      // out by diagnostic fields just because of arbitrary key order.
+                      .sort(([, a], [, b]) => (b.required ? 1 : 0) - (a.required ? 1 : 0))
                       .map(([k]) => k)
                   : numericMetrics;
                 // Only show metrics that have a current value
@@ -565,7 +576,7 @@ export default function DeviceDetailPage() {
                             {formatMetricLabel(metric, deviceType?.telemetry_schema)}
                           </p>
                           <p className="text-lg font-bold text-th-primary leading-none">
-                            {typeof value === 'number' ? value.toFixed(1) : '—'}
+                            {typeof value === 'number' ? formatNumeric(value) : '—'}
                             {meta.unit && <span className="text-xs font-normal text-th-muted ml-0.5">{meta.unit}</span>}
                           </p>
                           {trend && (
@@ -704,7 +715,7 @@ export default function DeviceDetailPage() {
                         </div>
                         <div className="text-right text-xs text-th-secondary">
                           {numericMetrics.slice(0, 2).map(m => point[m] != null && (
-                            <p key={m}>{formatMetricLabel(m, deviceType?.telemetry_schema)}: {typeof point[m] === 'number' ? (point[m] as number).toFixed(1) : point[m]}</p>
+                            <p key={m}>{formatMetricLabel(m, deviceType?.telemetry_schema)}: {typeof point[m] === 'number' ? formatNumeric(point[m] as number) : point[m]}</p>
                           ))}
                         </div>
                       </div>
@@ -917,7 +928,7 @@ function TelemetryChartCard({
           {description && <p className="text-xs text-th-muted mt-0.5">{description}</p>}
         </div>
         <span className="text-2xl font-bold" style={{ color }}>
-          {typeof latestValue === 'number' ? latestValue.toFixed(1) : '—'} <span className="text-sm font-normal text-th-secondary">{unit}</span>
+          {typeof latestValue === 'number' ? formatNumeric(latestValue) : '—'} <span className="text-sm font-normal text-th-secondary">{unit}</span>
         </span>
       </div>
 
@@ -953,7 +964,7 @@ function TelemetryChartCard({
               boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
               fontSize: '13px',
             }}
-            formatter={(value: number) => [`${value.toFixed(2)} ${unit}`, title]}
+            formatter={(value: number) => [`${formatNumeric(value)} ${unit}`, title]}
           />
           <Area
             type="monotone"
@@ -971,15 +982,15 @@ function TelemetryChartCard({
       <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-th-subtle">
         <div className="text-center">
           <p className="text-xs text-th-muted mb-0.5">Min</p>
-          <p className="text-sm font-semibold text-th-primary">{minValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
+          <p className="text-sm font-semibold text-th-primary">{formatNumeric(minValue)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
         <div className="text-center">
           <p className="text-xs text-th-muted mb-0.5">Avg</p>
-          <p className="text-sm font-semibold text-th-primary">{avgValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
+          <p className="text-sm font-semibold text-th-primary">{formatNumeric(avgValue)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
         <div className="text-center">
           <p className="text-xs text-th-muted mb-0.5">Max</p>
-          <p className="text-sm font-semibold text-th-primary">{maxValue.toFixed(1)} <span className="font-normal text-th-muted">{unit}</span></p>
+          <p className="text-sm font-semibold text-th-primary">{formatNumeric(maxValue)} <span className="font-normal text-th-muted">{unit}</span></p>
         </div>
       </div>
     </div>
@@ -1959,9 +1970,10 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [formData, setFormData] = useState({ name: device.name, device_type: device.device_type });
+  const [formData, setFormData] = useState({ name: device.name, device_type_id: device.device_type_id ?? '' });
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [showNewRule, setShowNewRule] = useState(false);
+  const [deviceTypes, setDeviceTypes] = useState<{ id: string; name: string }[]>([]);
 
   // API Credentials state
   const [tokens, setTokens] = useState<any[]>([]);
@@ -1991,8 +2003,19 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
         setTokens(json.data || []);
       }
     };
+    const loadDeviceTypes = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const tenant = JSON.parse(atob(token.split('.')[1])).tenant_id;
+      const res = await fetch(`/api/v1/tenants/${tenant}/device-types?per_page=100`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const json = await res.json();
+        setDeviceTypes(json.data || []);
+      }
+    };
     loadRules();
     loadTokens();
+    loadDeviceTypes();
   }, [deviceId]);
 
   const saveDevice = async () => {
@@ -2002,7 +2025,14 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
     const res = await fetch(`/api/v1/tenants/${tenant}/devices/${deviceId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(formData)
+      // device_type_id is an Optional[UUID] on the backend — "" ("Unassigned") isn't a
+      // valid UUID, and the update route treats a present device_type_id as "reassign"
+      // (not "clear"), so omit the key entirely rather than send an empty string.
+      body: JSON.stringify(
+        formData.device_type_id
+          ? formData
+          : { name: formData.name }
+      )
     });
     if (res.ok) {
       const json = await res.json();
@@ -2104,7 +2134,7 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type: device.device_type }); }} className={btn.secondary}>Cancel</button>
+              <button onClick={() => { setEditing(false); setFormData({ name: device.name, device_type_id: device.device_type_id ?? '' }); }} className={btn.secondary}>Cancel</button>
               <button onClick={saveDevice} className={btn.primary}>Save Changes</button>
             </div>
           )}
@@ -2121,7 +2151,12 @@ function DeviceSettings({ device, deviceId, onUpdate, discoveredMetrics }: { dev
           <div>
             <label className="block text-sm text-th-secondary mb-1">Device Type</label>
             {editing ? (
-              <input value={formData.device_type} onChange={e => setFormData(prev => ({ ...prev, device_type: e.target.value }))} className="w-full px-3 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <select value={formData.device_type_id} onChange={e => setFormData(prev => ({ ...prev, device_type_id: e.target.value }))} className="w-full px-3 py-2.5 border border-[var(--color-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Unassigned</option>
+                {deviceTypes.map(dt => (
+                  <option key={dt.id} value={dt.id}>{dt.name}</option>
+                ))}
+              </select>
             ) : (
               <p className="text-sm text-th-primary bg-page px-3 py-2.5 rounded-lg border border-th-default">{device.device_type}</p>
             )}

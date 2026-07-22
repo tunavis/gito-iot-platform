@@ -7,7 +7,7 @@ import StatCard from '@/components/ui/StatCard';
 import IconTile from '@/components/ui/IconTile';
 import { tag } from '@/components/ui/buttonStyles';
 import {
-  categoryIcons,
+  resolveDeviceIcon,
   capabilityColors,
   capabilityLabels,
   formatSeconds,
@@ -43,7 +43,7 @@ export default function DeviceTypeView({
       {/* Hero Identity */}
       <div className="gito-card p-6">
         <div className="flex items-start gap-4">
-          <IconTile color={dt.color} icon={categoryIcons[dt.category] || <Cpu className="w-6 h-6" />} size="lg" />
+          <IconTile color={dt.color} icon={resolveDeviceIcon(dt)} size="lg" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-xl font-bold text-th-primary">{dt.name}</h2>

@@ -242,6 +242,60 @@ def test_bcd_out_of_bounds_is_skipped():
     assert decode(spec, b64(">B", 1), None) == {}
 
 
+# ── Cross-field VIF-style exponent scaling (B METERS counter overflow) ───────
+
+def test_scale_exponent_ref_at_base_is_a_no_op():
+    # vif_code == base -> 10**0 -> unchanged
+    raw = bytes([0x74, 0x20, 0x01, 0x00, 19])  # total_volume bcd + vif_code=19
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [
+        field("total_volume", 0, 4, "bcd", endian="little",
+              scale_exponent_ref="vif_code", scale_exponent_base=19),
+        field("vif_code", 4, 1, "uint8"),
+    ]}
+    assert decode(spec, raw_b64, None) == {"total_volume": 12074.0, "vif_code": 19.0}
+
+
+def test_scale_exponent_ref_scales_up_on_overflow():
+    # vif_code=20 (one step above base 19) -> counter is in decalitres -> x10
+    raw = bytes([0x74, 0x20, 0x01, 0x00, 20])
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [
+        field("total_volume", 0, 4, "bcd", endian="little",
+              scale_exponent_ref="vif_code", scale_exponent_base=19),
+        field("vif_code", 4, 1, "uint8"),
+    ]}
+    result = decode(spec, raw_b64, None)
+    assert result["total_volume"] == pytest.approx(120740.0)
+    assert result["vif_code"] == 20.0
+
+
+def test_scale_exponent_ref_missing_is_a_no_op():
+    # ref field failed to decode (out of bounds) -> base field keeps its raw value
+    spec = {"type": "declarative", "fields": [
+        field("total_volume", 0, 4, "bcd", endian="little",
+              scale_exponent_ref="vif_code", scale_exponent_base=19),
+        field("vif_code", 10, 1, "uint8"),  # out of bounds for this 4-byte payload
+    ]}
+    raw = bytes([0x74, 0x20, 0x01, 0x00])
+    raw_b64 = base64.b64encode(raw).decode()
+    assert decode(spec, raw_b64, None) == {"total_volume": 12074.0}
+
+
+def test_scale_exponent_ref_does_not_affect_other_fields():
+    raw = bytes([0x74, 0x20, 0x01, 0x00, 20, 0x40, 0x00, 0x00, 0x00])  # + reverse_volume bcd
+    raw_b64 = base64.b64encode(raw).decode()
+    spec = {"type": "declarative", "fields": [
+        field("total_volume", 0, 4, "bcd", endian="little",
+              scale_exponent_ref="vif_code", scale_exponent_base=19),
+        field("vif_code", 4, 1, "uint8"),
+        field("reverse_volume", 5, 4, "bcd", endian="little"),  # not VIF-scaled
+    ]}
+    result = decode(spec, raw_b64, None)
+    assert result["total_volume"] == pytest.approx(120740.0)
+    assert result["reverse_volume"] == 40.0
+
+
 # ── Single-bit extraction (e.g. reading one flag out of a packed alarm byte) ─
 
 def test_decode_single_bit_set():

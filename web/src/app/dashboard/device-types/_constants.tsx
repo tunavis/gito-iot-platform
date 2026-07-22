@@ -8,6 +8,33 @@ import {
   Zap,
   Camera,
   Settings,
+  Droplet,
+  Droplets,
+  Waves,
+  Flame,
+  Wind,
+  Gauge,
+  BatteryCharging,
+  Wifi,
+  Antenna,
+  Video,
+  Navigation,
+  Satellite,
+  Lightbulb,
+  DoorOpen,
+  Siren,
+  Fan,
+  Snowflake,
+  Sun,
+  ScanLine,
+  Package,
+  Shield,
+  Cloud,
+  Activity,
+  Lock,
+  Plug,
+  Bell,
+  type LucideIcon,
 } from 'lucide-react';
 import { ProtocolType } from '@/components/ProtocolSelector';
 import type { DeviceTypeForm } from './_types';
@@ -46,6 +73,59 @@ export const categoryLabels: Record<string, string> = {
   controller: 'Controller',
   other: 'Other',
 };
+
+// --- Per-device-type icons ---
+// Every device type stores its own `icon` key (e.g. 'droplets', 'zap') distinct
+// from its broad category, so a water meter and an energy meter — both
+// category 'meter' — don't have to look identical. Pick one per device type in
+// the editor below; resolveDeviceIcon() falls back to the category icon for
+// any type that predates this or was never given one.
+
+export const ICON_OPTIONS: { value: string; label: string; Icon: LucideIcon }[] = [
+  { value: 'droplet', label: 'Water (single)', Icon: Droplet },
+  { value: 'droplets', label: 'Water', Icon: Droplets },
+  { value: 'waves', label: 'Flow', Icon: Waves },
+  { value: 'zap', label: 'Electricity', Icon: Zap },
+  { value: 'flame', label: 'Gas / Flame', Icon: Flame },
+  { value: 'thermometer', label: 'Temperature', Icon: Thermometer },
+  { value: 'wind', label: 'Air / HVAC', Icon: Wind },
+  { value: 'gauge', label: 'Pressure', Icon: Gauge },
+  { value: 'battery-charging', label: 'Battery', Icon: BatteryCharging },
+  { value: 'wifi', label: 'Wifi', Icon: Wifi },
+  { value: 'radio', label: 'Gateway', Icon: Radio },
+  { value: 'antenna', label: 'Antenna', Icon: Antenna },
+  { value: 'video', label: 'Video', Icon: Video },
+  { value: 'camera', label: 'Camera', Icon: Camera },
+  { value: 'toggle-right', label: 'Switch', Icon: ToggleRight },
+  { value: 'map-pin', label: 'Location', Icon: MapPin },
+  { value: 'navigation', label: 'Tracker', Icon: Navigation },
+  { value: 'satellite', label: 'Satellite', Icon: Satellite },
+  { value: 'lightbulb', label: 'Lighting', Icon: Lightbulb },
+  { value: 'door-open', label: 'Access', Icon: DoorOpen },
+  { value: 'siren', label: 'Alarm', Icon: Siren },
+  { value: 'fan', label: 'Fan', Icon: Fan },
+  { value: 'snowflake', label: 'Cooling', Icon: Snowflake },
+  { value: 'sun', label: 'Solar', Icon: Sun },
+  { value: 'cpu', label: 'Controller', Icon: Cpu },
+  { value: 'scan-line', label: 'Scanner', Icon: ScanLine },
+  { value: 'package', label: 'Asset', Icon: Package },
+  { value: 'shield', label: 'Security', Icon: Shield },
+  { value: 'cloud', label: 'Cloud', Icon: Cloud },
+  { value: 'activity', label: 'Activity', Icon: Activity },
+  { value: 'lock', label: 'Lock', Icon: Lock },
+  { value: 'plug', label: 'Power', Icon: Plug },
+  { value: 'bell', label: 'Notification', Icon: Bell },
+];
+
+const deviceIcons: Record<string, React.ReactNode> = Object.fromEntries(
+  ICON_OPTIONS.map(({ value, Icon }) => [value, <Icon className="w-5 h-5" />])
+);
+
+export function resolveDeviceIcon(dt: { icon?: string | null; category?: string | null }): React.ReactNode {
+  return (dt.icon && deviceIcons[dt.icon])
+    || (dt.category && categoryIcons[dt.category])
+    || <Cpu className="w-5 h-5" />;
+}
 
 // --- Capabilities ---
 

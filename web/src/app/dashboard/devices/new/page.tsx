@@ -6,9 +6,9 @@ import PageShell from '@/components/ui/PageShell';
 import LoadingState from '@/components/ui/LoadingState';
 import IconTile from '@/components/ui/IconTile';
 import { btn, input, tag } from '@/components/ui/buttonStyles';
+import { resolveDeviceIcon } from '../../device-types/_constants';
 import {
-  ArrowLeft, Plus, Cpu, Thermometer, Radio, ToggleRight, MapPin, Zap,
-  Camera, Settings, Check, AlertCircle, ChevronRight, Tag,
+  ArrowLeft, Plus, Cpu, Check, AlertCircle, ChevronRight, Tag,
   Network, Bolt, Info,
 } from 'lucide-react';
 
@@ -43,17 +43,6 @@ const PROTOCOL_META: Record<string, { label: string; color: string }> = {
   coap:    { label: 'CoAP',      color: '#0891b2' },
   zigbee:  { label: 'Zigbee',    color: '#65a30d' },
   nbiot:   { label: 'NB-IoT',    color: '#ea580c' },
-};
-
-const categoryIcons: Record<string, React.ReactNode> = {
-  sensor:     <Thermometer className="w-5 h-5" />,
-  gateway:    <Radio className="w-5 h-5" />,
-  actuator:   <ToggleRight className="w-5 h-5" />,
-  tracker:    <MapPin className="w-5 h-5" />,
-  meter:      <Zap className="w-5 h-5" />,
-  camera:     <Camera className="w-5 h-5" />,
-  controller: <Settings className="w-5 h-5" />,
-  other:      <Cpu className="w-5 h-5" />,
 };
 
 // ─── Dynamic steps ────────────────────────────────────────────────────────────
@@ -381,7 +370,7 @@ function NewDeviceForm() {
                             style={{ background: 'linear-gradient(180deg, var(--color-primary) 0%, #1d4ed8 100%)' }} />
                         )}
                         <div className="flex items-start gap-3">
-                          <IconTile color={dt.color} icon={categoryIcons[dt.category] ?? <Cpu className="w-5 h-5" />} />
+                          <IconTile color={dt.color} icon={resolveDeviceIcon(dt)} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-semibold text-th-primary">{dt.name}</span>
@@ -597,7 +586,7 @@ function NewDeviceForm() {
                 {/* Device type header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-th-subtle">
                   <div className="flex items-center gap-3">
-                    <IconTile color={selectedType.color} icon={categoryIcons[selectedType.category] ?? <Cpu className="w-5 h-5" />} />
+                    <IconTile color={selectedType.color} icon={resolveDeviceIcon(selectedType)} />
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-th-primary">{selectedType.name}</span>

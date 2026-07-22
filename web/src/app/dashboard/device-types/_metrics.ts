@@ -68,6 +68,8 @@ export function mergeMetrics(
       scale: df.scale ?? 1,
       value_offset: df.value_offset ?? 0,
       ...(df.bit != null ? { bit: df.bit } : {}),
+      ...(df.scale_exponent_ref != null ? { scale_exponent_ref: df.scale_exponent_ref } : {}),
+      ...(df.scale_exponent_base != null ? { scale_exponent_base: df.scale_exponent_base } : {}),
     };
   }
 
@@ -110,6 +112,8 @@ export function splitMetrics(
       scale: m.source.scale,
       value_offset: m.source.value_offset,
       ...(m.source.bit != null ? { bit: m.source.bit } : {}),
+      ...(m.source.scale_exponent_ref != null ? { scale_exponent_ref: m.source.scale_exponent_ref } : {}),
+      ...(m.source.scale_exponent_base != null ? { scale_exponent_base: m.source.scale_exponent_base } : {}),
     }));
 
   const decoder: PayloadDecoder | null = decoderFields.length
@@ -140,7 +144,10 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   ];
   const decoder: PayloadDecoder = {
     type: 'declarative', f_port: 2,
-    fields: [{ name: 'flow_rate', offset: 0, length: 2, type: 'uint16', endian: 'big', scale: 0.1, value_offset: 0, bit: 3 }],
+    fields: [{
+      name: 'flow_rate', offset: 0, length: 2, type: 'uint16', endian: 'big', scale: 0.1, value_offset: 0, bit: 3,
+      scale_exponent_ref: 'vif_code', scale_exponent_base: 19,
+    }],
   };
   const key_mapping = { RAW_TEMP: 'temperature' };
 
@@ -157,11 +164,14 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   assert.strictEqual(split.data_model.length, 3, 'all three in schema');
   assert.strictEqual(split.data_model.find((f) => f.name === 'flow_rate')!.unit, 'm³/h', 'schema meta preserved');
   assert.strictEqual(split.decoder!.fields[0].bit, 3, 'bit round-trips');
-  assert.strictEqual(
-    splitMetrics(mergeMetrics(dm, { type: 'declarative', fields: [{ name: 'flow_rate', offset: 0, length: 2, type: 'uint16' }] }, {})).decoder!.fields[0].bit,
-    undefined,
-    'bit stays absent when not set',
-  );
+  assert.strictEqual(split.decoder!.fields[0].scale_exponent_ref, 'vif_code', 'scale_exponent_ref round-trips');
+  assert.strictEqual(split.decoder!.fields[0].scale_exponent_base, 19, 'scale_exponent_base round-trips');
+  {
+    const bare = splitMetrics(mergeMetrics(dm, { type: 'declarative', fields: [{ name: 'flow_rate', offset: 0, length: 2, type: 'uint16' }] }, {})).decoder!.fields[0];
+    assert.strictEqual(bare.bit, undefined, 'bit stays absent when not set');
+    assert.strictEqual(bare.scale_exponent_ref, undefined, 'scale_exponent_ref stays absent when not set');
+    assert.strictEqual(bare.scale_exponent_base, undefined, 'scale_exponent_base stays absent when not set');
+  }
 
   // empty decoder -> null
   assert.strictEqual(splitMetrics(mergeMetrics(dm, null, {})).decoder, null, 'no decode fields -> null decoder');

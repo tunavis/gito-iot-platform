@@ -26,10 +26,10 @@ import EmptyState from '@/components/ui/EmptyState';
 import { btn, input, tag } from '@/components/ui/buttonStyles';
 import IconTile from '@/components/ui/IconTile';
 import {
-  categoryIcons,
   categoryLabels,
   capabilityColors,
   capabilityLabels,
+  resolveDeviceIcon,
 } from './_constants';
 import type { DeviceType } from './_types';
 
@@ -282,7 +282,7 @@ export default function DeviceTypesPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <IconTile color={deviceType.color} icon={categoryIcons[deviceType.category] || <Cpu className="w-5 h-5" />} />
+                      <IconTile color={deviceType.color} icon={resolveDeviceIcon(deviceType)} />
                       <div>
                         <h3 className="font-semibold text-th-primary">{deviceType.name}</h3>
                         <p className="text-xs text-th-secondary">
@@ -430,7 +430,7 @@ export default function DeviceTypesPage() {
                   <div className="grid grid-cols-12 gap-4 items-center">
                     <div className="col-span-3">
                       <div className="flex items-center gap-3">
-                        <IconTile color={deviceType.color} icon={categoryIcons[deviceType.category] || <Cpu className="w-4 h-4" />} size="sm" />
+                        <IconTile color={deviceType.color} icon={resolveDeviceIcon(deviceType)} size="sm" />
                         <div>
                           <p className="text-sm font-semibold text-th-primary">{deviceType.name}</p>
                           <p className="text-xs text-th-muted">{deviceType.manufacturer || 'Generic'}</p>
