@@ -153,6 +153,7 @@ async def create_device_type(
                 "min": field.min_value,
                 "max": field.max_value,
                 "required": field.required,
+                "simulation": field.simulation.model_dump() if field.simulation else None,
             })
 
     capabilities_json = device_type_data.capabilities or []
@@ -288,6 +289,7 @@ async def update_device_type(
                 "min": field.min_value,
                 "max": field.max_value,
                 "required": field.required,
+                "simulation": field.simulation.model_dump() if field.simulation else None,
             })
         update_dict["data_model"] = data_model_json
 

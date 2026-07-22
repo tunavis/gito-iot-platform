@@ -20,6 +20,7 @@ import logging
 import os
 import random
 import re
+import secrets
 import subprocess
 import sys
 import threading as _real_threading
@@ -80,6 +81,7 @@ bridges: dict[str, dict] = {}
 gito_token:     str | None = None
 gito_tenant_id: str | None = None
 gito_email:     str | None = None
+gito_base_url:  str | None = None  # the URL actually used at login — see _gito_base()
 
 sim_proc: subprocess.Popen | None = None
 
@@ -420,7 +422,11 @@ def status():
 
 # ── Gito endpoints ─────────────────────────────────────────────────────────────
 def _gito_base() -> str:
-    return bridge_cfg.get("gito_api_url", "http://localhost").rstrip("/")
+    # Prefer the URL actually used at login (the form field can override the
+    # config default) — every endpoint below must agree with login on which
+    # Gito instance it's talking to, or "logged in" and "device-types 404"
+    # can both be true at once.
+    return (gito_base_url or bridge_cfg.get("gito_api_url", "http://localhost")).rstrip("/")
 
 
 @app.route("/api/gito/session")
@@ -433,7 +439,7 @@ def gito_session():
 
 @app.route("/api/gito/login", methods=["POST"])
 def gito_login():
-    global gito_token, gito_tenant_id, gito_email
+    global gito_token, gito_tenant_id, gito_email, gito_base_url
     data  = request.json or {}
     base  = (data.get("gito_url") or _gito_base()).rstrip("/")
     email = data.get("email", "")
@@ -455,6 +461,7 @@ def gito_login():
             gito_token     = token
             gito_tenant_id = jwt_payload.get("tenant_id")
             gito_email     = email
+            gito_base_url  = base
             return jsonify({"ok": True, "tenant_id": gito_tenant_id, "email": email})
         return jsonify({"ok": False, "message": f"Login failed ({resp.status_code}): {resp.text[:300]}"}), 401
     except Exception as exc:
@@ -536,6 +543,171 @@ def create_device():
         return jsonify({"ok": False, "message": f"API {resp.status_code}: {resp.text}"}), 500
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+# ── Simulator devices ──────────────────────────────────────────────────────────
+# Dedicated, clearly-tagged devices created *only* for the simulator to
+# publish as. This is the safety boundary: simulator.py's queries all require
+# tags @> '["simulated"]', so a device created here is the *only* kind the
+# simulator will ever touch — see simulator.py's module docstring for why
+# that matters (this replaces fixture mode picking a random existing device,
+# which once corrupted 9 days of a real meter's history).
+SIMULATED_TAG = "simulated"
+
+
+def _fetch_all_devices(headers: dict) -> list[dict]:
+    """The real API caps per_page at 100 — paginate through everything rather
+    than assuming the tenant's whole fleet fits on one page. This tenant
+    already has 67+ real devices before counting any simulator ones, and the
+    fleet only grows."""
+    all_devices: list[dict] = []
+    page = 1
+    while True:
+        resp = requests.get(
+            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices?per_page=100&page={page}",
+            headers=headers, timeout=10,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"API {resp.status_code}: {resp.text[:200]}")
+        body  = resp.json()
+        items = body.get("data", body) if isinstance(body, dict) else body
+        all_devices.extend(items)
+        meta = body.get("meta") if isinstance(body, dict) else None
+        total = (meta or {}).get("total", len(all_devices))
+        if len(all_devices) >= total or not items:
+            break
+        page += 1
+    return all_devices
+
+
+@app.route("/api/simulator/devices")
+def list_simulator_devices():
+    """List devices this tool created for simulation — optionally filtered to
+    one device type. Used by the 'Add Simulator Device' panel to show what
+    already exists before creating another one."""
+    if not gito_token or not gito_tenant_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    device_type_id = request.args.get("device_type_id")
+    try:
+        items = _fetch_all_devices({"Authorization": f"Bearer {gito_token}"})
+        sim_devices = [
+            d for d in items
+            if SIMULATED_TAG in (d.get("tags") or [])
+            and (not device_type_id or d.get("device_type_id") == device_type_id)
+        ]
+        return jsonify({"ok": True, "devices": sim_devices})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/simulator/create-device", methods=["POST"])
+def create_simulator_device():
+    """Create a brand-new device tagged 'simulated', for one device type —
+    the only safe way to get a device for the simulator to publish as."""
+    if not gito_token or not gito_tenant_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    data = request.json or {}
+    device_type_id = data.get("device_type_id")
+    if not device_type_id:
+        return jsonify({"ok": False, "message": "device_type_id is required"}), 422
+
+    headers = {"Authorization": f"Bearer {gito_token}", "Content-Type": "application/json"}
+    try:
+        dt_resp = requests.get(
+            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/device-types/{device_type_id}",
+            headers=headers, timeout=10,
+        )
+        if dt_resp.status_code != 200:
+            return jsonify({"ok": False, "message": f"Device type not found ({dt_resp.status_code})"}), 404
+        dt_body     = dt_resp.json()
+        device_type = dt_body.get("data", dt_body)
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"Failed to load device type: {exc}"}), 500
+
+    protocol  = ((device_type.get("connectivity") or {}).get("protocol") or "mqtt").lower()
+    type_name = device_type.get("name", "device")
+    name = (data.get("name") or "").strip() or f"SIM - {type_name} - {secrets.token_hex(2)}"
+
+    payload = {
+        "name": name,
+        "device_type": type_name,
+        "device_type_id": device_type_id,
+        "description": f"Created by the simulator for testing {type_name} — never a real device.",
+        "tags": [SIMULATED_TAG],
+    }
+
+    attempts = 3 if protocol == "lorawan" else 1
+    for attempt in range(attempts):
+        if protocol == "lorawan":
+            payload["dev_eui"] = secrets.token_hex(8)  # 16 hex chars
+        try:
+            resp = requests.post(
+                f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices",
+                json=payload, headers=headers, timeout=10,
+            )
+        except Exception as exc:
+            return jsonify({"ok": False, "message": str(exc)}), 500
+        if resp.status_code in (200, 201):
+            body = resp.json()
+            return jsonify({"ok": True, "device": body.get("data", body)})
+        if resp.status_code == 409 and attempt < attempts - 1:
+            continue  # dev_eui collision (astronomically unlikely) — try a new one
+        return jsonify({"ok": False, "message": f"API {resp.status_code}: {resp.text}"}), 500
+    return jsonify({"ok": False, "message": "Could not allocate a unique dev_eui"}), 500
+
+
+@app.route("/api/simulator/delete-device", methods=["POST"])
+def delete_simulator_device():
+    """Delete a simulator-created device. Refuses unless the device is
+    actually tagged 'simulated' — this tool will not delete a real device,
+    even if asked to."""
+    if not gito_token or not gito_tenant_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    data      = request.json or {}
+    device_id = data.get("device_id")
+    if not device_id:
+        return jsonify({"ok": False, "message": "device_id is required"}), 422
+    headers = {"Authorization": f"Bearer {gito_token}"}
+    try:
+        get_resp = requests.get(
+            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices/{device_id}",
+            headers=headers, timeout=10,
+        )
+        if get_resp.status_code != 200:
+            return jsonify({"ok": False, "message": f"Device not found ({get_resp.status_code})"}), 404
+        device = get_resp.json()
+        device = device.get("data", device)
+        if SIMULATED_TAG not in (device.get("tags") or []):
+            return jsonify({"ok": False, "message": "Refusing to delete: this device is not tagged 'simulated'"}), 403
+        del_resp = requests.delete(
+            f"{_gito_base()}/api/v1/tenants/{gito_tenant_id}/devices/{device_id}",
+            headers=headers, timeout=10,
+        )
+        if del_resp.status_code in (200, 204):
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "message": f"API {del_resp.status_code}: {del_resp.text}"}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/detect-gito-url")
+def detect_gito_url():
+    """Probe a short list of common local URLs and return whichever answers
+    /api/health — so the login form pre-fills correctly without the user
+    needing to know internal port numbers (we got this wrong ourselves more
+    than once this session: the config default is a guess, not a guarantee)."""
+    candidates = [bridge_cfg.get("gito_api_url", "http://localhost")]
+    for extra in ("http://localhost:8088", "http://localhost:8001", "http://localhost"):
+        if extra not in candidates:
+            candidates.append(extra)
+    for base in candidates:
+        try:
+            r = requests.get(f"{base}/api/health", timeout=1.5)
+            if r.status_code == 200:
+                return jsonify({"ok": True, "url": base})
+        except Exception:
+            continue
+    return jsonify({"ok": False, "url": candidates[0]})
 
 
 # ── Bridge management ──────────────────────────────────────────────────────────
@@ -638,6 +810,34 @@ def stop_simulator():
             sim_proc.kill()
     sim_proc = None
     return jsonify({"ok": True, "running": False})
+
+
+@app.route("/api/simulator/fixture", methods=["POST"])
+def run_fixture():
+    """Publish N synthetic uplinks for one device type immediately (--fixture
+    mode) and return the log output — the repeatable "does this decoder
+    actually work" check, run from the UI instead of a terminal."""
+    data = request.json or {}
+    device_type_id = data.get("device_type_id")
+    if not device_type_id:
+        return jsonify({"ok": False, "message": "device_type_id is required"}), 422
+    count = max(1, min(int(data.get("count", 5)), 20))
+    device_id = data.get("device_id")  # optional — which simulator device to publish as
+
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "simulator.py")
+    cmd = [sys.executable, script, "--fixture", device_type_id, "--count", str(count)]
+    if device_id:
+        cmd += ["--device-id", device_id]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True, text=True, timeout=count * 3 + 15,
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "message": "Fixture run timed out"}), 504
+
+    output = (result.stdout or "") + (result.stderr or "")
+    return jsonify({"ok": result.returncode == 0, "output": output})
 
 
 @app.route("/api/bridge/saved")

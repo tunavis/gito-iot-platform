@@ -3,126 +3,409 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gito · MQTT Bridge</title>
+  <title>Gito · Device Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <style>
-    [x-cloak] { display: none !important; }
-    .pulse { animation: pulse 2s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-    .topic-row { transition: background .1s; }
-    .topic-row:hover { background: rgba(16,185,129,.07); }
-    pre { white-space: pre-wrap; word-break: break-all; }
-    .input {
-      background:#111827; border:1px solid #374151; border-radius:.375rem;
-      color:#f9fafb; padding:.35rem .6rem; font-size:.75rem; font-family:inherit;
-      outline:none; transition:border-color .15s; width:100%;
+    /* ── Gito design tokens — mirrors web/src/app/globals.css exactly ── */
+    :root {
+      --color-primary: #2563eb;
+      --color-accent: #22d3ee;
+      --color-page: #f4f7fb;
+      --color-surface: #ffffff;
+      --color-panel: #eef2f8;
+      --color-card: #ffffff;
+      --color-card-hover: #f4f7fb;
+      --color-text-primary: #0a1628;
+      --color-text-secondary: #4a6080;
+      --color-text-muted: #7c9bc2;
+      --color-border: #d4dff0;
+      --color-border-subtle: #e8eef8;
+      --color-input-bg: #ffffff;
+      --color-input-border: #c8d6ec;
+      --status-ok: #16a34a;
+      --status-ok-bg: #f0fdf4;
+      --status-warn: #d97706;
+      --status-warn-bg: #fffbeb;
+      --status-alarm: #dc2626;
+      --status-alarm-bg: #fef2f2;
+      --status-offline: #64748b;
+      --status-offline-bg: #f1f5f9;
     }
-    .input:focus { border-color:#10b981; }
-    .input:disabled { opacity:.5; cursor:not-allowed; }
-    .label { display:block; font-size:.68rem; color:#6b7280; margin-bottom:.2rem; text-transform:uppercase; letter-spacing:.05em; }
-    .btn { border-radius:.375rem; padding:.35rem .75rem; font-size:.75rem; font-family:inherit; font-weight:700; cursor:pointer; border:none; transition:background .15s; }
-    .btn-green  { background:#059669; color:#fff; }
-    .btn-green:hover:not(:disabled)  { background:#10b981; }
-    .btn-green:disabled { background:#374151; color:#6b7280; cursor:not-allowed; }
-    .btn-red    { background:#7f1d1d; color:#fca5a5; border:1px solid #991b1b; }
-    .btn-red:hover:not(:disabled) { background:#991b1b; }
-    .btn-red:disabled { background:#374151; color:#6b7280; cursor:not-allowed; }
-    .btn-gray   { background:#1f2937; color:#9ca3af; border:1px solid #374151; }
-    .btn-gray:hover:not(:disabled) { background:#374151; }
-    .card { background:#111827; border:1px solid #1f2937; border-radius:.5rem; }
-    .spin { animation: spin .8s linear infinite; display:inline-block; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-page: #070c16;
+        --color-surface: #0d1422;
+        --color-panel: #111b2e;
+        --color-card: #0f1928;
+        --color-card-hover: #152035;
+        --color-text-primary: #e8f0fe;
+        --color-text-secondary: #7c9bc2;
+        --color-text-muted: #4a6080;
+        --color-border: #1e2d45;
+        --color-border-subtle: #141f33;
+        --color-input-bg: #0a1020;
+        --color-input-border: #1e2d45;
+        --status-ok-bg: rgba(22, 163, 74, 0.15);
+        --status-warn-bg: rgba(217, 119, 6, 0.15);
+        --status-alarm-bg: rgba(220, 38, 38, 0.15);
+        --status-offline-bg: rgba(100, 116, 139, 0.15);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      background: var(--color-page);
+      color: var(--color-text-primary);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 13px;
+      margin: 0;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    [x-cloak] { display: none !important; }
+    pre { white-space: pre-wrap; word-break: break-all; margin: 0; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    .pulse { animation: pulse 2s infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; display: inline-block; }
+
+    .icon { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; flex-shrink: 0; }
+
+    .topic-row { transition: background .1s; cursor: pointer; }
+    .topic-row:hover { background: var(--color-card-hover); }
+
+    .input {
+      background: var(--color-input-bg); border: 1px solid var(--color-input-border);
+      border-radius: .375rem; color: var(--color-text-primary); padding: .35rem .6rem;
+      font-size: .75rem; font-family: inherit; outline: none; transition: border-color .15s; width: 100%;
+    }
+    .input:focus { border-color: var(--color-primary); }
+    .input:disabled { opacity: .5; cursor: not-allowed; }
+
+    .label {
+      display: block; font-size: .68rem; color: var(--color-text-muted);
+      margin-bottom: .2rem; text-transform: uppercase; letter-spacing: .05em;
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+      border-radius: .375rem; padding: .35rem .75rem; font-size: .75rem; font-family: inherit;
+      font-weight: 700; cursor: pointer; border: 1px solid transparent; transition: background .15s, opacity .15s;
+    }
+    .btn-primary { background: var(--color-primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: .88; }
+    .btn-primary:disabled { background: var(--color-border); color: var(--color-text-muted); cursor: not-allowed; }
+    .btn-danger { background: var(--status-alarm-bg); color: var(--status-alarm); border-color: color-mix(in srgb, var(--status-alarm) 40%, transparent); }
+    .btn-danger:hover:not(:disabled) { background: var(--status-alarm); color: #fff; }
+    .btn-danger:disabled { background: var(--color-panel); color: var(--color-text-muted); border-color: var(--color-border); cursor: not-allowed; }
+    .btn-ghost { background: var(--color-panel); color: var(--color-text-secondary); border-color: var(--color-border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--color-card-hover); }
+
+    .card { background: var(--color-card); border: 1px solid var(--color-border); border-radius: .5rem; }
+
+    .text-primary { color: var(--color-text-primary); }
+    .text-secondary { color: var(--color-text-secondary); }
+    .text-muted { color: var(--color-text-muted); }
+    .text-ok { color: var(--status-ok); }
+    .text-danger { color: var(--status-alarm); }
+    .text-warn { color: var(--status-warn); }
+    .text-accent { color: var(--color-accent); }
+    .text-primary-accent { color: var(--color-primary); }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: .3rem; border-radius: 999px;
+      padding: .1rem .55rem; font-weight: 700; font-size: .68rem; white-space: nowrap;
+    }
+    .badge-ok { background: var(--status-ok-bg); color: var(--status-ok); }
+    .badge-danger { background: var(--status-alarm-bg); color: var(--status-alarm); }
+    .badge-warn { background: var(--status-warn-bg); color: var(--status-warn); }
+    .badge-neutral { background: var(--color-panel); color: var(--color-text-muted); }
+    .badge-accent { background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); }
+
+    .tint-ok { background: var(--status-ok-bg); border: 1px solid color-mix(in srgb, var(--status-ok) 45%, transparent); }
+    .tint-danger { background: var(--status-alarm-bg); border: 1px solid color-mix(in srgb, var(--status-alarm) 45%, transparent); }
+    .tint-warn { background: var(--status-warn-bg); border: 1px solid color-mix(in srgb, var(--status-warn) 45%, transparent); }
+    .tint-accent { background: color-mix(in srgb, var(--color-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent); }
+
+    .dot { width: .4rem; height: .4rem; border-radius: 999px; flex-shrink: 0; }
+    .dot-ok { background: var(--status-ok); }
+    .dot-off { background: var(--color-text-muted); }
+    .dot-danger { background: var(--status-alarm); }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 999px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* ── Tab navigation ── */
+    .tab-bar { display: flex; gap: .25rem; padding: 0 1.25rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+    .tab-btn {
+      display: flex; align-items: center; gap: .45rem; padding: .8rem 1rem; font-size: .8rem; font-weight: 700;
+      color: var(--color-text-muted); border-bottom: 2px solid transparent; cursor: pointer; background: none; border-left: none; border-right: none; border-top: none;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover { color: var(--color-text-secondary); }
+    .tab-btn.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
   </style>
 </head>
-<body class="bg-gray-950 text-gray-100 text-sm font-mono" x-data="bridge()" x-init="init()">
+<body x-data="bridge()" x-init="init()">
+
+<!-- ── Icon sprite (stroke-based, matches the app's Lucide icon style) ──────── -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="11.5"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-chevron-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-square" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+  <symbol id="i-beaker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6.2a2 2 0 0 1-.4 1.2L4.5 18a2 2 0 0 0 1.6 3.2h11.8a2 2 0 0 0 1.6-3.2l-5.1-7.6a2 2 0 0 1-.4-1.2V3"/><line x1="6.5" y1="14.5" x2="17.5" y2="14.5"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="20" y2="15"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+</svg>
 
 <!-- ── Toast notifications ─────────────────────────────────────────────────── -->
 <div class="fixed bottom-5 right-5 z-[200] flex flex-col items-end gap-2 pointer-events-none">
   <template x-for="t in toasts" :key="t.id">
     <div class="pointer-events-auto flex items-center gap-2.5 pl-3.5 pr-4 py-2.5 rounded-lg shadow-2xl text-xs font-semibold border max-w-xs"
-         :class="t.type==='success' ? 'bg-emerald-950 border-emerald-700 text-emerald-100' :
-                 t.type==='error'   ? 'bg-red-950 border-red-700 text-red-100' :
-                                      'bg-gray-800 border-gray-600 text-gray-200'">
-      <span x-text="t.type==='success' ? '✓' : t.type==='error' ? '✕' : 'ℹ'"></span>
+         :class="t.type==='success' ? 'tint-ok text-ok' : t.type==='error' ? 'tint-danger text-danger' : 'card text-secondary'">
+      <svg class="icon" style="width:1.1em;height:1.1em"><use :href="t.type==='success' ? '#i-check' : t.type==='error' ? '#i-x' : '#i-info'"></use></svg>
       <span x-text="t.msg" class="break-words"></span>
     </div>
   </template>
 </div>
 
-<!-- ── Top bar ──────────────────────────────────────────────────────────────── -->
-<header class="flex items-center justify-between px-5 py-2.5 bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
-  <div class="flex items-center gap-2.5">
-    <span class="text-emerald-400 font-bold">⚡ Gito</span>
-    <span class="text-gray-600">/</span>
-    <span class="text-gray-200 font-semibold">MQTT Bridge</span>
-  </div>
-
-  <!-- Flow status strip -->
-  <div class="flex items-center gap-2 text-xs">
-    <!-- External broker -->
-    <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800">
-      <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            :class="ext.connected ? 'bg-emerald-400 pulse' : 'bg-red-500'"></span>
-      <span class="text-gray-400">External</span>
-      <span :class="ext.connected ? 'text-emerald-400' : 'text-gray-600'"
-            x-text="ext.connected ? ext.brokerLabel : 'Disconnected'"></span>
+<!-- ══════════════════════════════════════════════════════════════════════════
+     LOGIN GATE — the only thing shown until authenticated. Nothing else
+     (broker connect, topics, simulator) is reachable before this; there is
+     no reason to bury credentials mid-sidebar when every feature needs them.
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div x-show="!gito.loggedIn" x-cloak class="min-h-screen flex items-center justify-center px-4" style="min-height:100vh">
+  <div class="card w-full p-8" style="max-width:22rem">
+    <div class="flex flex-col items-center text-center mb-6">
+      <img src="/static/GitoLogo.png" alt="Gito" style="height:32px;width:auto" class="mb-4" />
+      <h1 class="text-lg font-bold text-primary">Device Simulator</h1>
+      <p class="text-xs text-muted mt-1">Sign in with your Gito account to continue</p>
     </div>
-
-    <span class="text-gray-700">→</span>
-
-    <!-- Bridge -->
-    <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800">
-      <span class="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"></span>
-      <span class="text-blue-300">Bridge</span>
-      <span class="text-gray-600" x-text="`${topics.length}t · ${activeBridges.length}b`"></span>
-    </div>
-
-    <span class="text-gray-700">→</span>
-
-    <!-- Local Mosquitto -->
-    <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800">
-      <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            :class="local.connected ? 'bg-emerald-400 pulse' : 'bg-red-500'"></span>
-      <span class="text-gray-400">Mosquitto</span>
-      <span :class="local.connected ? 'text-emerald-400' : 'text-red-400'"
-            x-text="local.connected ? 'Ready' : 'Offline'"></span>
-      <button x-show="!local.connected" @click="reconnectLocal()"
-              class="text-yellow-500 hover:text-yellow-300 underline ml-0.5 cursor-pointer">retry</button>
-    </div>
-
-    <span class="text-gray-700">→</span>
-
-    <!-- Gito -->
-    <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800">
-      <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            :class="gito.loggedIn ? 'bg-emerald-400' : 'bg-gray-600'"></span>
-      <span class="text-gray-400">Gito</span>
-      <span :class="gito.loggedIn ? 'text-emerald-400' : 'text-gray-600'"
-            x-text="gito.loggedIn ? gito.emailDisplay : 'Not logged in'"></span>
-    </div>
-  </div>
-</header>
-
-<!-- ── Main layout ───────────────────────────────────────────────────────────── -->
-<div class="flex" style="height:calc(100vh - 44px)">
-
-  <!-- Left sidebar ─────────────────────────────────────────────────────────── -->
-  <div class="w-72 flex-shrink-0 border-r border-gray-800 flex flex-col overflow-hidden">
-
-    <!-- Step 1: External Broker -->
-    <div class="border-b border-gray-800">
-      <button @click="panels.broker = !panels.broker"
-              class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-900 transition">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-bold uppercase tracking-widest text-gray-500">1</span>
-          <span class="text-xs font-semibold text-gray-300">External Broker</span>
-          <span x-show="ext.connected" class="text-xs text-emerald-500">✓</span>
-        </div>
-        <span class="text-gray-600 text-xs" x-text="panels.broker ? '▲' : '▼'"></span>
+    <div class="space-y-3">
+      <div>
+        <label class="label">Gito URL</label>
+        <input x-model="gitoForm.url" class="input" :disabled="gitoForm.loading" />
+      </div>
+      <div>
+        <label class="label">Email</label>
+        <input x-model="gitoForm.email" type="email" class="input" :disabled="gitoForm.loading" @keydown.enter="$refs.gitoPwd.focus()" />
+      </div>
+      <div>
+        <label class="label">Password</label>
+        <input x-model="gitoForm.password" type="password" class="input" x-ref="gitoPwd" :disabled="gitoForm.loading" @keydown.enter="loginGito()" />
+      </div>
+      <button @click="loginGito()" :disabled="gitoForm.loading || !gitoForm.email || !gitoForm.password" class="btn btn-primary w-full py-2.5 mt-1">
+        <span x-show="gitoForm.loading" class="spin" style="width:.75rem;height:.75rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:999px"></span>
+        <span x-text="gitoForm.loading ? 'Signing in…' : 'Sign In'"></span>
       </button>
-      <div x-show="panels.broker" x-cloak class="px-4 pb-4 space-y-2">
+      <p x-show="gitoForm.error" class="text-xs text-danger break-words text-center" x-text="gitoForm.error"></p>
+    </div>
+    <div class="flex items-center justify-center gap-2 mt-5 text-xs">
+      <span class="dot" :class="local.connected ? 'dot-ok' : 'dot-danger'"></span>
+      <span class="text-muted" x-text="'Local Mosquitto: ' + (local.connected ? 'ready' : 'offline — check Docker')"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MAIN APP — only after login
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div x-show="gito.loggedIn" x-cloak>
+
+  <!-- ── Top bar ────────────────────────────────────────────────────────────── -->
+  <header class="flex items-center justify-between px-5 py-2.5 card sticky top-0 z-50" style="border-radius:0; border-width:0 0 1px 0;">
+    <div class="flex items-center gap-3">
+      <img src="/static/GitoLogo.png" alt="Gito" style="height:22px;width:auto;" />
+      <div class="pl-3 text-secondary" style="border-left:1px solid var(--color-border)">
+        <span class="text-primary font-bold">Device Simulator</span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 text-xs">
+      <div class="flex items-center gap-1.5 px-2 py-1 rounded badge-neutral">
+        <span class="dot" :class="local.connected ? 'dot-ok pulse' : 'dot-danger'"></span>
+        <span class="text-muted">Mosquitto</span>
+        <span :class="local.connected ? 'text-ok' : 'text-danger'" x-text="local.connected ? 'Ready' : 'Offline'"></span>
+      </div>
+      <div class="flex items-center gap-1.5 px-2 py-1 rounded badge-neutral" x-show="simulator.running">
+        <span class="dot dot-ok pulse"></span>
+        <span class="text-ok">Continuous simulation running</span>
+      </div>
+      <div class="flex items-center gap-2 pl-2 ml-1" style="border-left:1px solid var(--color-border)">
+        <span class="text-secondary font-semibold" x-text="gito.emailDisplay"></span>
+        <button @click="logoutGito()" class="btn btn-ghost px-2 py-1 text-xs" title="Sign out"><svg class="icon"><use href="#i-logout"></use></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Tabs ───────────────────────────────────────────────────────────────── -->
+  <nav class="tab-bar">
+    <button @click="activeTab = 'simulator'" class="tab-btn" :class="activeTab === 'simulator' ? 'active' : ''">
+      <svg class="icon"><use href="#i-cpu"></use></svg>
+      Simulator Devices
+    </button>
+    <button @click="activeTab = 'bridge'" class="tab-btn" :class="activeTab === 'bridge' ? 'active' : ''">
+      <svg class="icon"><use href="#i-radio"></use></svg>
+      Bridge External Device
+      <span x-show="mergedBridges.length" class="badge badge-neutral" x-text="mergedBridges.length"></span>
+    </button>
+  </nav>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB: Simulator Devices — the primary, day-to-day workflow: create a
+       dedicated test device for a device type, prove its decoder works.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div x-show="activeTab === 'simulator'" class="p-6" style="max-width:64rem; margin:0 auto">
+
+    <!-- Continuous simulation — compact control bar, not a buried step -->
+    <div class="card p-4 mb-5 flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <p class="text-sm font-semibold text-primary">Continuous simulation</p>
+        <p class="text-xs text-muted mt-0.5">Publishes synthetic telemetry on a timer for every simulator device you've created — never a real device.</p>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <div x-show="!simulator.running" style="width:80px">
+          <input x-model.number="simulator.interval" type="number" min="5" max="300" class="input" title="Interval (seconds)" />
+        </div>
+        <button x-show="!simulator.running" @click="startSimulator()" :disabled="simulator.loading" class="btn btn-primary py-2 px-4 text-xs">
+          <span x-show="simulator.loading" class="spin" style="width:.75rem;height:.75rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:999px"></span>
+          <svg x-show="!simulator.loading" class="icon"><use href="#i-play"></use></svg>
+          <span x-text="simulator.loading ? 'Starting…' : 'Start'"></span>
+        </button>
+        <button x-show="simulator.running" @click="stopSimulator()" :disabled="simulator.loading" class="btn btn-danger py-2 px-4 text-xs">
+          <span x-show="simulator.loading" class="spin" style="width:.75rem;height:.75rem;border:2px solid currentColor;border-top-color:transparent;border-radius:999px"></span>
+          <svg x-show="!simulator.loading" class="icon"><use href="#i-square"></use></svg>
+          <span x-text="simulator.loading ? 'Stopping…' : 'Stop'"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="tint-accent rounded p-3 mb-5 text-xs text-primary-accent leading-relaxed">
+      Every device below is a real Gito device created specifically for testing — this
+      <strong>never</strong> uses a real device, even if one of the selected type already exists.
+    </div>
+
+    <div class="grid gap-5" style="grid-template-columns: 1fr 1fr">
+      <!-- Left: pick type + existing devices -->
+      <div class="space-y-4">
+        <div class="card p-4">
+          <label class="label">Device type</label>
+          <select x-model="fixture.deviceTypeId" @change="loadSimDevices()" class="input">
+            <option value="">— select —</option>
+            <template x-for="dt in deviceTypes" :key="dt.id">
+              <option :value="dt.id" x-text="`${dt.name} (${dt.connectivity?.protocol || 'mqtt'})`"></option>
+            </template>
+          </select>
+          <p x-show="!deviceTypes.length" class="text-xs text-muted mt-2">
+            No device types yet —
+            <a :href="gitoForm.url + '/dashboard/device-types/new'" target="_blank" class="text-primary-accent underline">create one in Gito</a>
+            first (a vendor preset does most of the work).
+          </p>
+        </div>
+
+        <div class="card p-4" x-show="fixture.deviceTypeId">
+          <p class="text-sm font-semibold text-primary mb-3">Existing simulator devices</p>
+          <div class="space-y-2">
+            <template x-if="loadingSimDevices">
+              <p class="text-xs text-muted">Loading…</p>
+            </template>
+            <template x-if="!loadingSimDevices && simDevices.length === 0">
+              <p class="text-xs text-muted">None yet — create one on the right.</p>
+            </template>
+            <template x-for="d in simDevices" :key="d.id">
+              <div class="flex items-center justify-between gap-2 px-3 py-2 rounded" style="background:var(--color-panel)">
+                <div class="min-w-0">
+                  <p class="text-xs text-primary font-semibold truncate" x-text="d.name"></p>
+                  <p class="text-xs text-muted truncate mono" x-text="d.dev_eui || d.id"></p>
+                </div>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                  <button @click="sendTestData(d.id)" :disabled="fixture.running" class="btn btn-ghost px-2 py-1 text-xs" title="Send test uplinks">
+                    <svg class="icon"><use href="#i-zap"></use></svg>
+                  </button>
+                  <button @click="deleteSimDevice(d.id)" class="btn btn-ghost px-2 py-1 text-xs" style="color:var(--status-alarm)" title="Delete this simulator device">
+                    <svg class="icon"><use href="#i-trash"></use></svg>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: create new + settings -->
+      <div class="space-y-4">
+        <div class="card p-4" x-show="fixture.deviceTypeId">
+          <p class="text-sm font-semibold text-primary mb-3">Create a new simulator device</p>
+          <label class="label">Name <span class="text-muted opacity-60">(optional — auto-generated if left blank)</span></label>
+          <input x-model="newSimDeviceName" placeholder="auto-generated if left blank" class="input mb-3" />
+          <button @click="createSimDevice()" :disabled="creatingSimDevice" class="btn btn-primary w-full py-2.5 text-xs">
+            <span x-show="creatingSimDevice" class="spin" style="width:.75rem;height:.75rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:999px"></span>
+            <svg x-show="!creatingSimDevice" class="icon"><use href="#i-send"></use></svg>
+            <span x-text="creatingSimDevice ? 'Creating…' : 'Create Simulator Device'"></span>
+          </button>
+        </div>
+
+        <div class="card p-4" x-show="fixture.deviceTypeId">
+          <label class="label">Uplinks per "send test data" click</label>
+          <input x-model.number="fixture.count" type="number" min="1" max="20" class="input" style="width:96px" />
+        </div>
+
+        <template x-if="!fixture.deviceTypeId">
+          <div class="card p-8 flex flex-col items-center text-center text-muted">
+            <svg class="icon mb-2" style="width:2rem;height:2rem"><use href="#i-cpu"></use></svg>
+            <p class="text-xs">Select a device type on the left to get started</p>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Fixture run output -->
+    <template x-if="fixture.output">
+      <div class="card p-4 mt-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <svg class="icon text-accent" style="width:1.1em;height:1.1em"><use href="#i-beaker"></use></svg>
+            <p class="text-sm font-semibold text-primary">Fixture run output</p>
+          </div>
+          <button @click="fixture.output = ''" class="btn btn-ghost text-xs">Close</button>
+        </div>
+        <pre class="mono text-xs p-3 rounded overflow-auto" style="max-height:24rem; background:var(--color-panel); color:var(--color-text-secondary)" x-text="fixture.output"></pre>
+      </div>
+    </template>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB: Bridge External Device — occasional workflow: import a real
+       device's telemetry from an external MQTT broker.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div x-show="activeTab === 'bridge'" class="flex" style="height:calc(100vh - 93px)">
+
+    <!-- Left: broker connect + topics -->
+    <div class="w-72 flex-shrink-0 flex flex-col overflow-hidden" style="border-right:1px solid var(--color-border); background:var(--color-surface)">
+      <div class="p-4 space-y-2" style="border-bottom:1px solid var(--color-border)">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-xs font-bold uppercase tracking-widest text-secondary">External Broker</p>
+          <svg x-show="ext.connected" class="icon text-ok"><use href="#i-check"></use></svg>
+        </div>
         <div>
           <label class="label">Host</label>
           <input x-model="brokerForm.host" class="input" @keydown.enter="connectBroker()" />
@@ -137,590 +420,381 @@
             <input x-model="brokerForm.topicFilter" placeholder="#" class="input" />
           </div>
         </div>
-        <div>
-          <label class="label">Username <span class="text-gray-700">(optional)</span></label>
-          <input x-model="brokerForm.username" class="input" />
-        </div>
-        <div>
-          <label class="label">Password <span class="text-gray-700">(optional)</span></label>
-          <input x-model="brokerForm.password" type="password" class="input" />
-        </div>
         <div class="flex gap-2 pt-1">
-          <button @click="connectBroker()" :disabled="brokerForm.connecting"
-                  class="btn btn-green flex-1">
-            <span x-show="brokerForm.connecting" class="spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full mr-1 align-middle"></span>
+          <button @click="connectBroker()" :disabled="brokerForm.connecting" class="btn btn-primary flex-1">
+            <span x-show="brokerForm.connecting" class="spin" style="width:.75rem;height:.75rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:999px"></span>
             <span x-text="brokerForm.connecting ? 'Connecting…' : (ext.connected ? 'Reconnect' : 'Connect')"></span>
           </button>
-          <button x-show="ext.connected" @click="disconnectBroker()" class="btn btn-red px-3">✕</button>
+          <button x-show="ext.connected" @click="disconnectBroker()" class="btn btn-danger px-3"><svg class="icon"><use href="#i-x"></use></svg></button>
         </div>
-        <p x-show="ext.message && !ext.connected" class="text-xs text-red-400 mt-1 break-words" x-text="ext.message"></p>
-        <p x-show="ext.message && ext.connected" class="text-xs text-emerald-600 mt-1" x-text="ext.message"></p>
+        <p x-show="ext.message && !ext.connected" class="text-xs text-danger break-words" x-text="ext.message"></p>
+        <p x-show="ext.message && ext.connected" class="text-xs text-ok" x-text="ext.message"></p>
+      </div>
+
+      <div class="flex flex-col flex-1 overflow-hidden">
+        <div class="px-4 py-2 flex items-center justify-between" style="border-bottom:1px solid var(--color-border)">
+          <div class="flex items-center gap-2">
+            <p class="text-xs font-bold uppercase tracking-widest text-secondary">Topics</p>
+            <span class="text-xs text-muted" x-text="topics.length ? `(${groupedTopics.length}g · ${topics.length}t)` : '(0)'"></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input x-model="topicSearch" placeholder="filter…" class="input text-xs py-0.5 px-2" style="width:70px" />
+            <button x-show="!topicSearch && topics.length > 0" @click="clearTopics()" class="text-muted hover:text-danger text-xs" title="Clear all topics"><svg class="icon"><use href="#i-trash"></use></svg></button>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+          <template x-if="topics.length === 0">
+            <div class="flex flex-col items-center justify-center py-16 text-muted">
+              <svg class="icon mb-2" style="width:2.25rem;height:2.25rem"><use href="#i-activity"></use></svg>
+              <p class="text-xs text-center">Connect to a broker to<br>see live device topics</p>
+            </div>
+          </template>
+
+          <template x-for="g in groupedTopics" :key="g.prefix">
+            <div>
+              <template x-if="g.isSingleTopic || expandedGroup !== g.prefix">
+                <div @click="g.isSingleTopic ? selectTopic(g.topics[0]) : (expandedGroup = g.prefix)"
+                     class="topic-row px-4 py-2 flex items-start gap-2"
+                     style="border-bottom:1px solid var(--color-border-subtle)"
+                     :style="g.isSingleTopic && selectedTopic?.topic === g.topics[0].topic ? 'background:var(--status-ok-bg); box-shadow: inset 2px 0 0 var(--status-ok)' : ''">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs text-primary truncate font-semibold" x-text="g.isSingleTopic ? g.topics[0].topic : g.prefix"></p>
+                    <p class="text-xs text-muted truncate mt-0.5" x-text="Object.keys(g.mergedMetrics).slice(0,4).join(' · ')"></p>
+                  </div>
+                  <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
+                    <span class="badge" :class="g.isBridged ? 'badge-ok' : 'badge-neutral'" x-text="g.totalCount"></span>
+                    <template x-if="g.isSingleTopic && g.topics[0].last_seen">
+                      <span class="text-xs text-muted" x-text="timeAgo(g.topics[0].last_seen)"></span>
+                    </template>
+                    <template x-if="!g.isSingleTopic">
+                      <span class="text-xs text-muted" x-text="`${g.topics.length} ▼`"></span>
+                    </template>
+                    <svg x-show="g.isBridged" class="icon text-ok" style="width:.8em;height:.8em"><use href="#i-link"></use></svg>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="!g.isSingleTopic && expandedGroup === g.prefix">
+                <div>
+                  <div @click="expandedGroup = null" class="topic-row px-4 py-1.5 flex items-center justify-between gap-2" style="border-bottom:1px solid var(--color-border-subtle); background:var(--color-panel)">
+                    <p class="text-xs text-primary-accent font-semibold truncate" x-text="g.prefix"></p>
+                    <svg class="icon text-muted"><use href="#i-chevron-up"></use></svg>
+                  </div>
+                  <template x-for="t in g.topics" :key="t.topic">
+                    <div @click="selectTopic(t)" class="topic-row px-4 py-2 pl-7 flex items-start gap-2" style="border-bottom:1px solid var(--color-border-subtle)"
+                         :style="selectedTopic?.topic === t.topic ? 'background:var(--status-ok-bg); box-shadow: inset 2px 0 0 var(--status-ok)' : ''">
+                      <div class="flex-1 min-w-0">
+                        <p class="text-xs text-secondary truncate" x-text="t.topic.split('/').pop()"></p>
+                        <p class="text-xs text-muted truncate mt-0.5" x-text="Object.keys(t.metrics || {}).slice(0,3).join(' · ')"></p>
+                      </div>
+                      <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
+                        <span class="badge" :class="isBridged(t.topic) ? 'badge-ok' : 'badge-neutral'" x-text="t.count"></span>
+                        <span x-show="t.last_seen" class="text-xs text-muted" x-text="timeAgo(t.last_seen)"></span>
+                        <svg x-show="isBridged(t.topic)" class="icon text-ok" style="width:.8em;height:.8em"><use href="#i-link"></use></svg>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
 
-    <!-- Step 2: Gito Login -->
-    <div class="border-b border-gray-800">
-      <button @click="panels.gito = !panels.gito"
-              class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-900 transition">
-        <div class="flex items-center gap-2 min-w-0 overflow-hidden">
-          <span class="text-xs font-bold uppercase tracking-widest text-gray-500 flex-shrink-0">2</span>
-          <span class="text-xs font-semibold text-gray-300 flex-shrink-0">Gito Login</span>
-          <span x-show="gito.loggedIn" class="text-xs text-emerald-500 truncate"
-                x-text="'✓ ' + gito.emailDisplay"></span>
-        </div>
-        <span class="text-gray-600 text-xs flex-shrink-0 ml-1" x-text="panels.gito ? '▲' : '▼'"></span>
-      </button>
-      <div x-show="panels.gito" x-cloak class="px-4 pb-4 space-y-2">
+    <!-- Right area -->
+    <div class="flex-1 flex flex-col overflow-hidden">
 
-        <!-- ── Connected state ── -->
-        <template x-if="gito.loggedIn">
-          <div class="space-y-2">
-            <div class="bg-emerald-950 border border-emerald-800 rounded p-3 flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 pulse flex-shrink-0"></span>
+      <!-- No topic selected -->
+      <template x-if="!selectedTopic">
+        <div class="flex flex-col items-center justify-center flex-1 text-muted">
+          <svg class="icon mb-4" style="width:3.5rem;height:3.5rem"><use href="#i-activity"></use></svg>
+          <p class="font-semibold text-secondary mb-1">Select a topic to get started</p>
+          <p class="text-xs text-center leading-relaxed">
+            Connect your external broker and watch topics appear.<br>
+            Pick one, register it as a Gito device, then start the bridge.
+          </p>
+          <div class="mt-8 flex items-center gap-3 text-xs">
+            <div class="px-3 py-2 rounded border flex flex-col items-center gap-0.5" :style="ext.connected ? 'border-color:var(--status-ok); color:var(--status-ok)' : 'border-color:var(--color-border); color:var(--color-text-muted)'">
+              <span>External MQTT</span>
+              <span x-text="ext.connected ? '● connected' : '○ disconnected'"></span>
+            </div>
+            <svg class="icon text-muted"><use href="#i-chevron-right"></use></svg>
+            <div class="px-3 py-2 rounded tint-accent text-primary-accent">bridge_ui.py</div>
+            <svg class="icon text-muted"><use href="#i-chevron-right"></use></svg>
+            <div class="px-3 py-2 rounded border flex flex-col items-center gap-0.5" :style="local.connected ? 'border-color:var(--status-ok); color:var(--status-ok)' : 'border-color:var(--color-border); color:var(--color-text-muted)'">
+              <span>Mosquitto</span>
+              <span x-text="local.connected ? '● ready' : '○ offline'"></span>
+            </div>
+            <svg class="icon text-muted"><use href="#i-chevron-right"></use></svg>
+            <div class="px-3 py-2 rounded card text-muted">Gito DB</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Topic selected -->
+      <template x-if="selectedTopic">
+        <div class="flex flex-1 overflow-hidden">
+
+          <div class="flex-1 flex flex-col overflow-hidden" style="border-right:1px solid var(--color-border)">
+            <div class="px-5 py-3 flex items-center justify-between flex-shrink-0" style="border-bottom:1px solid var(--color-border)">
               <div class="min-w-0">
-                <p class="text-xs text-emerald-300 font-bold">Connected to Gito</p>
-                <p class="text-xs text-emerald-600 truncate" x-text="gito.emailDisplay"></p>
+                <p class="text-xs text-muted uppercase tracking-widest mb-0.5">External topic</p>
+                <p class="text-ok font-semibold text-sm truncate mono" x-text="selectedTopic.topic"></p>
+              </div>
+              <div class="text-right text-xs text-muted flex-shrink-0 ml-4">
+                <p><span class="text-primary font-bold" x-text="selectedTopic.count"></span> messages</p>
+                <p x-text="selectedTopic.last_seen ? timeAgo(selectedTopic.last_seen) + ' ago' : 'no data yet'"></p>
               </div>
             </div>
-            <div class="flex gap-2">
-              <button @click="logoutGito()" class="btn btn-gray flex-1 text-xs">Sign out</button>
-              <button @click="loginGito()" :disabled="gitoForm.loading || !gitoForm.password"
-                      class="btn btn-gray flex-1 text-xs" title="Log in as a different user">
-                Switch user
-              </button>
-            </div>
-          </div>
-        </template>
 
-        <!-- ── Login form ── -->
-        <template x-if="!gito.loggedIn">
-          <div class="space-y-2">
-            <div>
-              <label class="label">Gito URL</label>
-              <input x-model="gitoForm.url" class="input" :disabled="gitoForm.loading" />
+            <div class="px-5 pt-4 pb-3 flex-shrink-0" style="border-bottom:1px solid var(--color-border)">
+              <p class="label mb-2">Latest raw payload</p>
+              <pre class="card mono text-xs p-3 overflow-auto" style="max-height:9rem; color:var(--status-ok)" x-text="selectedTopic.last_payload ? formatJson(selectedTopic.parsed) : '(waiting for data…)'"></pre>
             </div>
-            <div>
-              <label class="label">Email</label>
-              <input x-model="gitoForm.email" type="email" class="input"
-                     :disabled="gitoForm.loading"
-                     @keydown.enter="$refs.gitoPwd.focus()" />
-            </div>
-            <div>
-              <label class="label">Password</label>
-              <input x-model="gitoForm.password" type="password" class="input"
-                     x-ref="gitoPwd" :disabled="gitoForm.loading"
-                     @keydown.enter="loginGito()" />
-            </div>
-            <button @click="loginGito()"
-                    :disabled="gitoForm.loading || !gitoForm.email || !gitoForm.password"
-                    class="btn btn-green w-full mt-1">
-              <span x-show="gitoForm.loading" class="spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full mr-1.5 align-middle"></span>
-              <span x-text="gitoForm.loading ? 'Logging in…' : 'Log in to Gito'"></span>
-            </button>
-            <p x-show="gitoForm.error" class="text-xs text-red-400 break-words" x-text="gitoForm.error"></p>
-          </div>
-        </template>
-      </div>
-    </div>
 
-    <!-- Step 3: Topics -->
-    <div class="flex flex-col flex-1 overflow-hidden">
-      <div class="px-4 py-2 flex items-center justify-between border-b border-gray-800">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-bold uppercase tracking-widest text-gray-500">3</span>
-          <span class="text-xs font-semibold text-gray-300">Topics</span>
-          <span class="text-xs text-gray-600"
-                x-text="topics.length ? `(${groupedTopics.length}g · ${topics.length}t)` : '(0)'"></span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <input x-model="topicSearch" placeholder="filter…"
-                 class="input text-xs py-0.5 px-2" style="width:80px" />
-          <!-- Clear filter -->
-          <button x-show="topicSearch" @click="topicSearch = ''"
-                  class="text-gray-600 hover:text-gray-400 text-xs" title="Clear filter">✕</button>
-          <!-- Clear all discovered topics -->
-          <button x-show="!topicSearch && topics.length > 0" @click="clearTopics()"
-                  class="text-gray-700 hover:text-red-500 text-xs" title="Clear all topics">⊘</button>
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-y-auto">
-        <template x-if="topics.length === 0">
-          <div class="flex flex-col items-center justify-center py-16 text-gray-700">
-            <p class="text-3xl mb-2">📡</p>
-            <p class="text-xs text-center">Connect to a broker to<br>see live device topics</p>
-          </div>
-        </template>
-
-        <template x-for="g in groupedTopics" :key="g.prefix">
-          <div>
-            <!-- Collapsed group / single-topic row -->
-            <template x-if="g.isSingleTopic || expandedGroup !== g.prefix">
-              <div @click="g.isSingleTopic ? selectTopic(g.topics[0]) : (expandedGroup = g.prefix)"
-                   class="topic-row cursor-pointer px-4 py-2 flex items-start gap-2 border-b border-gray-800/40"
-                   :class="g.isSingleTopic && selectedTopic?.topic === g.topics[0].topic
-                     ? 'bg-emerald-950/50 border-l-2 border-l-emerald-500' : ''">
-                <div class="flex-1 min-w-0">
-                  <p class="text-xs text-gray-200 truncate font-semibold"
-                     x-text="g.isSingleTopic ? g.topics[0].topic : g.prefix"></p>
-                  <p class="text-xs text-gray-600 truncate mt-0.5"
-                     x-text="Object.keys(g.mergedMetrics).slice(0,4).join(' · ')"></p>
-                </div>
-                <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
-                  <span class="text-xs rounded-full px-1.5 py-0.5 font-bold"
-                        :class="g.isBridged ? 'bg-emerald-900 text-emerald-300' : 'bg-gray-800 text-gray-500'"
-                        x-text="g.totalCount"></span>
-                  <template x-if="g.isSingleTopic && g.topics[0].last_seen">
-                    <span class="text-xs text-gray-700" x-text="timeAgo(g.topics[0].last_seen)"></span>
-                  </template>
-                  <template x-if="!g.isSingleTopic">
-                    <span class="text-xs text-gray-600" x-text="`${g.topics.length} ▼`"></span>
-                  </template>
-                  <span x-show="g.isBridged" class="text-xs leading-none">🔗</span>
-                </div>
+            <div class="px-5 py-4 flex-1 overflow-auto">
+              <div class="flex items-center justify-between mb-3">
+                <p class="label">Metrics forwarded to Gito</p>
+                <span class="text-xs" :class="Object.keys(selectedTopic.metrics||{}).length > 0 ? 'text-ok' : 'text-muted'" x-text="`${Object.keys(selectedTopic.metrics||{}).length} metric(s)`"></span>
               </div>
-            </template>
 
-            <!-- Expanded group -->
-            <template x-if="!g.isSingleTopic && expandedGroup === g.prefix">
-              <div>
-                <div @click="expandedGroup = null"
-                     class="topic-row cursor-pointer px-4 py-1.5 flex items-center justify-between gap-2 border-b border-gray-800/40 bg-gray-900/60">
-                  <p class="text-xs text-emerald-500 font-semibold truncate" x-text="g.prefix"></p>
-                  <span class="text-gray-600 text-xs flex-shrink-0">▲</span>
+              <template x-if="Object.keys(selectedTopic.metrics||{}).length === 0">
+                <div class="tint-warn rounded p-3 mb-4">
+                  <p class="text-warn text-xs font-semibold">No metrics detected</p>
+                  <p class="text-warn text-xs mt-1" style="opacity:.8">No numeric or string values found in this payload. mqtt_processor may not store anything.</p>
                 </div>
-                <template x-for="t in g.topics" :key="t.topic">
-                  <div @click="selectTopic(t)"
-                       class="topic-row cursor-pointer px-4 py-2 pl-7 flex items-start gap-2 border-b border-gray-800/40"
-                       :class="selectedTopic?.topic === t.topic
-                         ? 'bg-emerald-950/50 border-l-2 border-l-emerald-500' : ''">
-                    <div class="flex-1 min-w-0">
-                      <p class="text-xs text-gray-300 truncate" x-text="t.topic.split('/').pop()"></p>
-                      <p class="text-xs text-gray-700 truncate mt-0.5"
-                         x-text="Object.keys(t.metrics || {}).slice(0,3).join(' · ')"></p>
+              </template>
+
+              <template x-if="Object.keys(selectedTopic.metrics||{}).length > 0">
+                <div class="card overflow-hidden mb-4">
+                  <div class="grid" style="grid-template-columns:1fr auto auto; background:var(--color-panel); border-bottom:1px solid var(--color-border)">
+                    <span class="px-3 py-1.5 text-muted text-xs uppercase tracking-widest">Key</span>
+                    <span class="px-3 py-1.5 text-muted text-xs uppercase tracking-widest text-right">Value</span>
+                    <span class="px-3 py-1.5 text-muted text-xs uppercase tracking-widest text-right" style="min-width:56px">Type</span>
+                  </div>
+                  <template x-for="[key, val] in Object.entries(selectedTopic.metrics||{})" :key="key">
+                    <div class="grid" style="grid-template-columns:1fr auto auto; border-bottom:1px solid var(--color-border-subtle)">
+                      <span class="px-3 py-2 text-xs text-secondary mono truncate" x-text="key"></span>
+                      <span class="px-3 py-2 text-xs text-ok mono text-right" x-text="typeof val==='number' ? val.toFixed(3) : String(val)"></span>
+                      <span class="px-3 py-2 text-xs text-muted text-right mono" style="min-width:56px" x-text="typeof val==='number' ? 'num' : typeof val==='boolean' ? 'bool' : 'str'"></span>
                     </div>
-                    <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
-                      <span class="text-xs rounded-full px-1.5 py-0.5 font-bold"
-                            :class="isBridged(t.topic) ? 'bg-emerald-900 text-emerald-300' : 'bg-gray-800 text-gray-500'"
-                            x-text="t.count"></span>
-                      <span x-show="t.last_seen" class="text-xs text-gray-700" x-text="timeAgo(t.last_seen)"></span>
-                      <span x-show="isBridged(t.topic)" class="text-xs leading-none">🔗</span>
+                  </template>
+                </div>
+              </template>
+
+              <template x-if="isBridged(selectedTopic.topic)">
+                <div class="tint-ok rounded p-3">
+                  <p class="text-xs text-muted uppercase tracking-widest mb-1">Publishing to</p>
+                  <p class="text-ok text-xs mono break-all" x-text="`${gito.tenantId}/devices/${bridgeForTopic(selectedTopic.topic)?.device_id}/telemetry`"></p>
+                </div>
+              </template>
+              <template x-if="!isBridged(selectedTopic.topic)">
+                <div class="card rounded p-3">
+                  <p class="text-xs text-muted uppercase tracking-widest mb-1">Will publish to</p>
+                  <p class="text-warn text-xs mono" x-text="`${gito.tenantId}/devices/{device_id}/telemetry`"></p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Right: Register & Bridge panel -->
+          <div class="flex-shrink-0 flex flex-col overflow-hidden" style="width:300px">
+            <div class="px-5 py-3 flex-shrink-0" style="border-bottom:1px solid var(--color-border)">
+              <p class="text-xs font-bold uppercase tracking-widest text-secondary">Register Device</p>
+            </div>
+
+            <div class="flex-1 overflow-auto px-5 py-4">
+
+              <template x-if="isBridged(selectedTopic.topic)">
+                <div class="space-y-3">
+                  <div class="tint-ok rounded p-3">
+                    <p class="text-ok text-xs font-bold mb-1 flex items-center gap-1.5"><svg class="icon"><use href="#i-link"></use></svg>Bridge Active</p>
+                    <p class="text-ok text-xs leading-relaxed" style="opacity:.75">Telemetry is flowing into Gito via local Mosquitto.</p>
+                  </div>
+                  <div class="card p-3 text-xs space-y-1.5">
+                    <div class="flex justify-between gap-2">
+                      <span class="text-muted">Device</span>
+                      <span class="text-primary font-bold truncate" x-text="bridgeForTopic(selectedTopic.topic)?.device_name"></span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-muted">Forwarded</span>
+                      <span class="text-primary font-bold" x-text="bridgeForTopic(selectedTopic.topic)?.count"></span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-muted">Status</span>
+                      <span :class="bridgeForTopic(selectedTopic.topic)?.status==='ok' ? 'text-ok' : 'text-danger'" x-text="bridgeForTopic(selectedTopic.topic)?.status"></span>
                     </div>
                   </div>
-                </template>
-              </div>
-            </template>
-          </div>
-        </template>
-      </div>
-    </div>
-
-    <!-- Step 4: Simulator -->
-    <div class="border-t border-gray-800 flex-shrink-0">
-      <button @click="panels.simulator = !panels.simulator"
-              class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-900 transition">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-bold uppercase tracking-widest text-gray-500">4</span>
-          <span class="text-xs font-semibold text-gray-300">Simulator</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span x-show="simulator.running" class="flex items-center gap-1 text-xs text-emerald-400">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse"></span>Running
-          </span>
-          <span x-show="!simulator.running" class="text-xs text-gray-600">Stopped</span>
-          <span class="text-gray-600 text-xs" x-text="panels.simulator ? '▲' : '▼'"></span>
-        </div>
-      </button>
-      <div x-show="panels.simulator" x-cloak class="px-3 pb-3 space-y-2.5">
-        <p class="text-xs text-gray-600 leading-relaxed">
-          Publishes synthetic telemetry for all active Gito devices. Auto-detects new devices every 10s.
-        </p>
-        <template x-if="gito.loggedIn && gitoDevices.length > 0">
-          <div class="text-xs text-gray-500">
-            Devices: <span class="text-gray-200 font-semibold" x-text="gitoDevices.length"></span>
-          </div>
-        </template>
-        <div x-show="!simulator.running">
-          <label class="label">Interval (seconds)</label>
-          <input x-model.number="simulator.interval" type="number" min="5" max="300" class="input" />
-        </div>
-        <template x-if="simulator.running && simulator.pid">
-          <div class="text-xs text-gray-600">PID: <span class="text-gray-400" x-text="simulator.pid"></span></div>
-        </template>
-        <button x-show="!simulator.running" @click="startSimulator()"
-                :disabled="simulator.loading" class="btn btn-green w-full py-2 text-xs">
-          <span x-show="simulator.loading" class="spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full mr-1 align-middle"></span>
-          <span x-text="simulator.loading ? 'Starting…' : '▶ Start Simulator'"></span>
-        </button>
-        <button x-show="simulator.running" @click="stopSimulator()"
-                :disabled="simulator.loading" class="btn btn-red w-full py-2 text-xs">
-          <span x-show="simulator.loading" class="spin w-3 h-3 border-2 border-red-300/30 border-t-red-300 rounded-full mr-1 align-middle"></span>
-          <span x-text="simulator.loading ? 'Stopping…' : '■ Stop Simulator'"></span>
-        </button>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Right area ────────────────────────────────────────────────────────────── -->
-  <div class="flex-1 flex flex-col overflow-hidden">
-
-    <!-- No topic selected -->
-    <template x-if="!selectedTopic">
-      <div class="flex flex-col items-center justify-center flex-1 text-gray-700">
-        <p class="text-6xl mb-5">🛰️</p>
-        <p class="font-semibold text-gray-400 mb-1">Select a topic to get started</p>
-        <p class="text-xs text-center leading-relaxed">
-          Connect your external broker (Step 1) and watch topics appear.<br>
-          Pick one, register it as a Gito device, then start the bridge.
-        </p>
-        <!-- Live status diagram -->
-        <div class="mt-8 flex items-center gap-3 text-xs">
-          <div class="px-3 py-2 rounded border flex flex-col items-center gap-0.5"
-               :class="ext.connected ? 'border-emerald-800 text-emerald-400' : 'border-gray-800 text-gray-600'">
-            <span>External MQTT</span>
-            <span x-text="ext.connected ? '● connected' : '○ disconnected'"></span>
-          </div>
-          <span class="text-gray-700">──►</span>
-          <div class="px-3 py-2 rounded bg-gray-900 border border-emerald-900 text-emerald-500">bridge_ui.py</div>
-          <span class="text-gray-700">──►</span>
-          <div class="px-3 py-2 rounded border flex flex-col items-center gap-0.5"
-               :class="local.connected ? 'border-emerald-800 text-emerald-400' : 'border-gray-800 text-gray-600'">
-            <span>Mosquitto</span>
-            <span x-text="local.connected ? '● ready' : '○ offline'"></span>
-          </div>
-          <span class="text-gray-700">──►</span>
-          <div class="px-3 py-2 rounded bg-gray-900 border border-gray-800 text-gray-500">Gito DB</div>
-        </div>
-      </div>
-    </template>
-
-    <!-- Topic selected -->
-    <template x-if="selectedTopic">
-      <div class="flex flex-1 overflow-hidden">
-
-        <!-- Center: payload + metrics -->
-        <div class="flex-1 flex flex-col overflow-hidden border-r border-gray-800">
-
-          <!-- Topic header -->
-          <div class="px-5 py-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
-            <div class="min-w-0">
-              <p class="text-xs text-gray-600 uppercase tracking-widest mb-0.5">External topic</p>
-              <p class="text-emerald-400 font-semibold text-sm truncate" x-text="selectedTopic.topic"></p>
-            </div>
-            <div class="text-right text-xs text-gray-600 flex-shrink-0 ml-4">
-              <p><span class="text-white font-bold" x-text="selectedTopic.count"></span> messages</p>
-              <p x-text="selectedTopic.last_seen ? timeAgo(selectedTopic.last_seen) + ' ago' : 'no data yet'"></p>
-            </div>
-          </div>
-
-          <!-- Raw payload -->
-          <div class="px-5 pt-4 pb-3 border-b border-gray-800 flex-shrink-0">
-            <p class="label mb-2">Latest raw payload</p>
-            <pre class="bg-gray-900 rounded p-3 text-xs text-green-300 overflow-auto max-h-36"
-                 x-text="selectedTopic.last_payload ? formatJson(selectedTopic.parsed) : '(waiting for data…)'"></pre>
-          </div>
-
-          <!-- Metrics -->
-          <div class="px-5 py-4 flex-1 overflow-auto">
-            <div class="flex items-center justify-between mb-3">
-              <p class="label">Metrics forwarded to Gito</p>
-              <span class="text-xs"
-                    :class="Object.keys(selectedTopic.metrics||{}).length > 0 ? 'text-emerald-600' : 'text-gray-700'"
-                    x-text="`${Object.keys(selectedTopic.metrics||{}).length} metric(s)`"></span>
-            </div>
-
-            <template x-if="Object.keys(selectedTopic.metrics||{}).length === 0">
-              <div class="bg-yellow-950/40 border border-yellow-900/50 rounded p-3 mb-4">
-                <p class="text-yellow-500 text-xs font-semibold">No metrics detected</p>
-                <p class="text-yellow-700 text-xs mt-1">
-                  No numeric or string values found in this payload. mqtt_processor may not store anything.
-                </p>
-              </div>
-            </template>
-
-            <template x-if="Object.keys(selectedTopic.metrics||{}).length > 0">
-              <div class="border border-gray-700 rounded overflow-hidden mb-4">
-                <div class="grid bg-gray-800/80 border-b border-gray-700"
-                     style="grid-template-columns:1fr auto auto">
-                  <span class="px-3 py-1.5 text-gray-500 text-xs uppercase tracking-widest">Key</span>
-                  <span class="px-3 py-1.5 text-gray-500 text-xs uppercase tracking-widest text-right">Value</span>
-                  <span class="px-3 py-1.5 text-gray-500 text-xs uppercase tracking-widest text-right" style="min-width:56px">Type</span>
+                  <button @click="stopBridgeForTopic(selectedTopic.topic)" class="btn btn-danger w-full">Stop Bridge</button>
                 </div>
-                <template x-for="[key, val] in Object.entries(selectedTopic.metrics||{})" :key="key">
-                  <div class="grid border-b border-gray-800 last:border-b-0 hover:bg-gray-800/40"
-                       style="grid-template-columns:1fr auto auto">
-                    <span class="px-3 py-2 text-xs text-gray-300 font-mono truncate" x-text="key"></span>
-                    <span class="px-3 py-2 text-xs text-emerald-400 font-mono text-right"
-                          x-text="typeof val==='number' ? val.toFixed(3) : String(val)"></span>
-                    <span class="px-3 py-2 text-xs text-gray-600 text-right font-mono" style="min-width:56px"
-                          x-text="typeof val==='number' ? 'num' : typeof val==='boolean' ? 'bool' : 'str'"></span>
-                  </div>
-                </template>
-              </div>
-            </template>
+              </template>
 
-            <!-- Route preview -->
-            <template x-if="gito.loggedIn && isBridged(selectedTopic.topic)">
-              <div class="bg-emerald-950/30 rounded p-3 border border-emerald-900/40">
-                <p class="text-xs text-gray-600 uppercase tracking-widest mb-1">Publishing to</p>
-                <p class="text-emerald-500 text-xs font-mono break-all"
-                   x-text="`${gito.tenantId}/devices/${bridgeForTopic(selectedTopic.topic)?.device_id}/telemetry`"></p>
-              </div>
-            </template>
-            <template x-if="gito.loggedIn && !isBridged(selectedTopic.topic)">
-              <div class="bg-gray-900/60 rounded p-3 border border-gray-800">
-                <p class="text-xs text-gray-600 uppercase tracking-widest mb-1">Will publish to</p>
-                <p class="text-yellow-700 text-xs font-mono"
-                   x-text="`${gito.tenantId}/devices/{device_id}/telemetry`"></p>
-              </div>
-            </template>
-          </div>
-        </div>
+              <template x-if="!isBridged(selectedTopic.topic)">
+                <div class="space-y-3">
 
-        <!-- Right: Register & Bridge panel -->
-        <div class="flex-shrink-0 flex flex-col overflow-hidden" style="width:300px">
-          <div class="px-5 py-3 border-b border-gray-800 flex-shrink-0">
-            <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Register Device</p>
-          </div>
-
-          <div class="flex-1 overflow-auto px-5 py-4">
-
-            <!-- Already bridged -->
-            <template x-if="isBridged(selectedTopic.topic)">
-              <div class="space-y-3">
-                <div class="bg-emerald-950 border border-emerald-800 rounded p-3">
-                  <p class="text-emerald-300 text-xs font-bold mb-1">🔗 Bridge Active</p>
-                  <p class="text-emerald-500/70 text-xs leading-relaxed">
-                    Telemetry is flowing into Gito via local Mosquitto.
-                  </p>
-                </div>
-                <div class="card p-3 text-xs space-y-1.5">
-                  <div class="flex justify-between gap-2">
-                    <span class="text-gray-500">Device</span>
-                    <span class="text-white font-bold truncate" x-text="bridgeForTopic(selectedTopic.topic)?.device_name"></span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span class="text-gray-500">Forwarded</span>
-                    <span class="text-white font-bold" x-text="bridgeForTopic(selectedTopic.topic)?.count"></span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span class="text-gray-500">Status</span>
-                    <span :class="bridgeForTopic(selectedTopic.topic)?.status==='ok' ? 'text-emerald-400' : 'text-red-400'"
-                          x-text="bridgeForTopic(selectedTopic.topic)?.status"></span>
-                  </div>
-                </div>
-                <button @click="stopBridgeForTopic(selectedTopic.topic)" class="btn btn-red w-full">
-                  Stop Bridge
-                </button>
-              </div>
-            </template>
-
-            <!-- Create / Link form -->
-            <template x-if="!isBridged(selectedTopic.topic)">
-              <div class="space-y-3">
-
-                <!-- Prerequisite warnings -->
-                <template x-if="!local.connected">
-                  <div class="bg-red-950/60 border border-red-800/60 rounded p-3">
-                    <p class="text-red-300 text-xs font-bold">⚠ Mosquitto offline</p>
-                    <p class="text-red-500/70 text-xs mt-1">Check Docker is running.</p>
-                  </div>
-                </template>
-                <template x-if="!gito.loggedIn">
-                  <div class="bg-yellow-950/50 border border-yellow-900/50 rounded p-3">
-                    <p class="text-yellow-300 text-xs">⚠ Log in to Gito first (Step 2)</p>
-                  </div>
-                </template>
-
-                <!-- Mode tabs -->
-                <div class="flex rounded overflow-hidden border border-gray-700 text-xs">
-                  <button @click="linkMode = 'create'"
-                          class="flex-1 py-1.5 font-semibold transition border-r border-gray-700"
-                          :class="linkMode==='create'
-                            ? 'bg-emerald-900 text-emerald-300'
-                            : 'bg-gray-800 text-gray-500 hover:text-gray-300'">
-                    + New Device
-                  </button>
-                  <button @click="switchToLinkMode()"
-                          class="flex-1 py-1.5 font-semibold transition"
-                          :class="linkMode==='link'
-                            ? 'bg-emerald-900 text-emerald-300'
-                            : 'bg-gray-800 text-gray-500 hover:text-gray-300'">
-                    Link Existing
-                  </button>
-                </div>
-
-                <!-- CREATE tab -->
-                <div x-show="linkMode === 'create'" class="space-y-3">
-                  <div>
-                    <label class="label">Device name *</label>
-                    <input x-model="newDevice.name"
-                           :placeholder="suggestName(selectedTopic.topic)"
-                           class="input"
-                           :class="newDevice.name.trim() ? 'border-emerald-800' : ''" />
-                  </div>
-                  <div>
-                    <label class="label">Device type <span class="text-gray-700">(optional)</span></label>
-                    <select x-model="newDevice.deviceTypeId" class="input">
-                      <option value="">— none —</option>
-                      <template x-for="dt in deviceTypes" :key="dt.id">
-                        <option :value="dt.id" x-text="dt.name"></option>
-                      </template>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="label">Description <span class="text-gray-700">(optional)</span></label>
-                    <input x-model="newDevice.description" placeholder="e.g. Outdoor sensor" class="input" />
-                  </div>
-                  <div>
-                    <label class="label">Location <span class="text-gray-700">(optional)</span></label>
-                    <input x-model="newDevice.location" placeholder="e.g. Warehouse A" class="input" />
-                  </div>
-                  <button @click="createAndBridge()"
-                          :disabled="!gito.loggedIn || !local.connected || creating || !newDevice.name.trim()"
-                          class="btn btn-green w-full py-2.5 mt-2">
-                    <span x-show="creating" class="spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full mr-1.5 align-middle"></span>
-                    <span x-text="creating ? 'Creating…' : '🚀 Create &amp; Start Bridge'"></span>
-                  </button>
-                  <p x-show="createError" class="text-xs text-red-400 break-words" x-text="createError"></p>
-                </div>
-
-                <!-- LINK tab -->
-                <div x-show="linkMode === 'link'" class="space-y-2">
-                  <template x-if="!gito.loggedIn">
-                    <p class="text-xs text-gray-600 text-center py-4">Log in to Gito to see your devices.</p>
+                  <template x-if="!local.connected">
+                    <div class="tint-danger rounded p-3">
+                      <p class="text-danger text-xs font-bold flex items-center gap-1.5"><svg class="icon"><use href="#i-alert"></use></svg>Mosquitto offline</p>
+                      <p class="text-danger text-xs mt-1" style="opacity:.75">Check Docker is running.</p>
+                    </div>
                   </template>
-                  <template x-if="gito.loggedIn">
-                    <div class="space-y-2">
-                      <div class="flex items-center gap-2">
-                        <input x-model="deviceSearch" placeholder="search devices…" class="input flex-1" />
-                        <button @click="loadGitoDevices()" :disabled="loadingDevices"
-                                class="btn btn-gray px-2.5 py-1 text-xs flex-shrink-0" title="Refresh list">
-                          <span x-show="!loadingDevices">↺</span>
-                          <span x-show="loadingDevices" class="spin w-3 h-3 border-2 border-gray-500/30 border-t-gray-400 rounded-full"></span>
-                        </button>
-                      </div>
 
-                      <div class="border border-gray-700 rounded overflow-hidden max-h-52 overflow-y-auto">
-                        <template x-if="loadingDevices">
-                          <div class="flex items-center justify-center py-6 gap-2 text-gray-600 text-xs">
-                            <span class="spin w-3 h-3 border-2 border-gray-600/30 border-t-gray-600 rounded-full"></span>
-                            Loading…
-                          </div>
-                        </template>
-                        <template x-if="!loadingDevices && gitoDevices.length === 0">
-                          <p class="text-xs text-gray-600 text-center py-4 px-3">No devices in Gito yet.</p>
-                        </template>
-                        <template x-if="!loadingDevices && filteredGitoDevices.length === 0 && gitoDevices.length > 0">
-                          <p class="text-xs text-gray-600 text-center py-4">
-                            No match for "<span x-text="deviceSearch"></span>"
-                          </p>
-                        </template>
-                        <template x-if="!loadingDevices && filteredGitoDevices.length > 0">
-                          <template x-for="dev in filteredGitoDevices" :key="dev.id">
-                            <div @click="selectedDevice = dev"
-                                 class="px-3 py-2 cursor-pointer border-b border-gray-800 last:border-b-0 transition"
-                                 :class="selectedDevice?.id === dev.id
-                                   ? 'bg-emerald-950 border-l-2 border-l-emerald-500'
-                                   : 'hover:bg-gray-800'">
-                              <div class="flex items-center justify-between gap-2">
-                                <div class="min-w-0">
-                                  <p class="text-xs text-gray-200 font-semibold truncate" x-text="dev.name"></p>
-                                  <p class="text-xs text-gray-600 truncate" x-text="dev.device_type || '—'"></p>
-                                </div>
-                                <span class="flex-shrink-0 text-xs rounded-full px-1.5 py-0.5 font-bold"
-                                      :class="dev.status==='active' ? 'bg-emerald-900 text-emerald-300' : 'bg-gray-800 text-gray-500'"
-                                      x-text="dev.status || '?'"></span>
-                              </div>
-                            </div>
-                          </template>
-                        </template>
-                      </div>
+                  <div class="flex rounded overflow-hidden text-xs" style="border:1px solid var(--color-border)">
+                    <button @click="linkMode = 'create'" class="flex-1 py-1.5 font-semibold transition-colors"
+                            :style="linkMode==='create' ? 'background:var(--status-ok-bg); color:var(--status-ok); border-right:1px solid var(--color-border)' : 'background:var(--color-panel); color:var(--color-text-muted); border-right:1px solid var(--color-border)'">
+                      + New Device
+                    </button>
+                    <button @click="switchToLinkMode()" class="flex-1 py-1.5 font-semibold transition-colors"
+                            :style="linkMode==='link' ? 'background:var(--status-ok-bg); color:var(--status-ok)' : 'background:var(--color-panel); color:var(--color-text-muted)'">
+                      Link Existing
+                    </button>
+                  </div>
 
-                      <template x-if="selectedDevice">
-                        <div class="card px-3 py-2 text-xs bg-emerald-950/20 border-emerald-900/50">
-                          <p class="text-gray-500">Selected →</p>
-                          <p class="text-emerald-300 font-semibold" x-text="selectedDevice.name"></p>
+                  <div x-show="linkMode === 'create'" class="space-y-3">
+                    <div>
+                      <label class="label">Device name *</label>
+                      <input x-model="newDevice.name" :placeholder="suggestName(selectedTopic.topic)" class="input" />
+                    </div>
+                    <div>
+                      <label class="label">Device type <span class="text-muted opacity-60">(optional)</span></label>
+                      <select x-model="newDevice.deviceTypeId" class="input">
+                        <option value="">— none —</option>
+                        <template x-for="dt in deviceTypes" :key="dt.id">
+                          <option :value="dt.id" x-text="dt.name"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="label">Description <span class="text-muted opacity-60">(optional)</span></label>
+                      <input x-model="newDevice.description" placeholder="e.g. Outdoor sensor" class="input" />
+                    </div>
+                    <div>
+                      <label class="label">Location <span class="text-muted opacity-60">(optional)</span></label>
+                      <input x-model="newDevice.location" placeholder="e.g. Warehouse A" class="input" />
+                    </div>
+                    <button @click="createAndBridge()" :disabled="!local.connected || creating || !newDevice.name.trim()" class="btn btn-primary w-full py-2.5 mt-2">
+                      <span x-show="creating" class="spin" style="width:.75rem;height:.75rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:999px"></span>
+                      <svg x-show="!creating" class="icon"><use href="#i-send"></use></svg>
+                      <span x-text="creating ? 'Creating…' : 'Create & Start Bridge'"></span>
+                    </button>
+                    <p x-show="createError" class="text-xs text-danger break-words" x-text="createError"></p>
+                  </div>
+
+                  <div x-show="linkMode === 'link'" class="space-y-2">
+                    <div class="flex items-center gap-2">
+                      <input x-model="deviceSearch" placeholder="search devices…" class="input flex-1" />
+                      <button @click="loadGitoDevices()" :disabled="loadingDevices" class="btn btn-ghost px-2.5 py-1 text-xs flex-shrink-0" title="Refresh list">
+                        <svg x-show="!loadingDevices" class="icon"><use href="#i-refresh"></use></svg>
+                        <span x-show="loadingDevices" class="spin" style="width:.75rem;height:.75rem;border:2px solid var(--color-border);border-top-color:var(--color-text-muted);border-radius:999px"></span>
+                      </button>
+                    </div>
+
+                    <div class="card overflow-hidden" style="max-height:13rem; overflow-y:auto">
+                      <template x-if="loadingDevices">
+                        <div class="flex items-center justify-center py-6 gap-2 text-muted text-xs">
+                          <span class="spin" style="width:.75rem;height:.75rem;border:2px solid var(--color-border);border-top-color:var(--color-text-muted);border-radius:999px"></span>
+                          Loading…
                         </div>
                       </template>
-
-                      <button @click="linkAndBridge()"
-                              :disabled="!gito.loggedIn || !local.connected || linking || !selectedDevice"
-                              class="btn btn-green w-full py-2.5 mt-1">
-                        <span x-show="linking" class="spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full mr-1.5 align-middle"></span>
-                        <span x-text="linking ? 'Starting…' : '🔗 Link &amp; Start Bridge'"></span>
-                      </button>
-                      <p x-show="linkError" class="text-xs text-red-400 break-words" x-text="linkError"></p>
+                      <template x-if="!loadingDevices && gitoDevices.length === 0">
+                        <p class="text-xs text-muted text-center py-4 px-3">No devices in Gito yet.</p>
+                      </template>
+                      <template x-if="!loadingDevices && filteredGitoDevices.length === 0 && gitoDevices.length > 0">
+                        <p class="text-xs text-muted text-center py-4">No match for "<span x-text="deviceSearch"></span>"</p>
+                      </template>
+                      <template x-if="!loadingDevices && filteredGitoDevices.length > 0">
+                        <template x-for="dev in filteredGitoDevices" :key="dev.id">
+                          <div @click="selectedDevice = dev" class="px-3 py-2 cursor-pointer transition-colors" style="border-bottom:1px solid var(--color-border-subtle)"
+                               :style="selectedDevice?.id === dev.id ? 'background:var(--status-ok-bg); box-shadow: inset 2px 0 0 var(--status-ok)' : ''">
+                            <div class="flex items-center justify-between gap-2">
+                              <div class="min-w-0">
+                                <p class="text-xs text-primary font-semibold truncate" x-text="dev.name"></p>
+                                <p class="text-xs text-muted truncate" x-text="dev.device_type || '—'"></p>
+                              </div>
+                              <span class="badge" :class="dev.status==='active' ? 'badge-ok' : 'badge-neutral'" x-text="dev.status || '?'"></span>
+                            </div>
+                          </div>
+                        </template>
+                      </template>
                     </div>
-                  </template>
-                </div>
 
+                    <template x-if="selectedDevice">
+                      <div class="card tint-ok px-3 py-2 text-xs">
+                        <p class="text-muted">Selected →</p>
+                        <p class="text-ok font-semibold" x-text="selectedDevice.name"></p>
+                      </div>
+                    </template>
+
+                    <button @click="linkAndBridge()" :disabled="!local.connected || linking || !selectedDevice" class="btn btn-primary w-full py-2.5 mt-1">
+                      <span x-show="linking" class="spin" style="width:.75rem;height:.75rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:999px"></span>
+                      <svg x-show="!linking" class="icon"><use href="#i-link"></use></svg>
+                      <span x-text="linking ? 'Starting…' : 'Link & Start Bridge'"></span>
+                    </button>
+                    <p x-show="linkError" class="text-xs text-danger break-words" x-text="linkError"></p>
+                  </div>
+
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Bridges strip -->
+      <template x-if="mergedBridges.length > 0">
+        <div class="flex-shrink-0" style="border-top:1px solid var(--color-border)">
+          <div class="px-5 py-2 flex items-center gap-3" style="border-bottom:1px solid var(--color-border)">
+            <span class="text-xs font-bold uppercase tracking-widest text-muted">Bridges</span>
+            <span class="badge badge-neutral" x-text="mergedBridges.length"></span>
+            <template x-if="activeBridges.length > 0">
+              <span class="flex items-center gap-1 text-xs text-ok">
+                <span class="dot dot-ok pulse"></span>
+                <span x-text="activeBridges.length + ' active'"></span>
+              </span>
+            </template>
+            <span class="text-xs text-muted">Saved sessions — Resume to restart forwarding</span>
+          </div>
+          <div class="flex gap-3 px-5 py-3 overflow-x-auto">
+            <template x-for="s in mergedBridges" :key="s.topic">
+              <div class="flex-shrink-0 card rounded px-4 py-3" style="min-width:14rem" :style="s.active ? 'border-color:color-mix(in srgb, var(--status-ok) 45%, var(--color-border))' : ''">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="min-w-0">
+                    <p class="text-primary font-semibold text-xs truncate" x-text="s.device_name"></p>
+                    <p class="text-muted text-xs truncate" x-text="s.topic"></p>
+                    <p x-show="s.active && s.count !== undefined" class="text-ok text-xs" style="opacity:.8" x-text="s.count + ' forwarded'"></p>
+                  </div>
+                  <div class="flex-shrink-0 mt-0.5">
+                    <span x-show="s.active" class="dot dot-ok pulse block"></span>
+                    <span x-show="!s.active" class="dot dot-off block"></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                  <button x-show="!s.active" @click="resumeBridge(s.topic)" :disabled="!ext.connected" class="btn btn-primary px-2.5 py-1 text-xs disabled:opacity-40">
+                    <svg class="icon"><use href="#i-play"></use></svg>Resume
+                  </button>
+                  <button x-show="s.active" @click="stopBridgeForTopic(s.topic)" class="btn btn-danger px-2.5 py-1 text-xs">
+                    <svg class="icon"><use href="#i-square"></use></svg>Stop
+                  </button>
+                  <button x-show="!s.active" @click="deleteSaved(s.topic)" class="text-muted hover:text-danger ml-auto" title="Remove saved bridge"><svg class="icon"><use href="#i-x"></use></svg></button>
+                </div>
               </div>
             </template>
           </div>
         </div>
-      </div>
-    </template>
+      </template>
 
-    <!-- Bridges strip ─────────────────────────────────────────────────────── -->
-    <template x-if="mergedBridges.length > 0">
-      <div class="border-t border-gray-800 flex-shrink-0">
-        <div class="px-5 py-2 flex items-center gap-3 border-b border-gray-800">
-          <span class="text-xs font-bold uppercase tracking-widest text-gray-500">Bridges</span>
-          <span class="text-xs rounded-full px-1.5 bg-gray-700 text-gray-300 font-bold"
-                x-text="mergedBridges.length"></span>
-          <template x-if="activeBridges.length > 0">
-            <span class="flex items-center gap-1 text-xs text-emerald-500">
-              <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full pulse"></span>
-              <span x-text="activeBridges.length + ' active'"></span>
-            </span>
-          </template>
-          <span class="text-xs text-gray-700">Saved sessions — Resume to restart forwarding</span>
-        </div>
-        <div class="flex gap-3 px-5 py-3 overflow-x-auto">
-          <template x-for="s in mergedBridges" :key="s.topic">
-            <div class="flex-shrink-0 card rounded px-4 py-3 min-w-56"
-                 :class="s.active ? 'border-emerald-800/60' : 'border-gray-800'">
-              <div class="flex items-start justify-between gap-2 mb-2">
-                <div class="min-w-0">
-                  <p class="text-white font-semibold text-xs truncate" x-text="s.device_name"></p>
-                  <p class="text-gray-600 text-xs truncate" x-text="s.topic"></p>
-                  <p x-show="s.active && s.count !== undefined"
-                     class="text-emerald-700 text-xs" x-text="s.count + ' forwarded'"></p>
-                </div>
-                <div class="flex-shrink-0 mt-0.5">
-                  <span x-show="s.active" class="w-2 h-2 bg-emerald-400 rounded-full pulse block"></span>
-                  <span x-show="!s.active" class="w-2 h-2 bg-gray-600 rounded-full block"></span>
-                </div>
-              </div>
-              <div class="flex items-center gap-2 text-xs">
-                <button x-show="!s.active" @click="resumeBridge(s.topic)"
-                        :disabled="!ext.connected || !gito.loggedIn"
-                        class="btn btn-green px-2.5 py-1 text-xs disabled:opacity-40">
-                  ▶ Resume
-                </button>
-                <button x-show="s.active" @click="stopBridgeForTopic(s.topic)"
-                        class="btn btn-red px-2.5 py-1 text-xs">
-                  ■ Stop
-                </button>
-                <button x-show="!s.active" @click="deleteSaved(s.topic)"
-                        class="text-gray-700 hover:text-red-500 ml-auto" title="Remove saved bridge">✕</button>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-    </template>
-
+    </div>
   </div>
+
 </div>
 
 <!-- ── Alpine app ─────────────────────────────────────────────────────────── -->
 <script>
 function bridge() {
   return {
-    panels: { broker: true, gito: true, simulator: false },
+    activeTab: 'simulator',   // 'simulator' | 'bridge' — tabs, not accordion steps
 
     brokerForm: {
       host: '{{ broker_host }}',
@@ -761,6 +835,11 @@ function bridge() {
     linkError: '',
 
     simulator: { running: false, pid: null, loading: false, interval: 30 },
+    fixture: { deviceTypeId: '', count: 5, running: false, output: '' },
+    simDevices: [],
+    loadingSimDevices: false,
+    newSimDeviceName: '',
+    creatingSimDevice: false,
 
     bridges: [],
     savedBridges: [],
@@ -891,13 +970,10 @@ function bridge() {
         const d = await r.json();
         this.ext.message = d.message || '';
         if (!d.ok) {
-          // Connection attempt rejected before it started (e.g. bad config)
           this.toast(d.message || 'Connection failed', 'error');
           this.brokerForm.connecting = false;
         }
-        // If ok: keep connecting=true — broker_status Socket.IO event will clear it
       } catch (e) {
-        // Can't reach bridge_ui server at all
         this.ext.message = String(e);
         this.toast('Connection error: ' + String(e), 'error');
         this.brokerForm.connecting = false;
@@ -940,11 +1016,9 @@ function bridge() {
           this.gito.loggedIn     = true;
           this.gito.tenantId     = d.tenant_id;
           this.gito.emailDisplay = d.email;
-          this.gitoForm.password = '';   // clear sensitive field
+          this.gitoForm.password = '';
           this.gitoForm.error    = '';
-          // Panel stays open — user now sees the "Connected" state clearly
           this.toast('Logged in as ' + d.email, 'success');
-          // Fire device loading in background — non-blocking
           Promise.all([this.loadDeviceTypes(), this.loadGitoDevices()]);
         } else {
           this.gitoForm.error = d.message || 'Login failed';
@@ -998,7 +1072,7 @@ function bridge() {
 
     async switchToLinkMode() {
       this.linkMode = 'link';
-      if (this.gito.loggedIn && this.gitoDevices.length === 0) {
+      if (this.gitoDevices.length === 0) {
         await this.loadGitoDevices();
       }
     },
@@ -1046,6 +1120,92 @@ function bridge() {
       }
     },
 
+    // ── Simulator devices — create/list/delete, then send test data ────────
+    async loadSimDevices() {
+      if (!this.fixture.deviceTypeId) { this.simDevices = []; return; }
+      this.loadingSimDevices = true;
+      try {
+        const r = await fetch(`/api/simulator/devices?device_type_id=${this.fixture.deviceTypeId}`);
+        const d = await r.json();
+        this.simDevices = d.ok ? (d.devices || []) : [];
+      } catch (_) {
+        this.simDevices = [];
+      } finally {
+        this.loadingSimDevices = false;
+      }
+    },
+
+    async createSimDevice() {
+      if (!this.fixture.deviceTypeId) return;
+      this.creatingSimDevice = true;
+      try {
+        const r = await fetch('/api/simulator/create-device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_type_id: this.fixture.deviceTypeId,
+            name: this.newSimDeviceName.trim() || undefined,
+          }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          this.toast('Created ' + d.device.name, 'success');
+          this.newSimDeviceName = '';
+          await this.loadSimDevices();
+        } else {
+          this.toast(d.message || 'Failed to create device', 'error');
+        }
+      } catch (e) {
+        this.toast(String(e), 'error');
+      } finally {
+        this.creatingSimDevice = false;
+      }
+    },
+
+    async deleteSimDevice(deviceId) {
+      if (!confirm('Delete this simulator device? This cannot be undone.')) return;
+      try {
+        const r = await fetch('/api/simulator/delete-device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device_id: deviceId }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          this.toast('Deleted', 'info');
+          await this.loadSimDevices();
+        } else {
+          this.toast(d.message || 'Failed to delete', 'error');
+        }
+      } catch (e) {
+        this.toast(String(e), 'error');
+      }
+    },
+
+    async sendTestData(deviceId) {
+      this.fixture.running = true;
+      this.fixture.output  = '';
+      try {
+        const r = await fetch('/api/simulator/fixture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_type_id: this.fixture.deviceTypeId,
+            device_id: deviceId,
+            count: this.fixture.count,
+          }),
+        });
+        const d = await r.json();
+        this.fixture.output = d.output || d.message || '(no output)';
+        this.toast(d.ok ? 'Test data sent' : 'Send failed', d.ok ? 'success' : 'error');
+      } catch (e) {
+        this.fixture.output = String(e);
+        this.toast('Send error: ' + String(e), 'error');
+      } finally {
+        this.fixture.running = false;
+      }
+    },
+
     // ── Topics ─────────────────────────────────────────────────────────────
     selectTopic(t) {
       this.selectedTopic  = t;
@@ -1054,7 +1214,6 @@ function bridge() {
       this.selectedDevice = null;
       this.deviceSearch   = '';
       this.linkMode       = 'create';
-      // Always reset the form for the newly selected topic
       this.newDevice = {
         name:         this.suggestName(t.topic),
         deviceTypeId: '',
@@ -1102,8 +1261,6 @@ function bridge() {
         if (bd.ok) {
           this.bridges.push(bd.bridge);
           this.newDevice = { name: '', deviceTypeId: '', description: '', location: '' };
-          this.panels.broker = false;
-          this.panels.gito   = false;
           this.toast('Device created & bridge started!', 'success');
           await Promise.all([this.loadSaved(), this.loadGitoDevices()]);
         } else {
@@ -1118,7 +1275,7 @@ function bridge() {
 
     async linkAndBridge() {
       if (!this.selectedTopic || !this.selectedDevice) return;
-      const deviceName = this.selectedDevice.name; // capture before we clear it
+      const deviceName = this.selectedDevice.name;
       this.linking   = true;
       this.linkError = '';
       try {
@@ -1177,17 +1334,14 @@ function bridge() {
         const wasConnected = this.ext.connected;
         this.ext.connected         = d.connected;
         this.ext.message           = d.message || '';
-        this.brokerForm.connecting = false; // DNS + TCP result is now known
+        this.brokerForm.connecting = false;
         if (d.connected) {
           this.ext.brokerLabel = this.brokerForm.host + ':' + this.brokerForm.port;
-          this.panels.broker   = false;
           if (!wasConnected) this.toast('Connected to ' + this.ext.brokerLabel, 'success');
         } else if (wasConnected) {
           this.ext.brokerLabel = '';
           this.toast('External broker disconnected', 'error');
-          this.panels.broker = true; // re-open so user can reconnect
         } else {
-          // Connect attempt failed (error from background thread)
           this.toast(d.message || 'Connection failed', 'error');
         }
       });
@@ -1249,11 +1403,18 @@ function bridge() {
         const r = await fetch('/api/bridges');
         this.bridges = await r.json();
       } catch (_) {}
-      await this.restoreSession(); // restore Gito login if bridge already has a token
+      // Pre-fill the Gito URL with whatever actually answers — the config
+      // default is a guess, and this port has confused us before.
+      try {
+        const r = await fetch('/api/detect-gito-url');
+        const d = await r.json();
+        if (d.url) this.gitoForm.url = d.url;
+      } catch (_) {}
+      await this.restoreSession();
       await this.loadSaved();
       await this.checkSimulatorStatus();
       setInterval(() => this.checkSimulatorStatus(), 15000);
-      setInterval(() => { this._tick++; }, 5000); // refresh timeAgo displays
+      setInterval(() => { this._tick++; }, 5000);
     },
 
     async restoreSession() {
@@ -1264,8 +1425,6 @@ function bridge() {
           this.gito.loggedIn     = true;
           this.gito.tenantId     = d.tenant_id;
           this.gito.emailDisplay = d.email;
-          this.panels.gito       = false; // collapse — already logged in
-          // Load device data in background
           Promise.all([this.loadDeviceTypes(), this.loadGitoDevices()]);
         }
       } catch (_) {}

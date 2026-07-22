@@ -42,29 +42,39 @@ export const VENDOR_PRESETS: VendorPreset[] = [
       {
         name: 'total_volume', type: 'float', unit: 'L', required: true,
         description: "Net cumulative flow, |forward − reverse|, in litres — auto-corrected for the meter's VIF-driven counter overflow.",
+        simulation: { mode: 'increment', min: 5000, max: 200000 },
       },
       {
         name: 'reverse_volume', type: 'float', unit: 'L', required: false,
         description: 'Cumulative reverse (backward) flow.',
+        simulation: { mode: 'drift', min: 0, max: 200 },
       },
       {
         name: 'k_index', type: 'integer', unit: '', required: false,
         description: 'Meter multiplier: 0 = ×1 (litres), 1 = ×10 (decalitres), 2 = ×100 (hectolitres). Fixed per physical meter model.',
+        // Device configuration, not a live reading — pinned, not drifted.
+        simulation: { mode: 'drift', min: 0, max: 0 },
       },
       {
         name: 'medium_code', type: 'integer', unit: '', required: false,
         description: 'Which medium the meter is configured for: 0 = water, 1 = hot water. Set via SET_METER_PAR, fixed per installation.',
+        simulation: { mode: 'drift', min: 0, max: 0 },
       },
       {
         name: 'vif_code', type: 'integer', unit: '', required: false,
         description: 'Counter unit in use: 0x13 litres, 0x14 decalitres, 0x15 hectolitres, 0x16 m³. Only changes if the counter overflows.',
+        // Pinned at the base unit (19 = litres): a random vif_code would make
+        // total_volume's VIF-exponent scaling (see decoderFields below)
+        // produce absurd values — overflow is the rare real-world case, not
+        // the default one, so simulation shouldn't manufacture it.
+        simulation: { mode: 'drift', min: 19, max: 19 },
       },
-      { name: 'magnetic_alarm', type: 'boolean', unit: '', required: false, description: 'Magnetic tampering field detected for 10+ minutes.' },
-      { name: 'removal_alarm', type: 'boolean', unit: '', required: false, description: 'Module physically removed from the meter.' },
-      { name: 'sensor_fraud_alarm', type: 'boolean', unit: '', required: false, description: 'Coil sequence indicates the index is being interfered with.' },
-      { name: 'leakage_alarm', type: 'boolean', unit: '', required: false, description: 'Continuous minimum flow detected for 12+ consecutive hours — possible leak.' },
-      { name: 'reverse_flow_alarm', type: 'boolean', unit: '', required: false, description: 'More than 20 litres of reverse flow detected.' },
-      { name: 'low_battery_alarm', type: 'boolean', unit: '', required: false, description: 'Battery voltage below threshold for 5 consecutive readings.' },
+      { name: 'magnetic_alarm', type: 'boolean', unit: '', required: false, description: 'Magnetic tampering field detected for 10+ minutes.', simulation: { mode: 'rare_bit' } },
+      { name: 'removal_alarm', type: 'boolean', unit: '', required: false, description: 'Module physically removed from the meter.', simulation: { mode: 'rare_bit' } },
+      { name: 'sensor_fraud_alarm', type: 'boolean', unit: '', required: false, description: 'Coil sequence indicates the index is being interfered with.', simulation: { mode: 'rare_bit' } },
+      { name: 'leakage_alarm', type: 'boolean', unit: '', required: false, description: 'Continuous minimum flow detected for 12+ consecutive hours — possible leak.', simulation: { mode: 'rare_bit' } },
+      { name: 'reverse_flow_alarm', type: 'boolean', unit: '', required: false, description: 'More than 20 litres of reverse flow detected.', simulation: { mode: 'rare_bit' } },
+      { name: 'low_battery_alarm', type: 'boolean', unit: '', required: false, description: 'Battery voltage below threshold for 5 consecutive readings.', simulation: { mode: 'rare_bit' } },
     ],
     decoderFields: [
       {
@@ -102,11 +112,14 @@ export const VENDOR_PRESETS: VendorPreset[] = [
       {
         name: 'total_volume', type: 'float', unit: 'L', required: true,
         description: 'Cumulative water volume as read from the meter dial.',
+        // A real meter's counter only ever climbs — simulate it starting
+        // somewhere in a plausible "already in service" range and ticking up.
+        simulation: { mode: 'increment', min: 50000, max: 500000 },
       },
-      { name: 'flow_exceeds_q3_alarm', type: 'boolean', unit: '', required: false, description: "Flow above the meter's Q3 rated maximum for 10+ minutes." },
-      { name: 'magnetic_fraud_alarm', type: 'boolean', unit: '', required: false, description: 'Magnetic tampering field detected.' },
-      { name: 'removal_alarm', type: 'boolean', unit: '', required: false, description: 'Module physically removed from the meter.' },
-      { name: 'leakage_alarm', type: 'boolean', unit: '', required: false, description: 'Continuous flow suggesting a leak in the last 24 hours.' },
+      { name: 'flow_exceeds_q3_alarm', type: 'boolean', unit: '', required: false, description: "Flow above the meter's Q3 rated maximum for 10+ minutes.", simulation: { mode: 'rare_bit' } },
+      { name: 'magnetic_fraud_alarm', type: 'boolean', unit: '', required: false, description: 'Magnetic tampering field detected.', simulation: { mode: 'rare_bit' } },
+      { name: 'removal_alarm', type: 'boolean', unit: '', required: false, description: 'Module physically removed from the meter.', simulation: { mode: 'rare_bit' } },
+      { name: 'leakage_alarm', type: 'boolean', unit: '', required: false, description: 'Continuous flow suggesting a leak in the last 24 hours.', simulation: { mode: 'rare_bit' } },
     ],
     decoderFields: [
       { name: 'total_volume', offset: 2, length: 4, type: 'uint32', endian: 'big' },

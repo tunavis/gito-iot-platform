@@ -6,6 +6,6 @@ when a device's network server hasn't decoded the uplink itself (no NS
 docs/superpowers/plans/2026-07-07-payload-decoding.md.
 """
 
-from .engine import decode
+from .engine import decode, encode
 
-__all__ = ["decode"]
+__all__ = ["decode", "encode"]

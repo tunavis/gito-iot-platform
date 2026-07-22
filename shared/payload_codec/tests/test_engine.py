@@ -10,7 +10,7 @@ import struct
 
 import pytest
 
-from payload_codec import decode
+from payload_codec import decode, encode
 
 
 def b64(fmt: str, *values) -> str:
@@ -376,3 +376,228 @@ def test_all_values_are_floats():
     spec = {"type": "declarative", "fields": [field("v", 0, 1, "uint8")]}
     result = decode(spec, b64(">B", 5), 1)
     assert isinstance(result["v"], float)
+
+
+# ── encode() — inverse of decode(), built for test/simulation fixtures ───────
+#
+# Contract is deliberately the opposite of decode()'s: encode() RAISES on a
+# malformed spec or an out-of-range value instead of silently skipping, so a
+# bad fixture generator fails loudly (see engine.py module docstring).
+
+# Real specs from the two vendor presets this codec was built against —
+# _vendorPresets.ts (RFM-LR1) and the IWM-LR3/LR4 device type's stored
+# decoder (dumped from the DB while validating that preset).
+
+IWM_LR3_LR4_SPEC = {
+    "type": "declarative",
+    "fields": [
+        field("total_volume", 1, 4, "bcd", endian="little",
+              scale_exponent_ref="vif_code", scale_exponent_base=19),
+        field("reverse_volume", 5, 4, "bcd", endian="little"),
+        field("k_index", 9, 1, "uint8"),
+        field("medium_code", 10, 1, "uint8"),
+        field("vif_code", 11, 1, "uint8"),
+        field("magnetic_alarm", 12, 1, "uint8", bit=0),
+        field("removal_alarm", 12, 1, "uint8", bit=1),
+        field("sensor_fraud_alarm", 12, 1, "uint8", bit=2),
+        field("leakage_alarm", 12, 1, "uint8", bit=3),
+        field("reverse_flow_alarm", 12, 1, "uint8", bit=4),
+        field("low_battery_alarm", 12, 1, "uint8", bit=5),
+    ],
+}
+
+RFM_LR1_SPEC = {
+    "type": "declarative",
+    "fields": [
+        field("total_volume", 2, 4, "uint32", endian="big"),
+        field("flow_exceeds_q3_alarm", 8, 1, "uint8", bit=7),
+        field("magnetic_fraud_alarm", 8, 1, "uint8", bit=5),
+        field("removal_alarm", 8, 1, "uint8", bit=3),
+        field("leakage_alarm", 8, 1, "uint8", bit=0),
+    ],
+}
+
+
+# ── Round-trips against the two real vendor decoder specs ────────────────────
+
+def test_round_trip_rfm_lr1_matches_scenario_from_the_spec_doc():
+    values = {"total_volume": 497782, "removal_alarm": True}
+    raw = encode(RFM_LR1_SPEC, values)
+    result = decode(RFM_LR1_SPEC, base64.b64encode(raw).decode(), 1)
+    assert result == {
+        "total_volume": 497782.0,
+        "flow_exceeds_q3_alarm": 0.0,
+        "magnetic_fraud_alarm": 0.0,
+        "removal_alarm": 1.0,
+        "leakage_alarm": 0.0,
+    }
+
+
+def test_round_trip_rfm_lr1_all_alarm_bits_independently_set():
+    values = {
+        "total_volume": 1234,
+        "flow_exceeds_q3_alarm": True,
+        "magnetic_fraud_alarm": True,
+        "removal_alarm": True,
+        "leakage_alarm": True,
+    }
+    raw = encode(RFM_LR1_SPEC, values)
+    assert decode(RFM_LR1_SPEC, base64.b64encode(raw).decode(), 1) == {
+        "total_volume": 1234.0,
+        "flow_exceeds_q3_alarm": 1.0,
+        "magnetic_fraud_alarm": 1.0,
+        "removal_alarm": 1.0,
+        "leakage_alarm": 1.0,
+    }
+
+
+def test_round_trip_iwm_bcd_within_base_range():
+    values = {"total_volume": 12074, "reverse_volume": 40, "vif_code": 19}
+    raw = encode(IWM_LR3_LR4_SPEC, values)
+    result = decode(IWM_LR3_LR4_SPEC, base64.b64encode(raw).decode(), None)
+    assert result["total_volume"] == pytest.approx(12074.0)
+    assert result["reverse_volume"] == pytest.approx(40.0)
+    assert result["vif_code"] == 19.0
+
+
+def test_round_trip_iwm_bcd_with_non_base_vif_code():
+    # vif_code=20 (one step above base 19, decalitres) — encode() must divide
+    # by 10 before packing the BCD digits so decode()'s x10 re-application
+    # reproduces the original value, matching the "counter steps to a coarser
+    # unit on overflow" behavior this field exists for.
+    values = {"total_volume": 120740, "vif_code": 20}
+    raw = encode(IWM_LR3_LR4_SPEC, values)
+    result = decode(IWM_LR3_LR4_SPEC, base64.b64encode(raw).decode(), None)
+    assert result["total_volume"] == pytest.approx(120740.0)
+    assert result["vif_code"] == 20.0
+
+
+def test_round_trip_iwm_without_vif_code_treats_value_as_base_units():
+    values = {"total_volume": 12074}
+    raw = encode(IWM_LR3_LR4_SPEC, values)
+    result = decode(IWM_LR3_LR4_SPEC, base64.b64encode(raw).decode(), None)
+    assert result["total_volume"] == pytest.approx(12074.0)
+
+
+def test_round_trip_iwm_alarm_bits_share_one_byte_without_clobbering():
+    values = {"total_volume": 1, "magnetic_alarm": True, "leakage_alarm": True}
+    raw = encode(IWM_LR3_LR4_SPEC, values)
+    result = decode(IWM_LR3_LR4_SPEC, base64.b64encode(raw).decode(), None)
+    assert result["magnetic_alarm"] == 1.0
+    assert result["removal_alarm"] == 0.0
+    assert result["sensor_fraud_alarm"] == 0.0
+    assert result["leakage_alarm"] == 1.0
+    assert result["reverse_flow_alarm"] == 0.0
+    assert result["low_battery_alarm"] == 0.0
+
+
+# ── Round-trip across every field type in one synthetic spec ─────────────────
+
+def test_round_trip_every_field_type_in_one_payload():
+    spec = {"type": "declarative", "fields": [
+        field("u8", 0, 1, "uint8"),
+        field("i8", 1, 1, "int8"),
+        field("u16", 2, 2, "uint16", endian="big"),
+        field("i16", 4, 2, "int16", endian="little"),
+        field("u32", 6, 4, "uint32", endian="big"),
+        field("i32", 10, 4, "int32", endian="little"),
+        field("f32", 14, 4, "float32", endian="big"),
+        field("bcd", 18, 3, "bcd", endian="little"),
+        field("flag_hi", 21, 1, "uint8", bit=7),
+        field("flag_lo", 21, 1, "uint8", bit=0),
+    ]}
+    values = {
+        "u8": 200, "i8": -100, "u16": 50000, "i16": -12345,
+        "u32": 3_000_000_000, "i32": -1_000_000, "f32": 3.5,
+        "bcd": 123456, "flag_hi": True, "flag_lo": False,
+    }
+    raw = encode(spec, values)
+    result = decode(spec, base64.b64encode(raw).decode(), None)
+    for key, expected in values.items():
+        if key in ("flag_hi", "flag_lo"):
+            assert result[key] == (1.0 if expected else 0.0)
+        else:
+            assert result[key] == pytest.approx(expected)
+
+
+# ── Scale / value_offset round-trip ───────────────────────────────────────────
+
+def test_round_trip_scale_and_value_offset():
+    spec = {"type": "declarative", "fields": [
+        field("temp", 0, 2, "int16", endian="big", scale=0.1, value_offset=-40)
+    ]}
+    raw = encode(spec, {"temp": 22.5})
+    assert decode(spec, base64.b64encode(raw).decode(), None)["temp"] == pytest.approx(22.5)
+
+
+# ── Partial values dict: fields not supplied stay zero-filled, not an error ──
+
+def test_field_absent_from_values_is_left_zero_filled():
+    spec = {"type": "declarative", "fields": [
+        field("a", 0, 1, "uint8"), field("b", 1, 1, "uint8"),
+    ]}
+    raw = encode(spec, {"a": 7})
+    assert decode(spec, base64.b64encode(raw).decode(), None) == {"a": 7.0, "b": 0.0}
+
+
+def test_empty_values_dict_produces_zero_filled_buffer():
+    spec = {"type": "declarative", "fields": [field("a", 0, 2, "uint16")]}
+    assert encode(spec, {}) == b"\x00\x00"
+
+
+# ── Malformed spec raises ─────────────────────────────────────────────────────
+
+def test_encode_none_spec_raises():
+    with pytest.raises(ValueError):
+        encode(None, {"a": 1})
+
+
+def test_encode_non_declarative_type_raises():
+    spec = {"type": "js", "fields": [field("a", 0, 1)]}
+    with pytest.raises(ValueError):
+        encode(spec, {"a": 1})
+
+
+def test_encode_missing_fields_raises():
+    with pytest.raises(ValueError):
+        encode({"type": "declarative"}, {"a": 1})
+
+
+def test_encode_malformed_field_raises():
+    spec = {"type": "declarative", "fields": [{"name": "a"}]}  # no offset/length
+    with pytest.raises(ValueError):
+        encode(spec, {"a": 1})
+
+
+# ── Out-of-range values raise instead of silently truncating ─────────────────
+
+def test_encode_bcd_value_too_large_raises():
+    spec = {"type": "declarative", "fields": [field("v", 0, 1, "bcd")]}  # max 99
+    with pytest.raises(ValueError):
+        encode(spec, {"v": 100})
+
+
+def test_encode_bcd_negative_value_raises():
+    spec = {"type": "declarative", "fields": [field("v", 0, 1, "bcd")]}
+    with pytest.raises(ValueError):
+        encode(spec, {"v": -1})
+
+
+def test_encode_uint8_overflow_raises():
+    spec = {"type": "declarative", "fields": [field("v", 0, 1, "uint8")]}
+    with pytest.raises(ValueError):
+        encode(spec, {"v": 256})
+
+
+def test_encode_int16_overflow_raises():
+    spec = {"type": "declarative", "fields": [field("v", 0, 2, "int16")]}
+    with pytest.raises(ValueError):
+        encode(spec, {"v": 40000})
+
+
+def test_encode_iwm_total_volume_exceeding_8_bcd_digits_raises():
+    # No vif_code supplied -> defaults to base (exponent 0, base units) -> the
+    # raw BCD int is the value itself, which exceeds the 8-digit field's
+    # 99,999,999 ceiling.
+    with pytest.raises(ValueError):
+        encode(IWM_LR3_LR4_SPEC, {"total_volume": 999_999_999_999})

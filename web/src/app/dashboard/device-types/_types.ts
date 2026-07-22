@@ -1,5 +1,15 @@
 import { ProtocolConfig } from '@/components/ProtocolConfigForm';
 
+/** Optional hint for the device simulator — how this field should vary over
+ * time. Absent entirely means the simulator falls back to a generic default
+ * for the field's `type`; this is an enhancement a preset can opt into, never
+ * a prerequisite for a device type to be simulatable. */
+export interface SimulationHint {
+  mode?: 'drift' | 'increment' | 'drain' | 'rare_bit';
+  min?: number;
+  max?: number;
+}
+
 export interface DataModelField {
   name: string;
   type: string;
@@ -8,6 +18,7 @@ export interface DataModelField {
   min_value?: number;
   max_value?: number;
   required: boolean;
+  simulation?: SimulationHint;
 }
 
 export interface DefaultSettings {

@@ -55,6 +55,27 @@ class ProtocolType(str, Enum):
     CUSTOM = "custom"
 
 
+class SimulationMode(str, Enum):
+    """How the device simulator should vary this field over time."""
+    DRIFT = "drift"          # random walk within min/max (default for numeric fields)
+    INCREMENT = "increment"  # monotonically increasing counter (e.g. total_volume)
+    DRAIN = "drain"          # slowly decreases (e.g. battery)
+    RARE_BIT = "rare_bit"    # boolean, almost always false (e.g. an alarm flag)
+
+
+class SimulationHint(BaseModel):
+    """Optional per-field hint for the device simulator. Absent entirely on a
+    field means the simulator falls back to a generic default for that field's
+    `type` — this is an enhancement a vendor preset can opt into, never a
+    prerequisite for a device type to be simulatable."""
+    mode: SimulationMode = Field(default=SimulationMode.DRIFT)
+    min: Optional[float] = Field(None, description="Overrides the field's own min_value for simulation")
+    max: Optional[float] = Field(None, description="Overrides the field's own max_value for simulation")
+
+    class Config:
+        use_enum_values = True
+
+
 class DataModelField(BaseModel):
     """A field in the device type's data model."""
     name: str = Field(..., description="Field name (e.g., 'temperature')")
@@ -64,6 +85,7 @@ class DataModelField(BaseModel):
     min_value: Optional[float] = Field(None, alias="min", description="Minimum valid value")
     max_value: Optional[float] = Field(None, alias="max", description="Maximum valid value")
     required: bool = Field(default=False, description="Is this field required in telemetry?")
+    simulation: Optional[SimulationHint] = Field(None, description="Optional device-simulator hint")
 
     class Config:
         populate_by_name = True
