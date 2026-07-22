@@ -20,6 +20,7 @@ import {
   Users,
   Link2,
   Rocket,
+  LogOut,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useTenant, TenantInfo } from '@/components/TenantContext';
@@ -175,10 +176,30 @@ function TenantSwitcher({ user }: { user: JwtUser }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const user = useCurrentUser();
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['Devices', 'Groups']));
+  const [signingOut, setSigningOut] = useState(false);
 
   const isManagement = user?.tenant_type === 'management';
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    const token = localStorage.getItem('auth_token');
+    try {
+      // The auth_token cookie is httpOnly (XSS protection) — only the server
+      // can clear it, so this call is required, not just an audit nicety.
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+    } catch {
+      // Fall through — still clear local state and redirect below.
+    } finally {
+      localStorage.removeItem('auth_token');
+      router.push('/auth/login');
+    }
+  };
 
   const toggleGroup = (label: string) => {
     const next = new Set(openGroups);
@@ -444,7 +465,18 @@ export default function Sidebar() {
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              title="Sign out"
+              className="p-1.5 rounded-md transition-colors hover:bg-white/5 disabled:opacity-50"
+              style={{ color: 'var(--color-sidebar-muted)' }}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
           {user?.role && (
             <span
               className="text-[10px] font-semibold px-2 py-0.5 rounded-md"

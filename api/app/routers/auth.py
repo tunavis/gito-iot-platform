@@ -197,7 +197,12 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    authorization: str | None = Header(None),
+):
     """Logout endpoint - clears auth cookie.
 
     JWT tokens are stateless, but we clear the httpOnly cookie.
@@ -205,6 +210,28 @@ async def logout(response: Response):
     """
     # Clear the auth_token cookie
     response.delete_cookie(key="auth_token", path="/")
+
+    # Audit trail — best-effort, mirrors the login entry below. Tolerates a
+    # missing/expired/invalid token (nothing to invalidate server-side for a
+    # stateless JWT — clearing the cookie above is what actually matters).
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            payload = decode_token(authorization.split(" ")[1])
+            tenant_id = payload.get("tenant_id")
+            user_id = payload.get("sub")
+            if tenant_id and user_id:
+                await session.set_tenant_context(tenant_id, user_id)
+                session.add(AuditLog(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    action="logout",
+                    resource_type="auth",
+                    ip_address=request.client.host if request.client else None,
+                    user_agent=request.headers.get("user-agent"),
+                ))
+                await session.commit()
+        except Exception as e:
+            logger.error(f"Failed to write logout audit log: {e}")
 
     return SuccessResponse(data={"message": "Logged out successfully"})
 
