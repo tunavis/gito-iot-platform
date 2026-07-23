@@ -118,7 +118,7 @@ export const ICON_OPTIONS: { value: string; label: string; Icon: LucideIcon }[] 
 ];
 
 const deviceIcons: Record<string, React.ReactNode> = Object.fromEntries(
-  ICON_OPTIONS.map(({ value, Icon }) => [value, <Icon className="w-5 h-5" />])
+  ICON_OPTIONS.map(({ value, Icon }) => [value, <Icon key={value} className="w-5 h-5" />])
 );
 
 export function resolveDeviceIcon(dt: { icon?: string | null; category?: string | null }): React.ReactNode {
