@@ -343,8 +343,13 @@ Useful when running in Docker or CI:
 
 ### Docker
 
+The build context is the **repo root**, not this directory — the Dockerfile
+pulls in `shared/payload_codec` the same way `api`/`processor` do, so a
+context scoped to just `simulation_data/mqtt` can't see it:
+
 ```bash
-docker build -t gito-mqtt-bridge .
+cd ../..   # repo root
+docker build -t gito-mqtt-bridge -f simulation_data/mqtt/Dockerfile .
 docker run -p 5555:5555 \
   -e GITO_API_URL=http://host.docker.internal \
   -e MQTT_LOCAL_HOST=host.docker.internal \

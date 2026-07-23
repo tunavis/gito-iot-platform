@@ -5,6 +5,7 @@
 set -e
 cd "$(dirname "$0")"
 echo "Installing/updating dependencies..."
+pip install -e ../../shared/payload_codec --quiet
 pip install -r requirements.txt --quiet
 echo
 echo "Starting Gito Device Simulator..."

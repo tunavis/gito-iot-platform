@@ -2,9 +2,10 @@ paho-mqtt==1.6.1
 psycopg2-binary==2.9.9
 PyYAML>=6.0.1
 
-# Local package, same one api/processor install — for the LoRaWAN publisher's
-# encode() call (see simulator.py's LoRaWANPublisher).
--e ../../shared/payload_codec
+# shared/payload_codec (LoRaWAN publisher's encode() call) is installed
+# separately by start.sh/start.bat and by the Dockerfile — not listed here
+# as an editable path, since that only resolves when run from this
+# directory on the host and breaks inside the Docker build context.
 
 # Bridge UI dependencies
 flask>=3.0.0

@@ -126,7 +126,8 @@ services:
   # MQTT Bridge UI (staging testing tool)
   mqtt-bridge:
     build:
-      context: ./simulation_data/mqtt
+      context: .
+      dockerfile: ./simulation_data/mqtt/Dockerfile
     container_name: gito-mqtt-bridge-staging
     restart: unless-stopped
     environment:
