@@ -332,14 +332,26 @@ Bridges are persisted to `saved_bridges.json`. After restarting the UI, connect 
 
 ### Environment Variable Overrides
 
-Useful when running in Docker or CI:
+`config.yaml` holds **host-machine** defaults — `127.0.0.1` plus the ports
+Postgres and Mosquitto are published on. Inside a container those resolve to
+the container itself, so any deployment other than "run it from this directory
+on the dev box" must override them:
 
-| Variable | Overrides |
-|----------|-----------|
-| `GITO_API_URL` | `bridge.gito_api_url` in config.yaml |
-| `MQTT_LOCAL_HOST` | `mqtt.local.host` |
-| `MQTT_LOCAL_PORT` | `mqtt.local.port` |
-| `UI_PORT` | `bridge.ui_port` (default 5555) |
+| Variable | Overrides | Used by |
+|----------|-----------|---------|
+| `GITO_API_URL` | `bridge.gito_api_url` in config.yaml | bridge_ui |
+| `MQTT_LOCAL_HOST` | `mqtt.local.host` | bridge_ui + simulator |
+| `MQTT_LOCAL_PORT` | `mqtt.local.port` | bridge_ui + simulator |
+| `UI_PORT` | `bridge.ui_port` (default 5555) | bridge_ui |
+| `DB_HOST` | `database.host` | simulator |
+| `DB_PORT` | `database.port` | simulator |
+| `DB_NAME` | `database.database` | simulator |
+| `DB_USER` | `database.user` | simulator |
+| `DB_PASSWORD` | `database.password` | simulator |
+
+`simulator.py` queries the database directly (to find `simulated`-tagged
+devices), so the `DB_*` set is required wherever it runs containerised —
+`docker-compose.staging.yml`'s `mqtt-bridge` service sets all of them.
 
 ### Docker
 

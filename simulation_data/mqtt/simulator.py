@@ -58,6 +58,7 @@ Device" panel does both device creation and simulation for you:
 import asyncio
 import base64
 import json
+import os
 import random
 import time
 import uuid
@@ -308,6 +309,29 @@ class Simulator:
     def __init__(self, config_path: str = "config.yaml"):
         with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
+
+        # config.yaml holds host-machine defaults (127.0.0.1 + the port
+        # Postgres/Mosquitto are published on). Inside a container those
+        # resolve to the container itself, so every deployment that isn't
+        # "run it from this directory on the dev box" overrides them by
+        # environment — same idiom bridge_ui.py uses.
+        db_cfg = self.config["database"]
+        local_cfg = self.config["mqtt"]["local"]
+        if os.environ.get("DB_HOST"):
+            db_cfg["host"] = os.environ["DB_HOST"]
+        if os.environ.get("DB_PORT"):
+            db_cfg["port"] = int(os.environ["DB_PORT"])
+        if os.environ.get("DB_NAME"):
+            db_cfg["database"] = os.environ["DB_NAME"]
+        if os.environ.get("DB_USER"):
+            db_cfg["user"] = os.environ["DB_USER"]
+        if os.environ.get("DB_PASSWORD"):
+            db_cfg["password"] = os.environ["DB_PASSWORD"]
+        if os.environ.get("MQTT_LOCAL_HOST"):
+            local_cfg["host"] = os.environ["MQTT_LOCAL_HOST"]
+        if os.environ.get("MQTT_LOCAL_PORT"):
+            local_cfg["port"] = int(os.environ["MQTT_LOCAL_PORT"])
+
         self.mqtt_client: Optional[mqtt.Client] = None
         self.db_conn = None
         self.states: Dict[str, DeviceState] = {}

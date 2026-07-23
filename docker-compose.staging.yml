@@ -134,16 +134,27 @@ services:
       dockerfile: ./simulation_data/mqtt/Dockerfile
     container_name: gito-mqtt-bridge-staging
     restart: unless-stopped
+    env_file:
+      - .env.staging
     environment:
       GITO_API_URL: http://api:8000
       MQTT_LOCAL_HOST: mosquitto
       MQTT_LOCAL_PORT: "1883"
       UI_PORT: "5555"
+      # simulator.py queries the DB directly for simulator-tagged devices.
+      # config.yaml's 127.0.0.1 defaults are host-machine values and resolve
+      # to this container in Docker, so they must be overridden here.
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: gito_iot_staging
+      DB_USER: gito_user
+      DB_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5555:5555"
     depends_on:
       - mosquitto
       - api
+      - postgres
     networks:
       - gito-staging-network
 
