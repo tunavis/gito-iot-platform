@@ -1,9 +1,13 @@
 version: '3.8'
 
 services:
-  # TimescaleDB (PostgreSQL 15 + time-series extensions)
+  # TimescaleDB — pinned to match local exactly (pg16 + TimescaleDB 2.25.2)
+  # so a full pg_dump/restore clone from local always restores cleanly. Do NOT
+  # move this to a floating `latest-*` tag: a binary/extension drift against
+  # the data on disk makes compressed telemetry chunks read back empty. If
+  # local's version changes, re-pin this to match before cloning.
   postgres:
-    image: timescale/timescaledb:latest-pg15
+    image: timescale/timescaledb:2.25.2-pg16
     container_name: gito-postgres-staging
     restart: unless-stopped
     # Force-preload timescaledb regardless of what's in the data volume's postgresql.conf.
