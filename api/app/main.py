@@ -175,6 +175,7 @@ def create_app() -> FastAPI:
     from app.routers import solution_templates as solution_templates_router  # Industry vertical templates
     from app.routers import integrations as integrations_router  # LoRaWAN integration management
     from app.routers import lorawan_ingest as lorawan_ingest_router  # Universal LoRaWAN webhook ingest
+    from app.routers import billing as billing_router  # Subscription billing & entitlements
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
@@ -205,6 +206,8 @@ def create_app() -> FastAPI:
     app.include_router(integrations_router.router, prefix="/api/v1")       # LoRaWAN integration management
     app.include_router(lorawan_ingest_router.router, prefix="/api/v1")     # Universal LoRaWAN webhook ingest
     app.include_router(websocket.router, prefix="/api/v1")
+    app.include_router(billing_router.public_router, prefix="/api/v1")  # Public pricing
+    app.include_router(billing_router.router, prefix="/api/v1")  # Subscription/entitlements/usage
     
     # Disabled routers (superseded by unified systems):
     # - alert_rules: Replaced by alert_rules_unified
