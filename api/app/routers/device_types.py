@@ -32,17 +32,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tenants/{tenant_id}/device-types", tags=["device-types"])
 
 
-async def _fetch_device_counts(session: RLSSession, device_type_ids: list[UUID]) -> dict[str, int]:
-    """Return a {device_type_id_str: count} map using a single parameterised query."""
+async def _fetch_device_counts(
+    session: RLSSession, tenant_id: UUID, device_type_ids: list[UUID]
+) -> dict[str, int]:
+    """Return a {device_type_id_str: count} map using a single parameterised query.
+
+    Tenant-scoped: another tenant's devices referencing the same type id must not
+    inflate the count (RLS is inert for the app's DB role).
+    """
     if not device_type_ids:
         return {}
     # Build :id0, :id1, ... placeholders — safe, no f-string SQL injection
     placeholders = ", ".join(f":id{i}" for i in range(len(device_type_ids)))
     params = {f"id{i}": str(uid) for i, uid in enumerate(device_type_ids)}
+    params["tid"] = str(tenant_id)
     result = await session.execute(
         text(
             f"SELECT device_type_id::text, COUNT(*) "
             f"FROM devices WHERE device_type_id::text IN ({placeholders}) "
+            f"AND tenant_id = :tid "
             f"GROUP BY device_type_id"
         ),
         params,
@@ -109,7 +117,7 @@ async def list_device_types(
     device_types = list(result.scalars().all())
 
     # Enrich with live device counts (one batch query)
-    counts = await _fetch_device_counts(session, [dt.id for dt in device_types])
+    counts = await _fetch_device_counts(session, tenant_id, [dt.id for dt in device_types])
     for dt in device_types:
         dt.device_count = counts.get(str(dt.id), 0)
 
@@ -233,8 +241,8 @@ async def get_device_type(
 
     # Live device count
     cnt_result = await session.execute(
-        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id"),
-        {"id": str(device_type_id)},
+        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id AND tenant_id = :tid"),
+        {"id": str(device_type_id), "tid": str(tenant_id)},
     )
     device_type.device_count = cnt_result.scalar() or 0
 
@@ -312,8 +320,8 @@ async def update_device_type(
 
     # Live device count
     cnt_result = await session.execute(
-        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id"),
-        {"id": str(device_type_id)},
+        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id AND tenant_id = :tid"),
+        {"id": str(device_type_id), "tid": str(tenant_id)},
     )
     device_type.device_count = cnt_result.scalar() or 0
 
@@ -357,8 +365,8 @@ async def delete_device_type(
 
     # Live device count — the cached column is unreliable
     cnt_result = await session.execute(
-        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id"),
-        {"id": str(device_type_id)},
+        text("SELECT COUNT(*) FROM devices WHERE device_type_id = :id AND tenant_id = :tid"),
+        {"id": str(device_type_id), "tid": str(tenant_id)},
     )
     live_count = cnt_result.scalar() or 0
 

@@ -92,6 +92,42 @@ async def list_devices(
     )
 
 
+async def _validate_device_fks(
+    session: RLSSession,
+    tenant_id: UUID,
+    *,
+    device_type_id=None,
+    organization_id=None,
+    site_id=None,
+    device_group_id=None,
+) -> None:
+    """Reject any parent FK that doesn't belong to this tenant.
+
+    device_type_id/organization_id/site_id/device_group_id arrive from the client.
+    Without this, a caller could attach their device to another tenant's device
+    type or org — and since RLS is inert for the app's DB role, nothing else stops
+    it. Only non-None values are checked (None = not set / being cleared).
+    Table names are hardcoded literals; ids are parameterized.
+    """
+    for table, value, field in (
+        ("device_types", device_type_id, "device_type_id"),
+        ("organizations", organization_id, "organization_id"),
+        ("sites", site_id, "site_id"),
+        ("device_groups", device_group_id, "device_group_id"),
+    ):
+        if value is None:
+            continue
+        exists = (await session.execute(
+            text(f"SELECT 1 FROM {table} WHERE id = :id AND tenant_id = :tid"),
+            {"id": str(value), "tid": str(tenant_id)},
+        )).scalar_one_or_none()
+        if exists is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{field} does not reference a resource in this tenant",
+            )
+
+
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def create_device(
     tenant_id: UUID,
@@ -111,6 +147,14 @@ async def create_device(
         )
 
     await session.set_tenant_context(tenant_id)
+
+    await _validate_device_fks(
+        session, tenant_id,
+        device_type_id=device_data.device_type_id,
+        organization_id=device_data.organization_id,
+        site_id=device_data.site_id,
+        device_group_id=device_data.device_group_id,
+    )
 
     # dev_EUI is unique per tenant — return a clear 409 instead of a raw 500 IntegrityError
     if device_data.dev_eui:
@@ -244,6 +288,14 @@ async def update_device(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
         )
+
+    await _validate_device_fks(
+        session, tenant_id,
+        device_type_id=device_data.device_type_id,
+        organization_id=device_data.organization_id,
+        site_id=device_data.site_id,
+        device_group_id=device_data.device_group_id,
+    )
 
     if device_data.name is not None:
         device.name = device_data.name

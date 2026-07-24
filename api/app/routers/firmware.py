@@ -298,6 +298,22 @@ async def execute_campaign(
 
     # Resolve target devices
     if body.device_ids:
+        # SECURITY: device_ids are client-supplied. They MUST be verified to
+        # belong to this tenant — otherwise a caller could target another
+        # tenant's devices and have firmware dispatched to their hardware.
+        # (RLS does not protect us here — the app connects as a superuser.)
+        owned = set((await session.execute(
+            select(Device.id).where(
+                Device.tenant_id == tenant_id,
+                Device.id.in_(body.device_ids),
+            )
+        )).scalars().all())
+        not_owned = [str(d) for d in body.device_ids if d not in owned]
+        if not_owned:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Device(s) not found in this tenant: {', '.join(not_owned)}",
+            )
         device_ids = body.device_ids
     else:
         rows = (await session.execute(
@@ -331,7 +347,7 @@ async def execute_campaign(
     errors = []
 
     devices = (await session.execute(
-        select(Device).where(Device.id.in_(device_ids))
+        select(Device).where(Device.id.in_(device_ids), Device.tenant_id == tenant_id)
     )).scalars().all()
 
     for device in devices:

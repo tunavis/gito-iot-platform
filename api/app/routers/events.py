@@ -94,7 +94,9 @@ async def list_events(
     # Fetch events + device names in one join
     rows = (await session.execute(
         select(Event, Device.name.label("device_name"))
-        .outerjoin(Device, Event.device_id == Device.id)
+        # tenant-scope the join so a foreign device_id can't surface another
+        # tenant's device name (RLS is inert for the app's DB role)
+        .outerjoin(Device, and_(Event.device_id == Device.id, Device.tenant_id == tenant_id))
         .where(where_clause)
         .order_by(Event.ts.desc())
         .offset((page - 1) * per_page)
@@ -157,7 +159,7 @@ async def create_event(
     device_name = None
     if event.device_id:
         device = (await session.execute(
-            select(Device).where(Device.id == event.device_id)
+            select(Device).where(Device.id == event.device_id, Device.tenant_id == tenant_id)
         )).scalar_one_or_none()
         device_name = device.name if device else None
 

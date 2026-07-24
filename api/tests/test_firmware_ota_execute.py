@@ -50,9 +50,10 @@ class TestExecuteCampaignPersistsPerDeviceOutcome:
         session.add = MagicMock()
         session.commit = AsyncMock()
         session.execute = AsyncMock(side_effect=[
-            _result(first=campaign),                          # campaign lookup
-            _result(first=fw),                                 # firmware lookup
-            _result(all_=[ok_device, failing_device]),          # devices list
+            _result(first=campaign),                                   # campaign lookup
+            _result(all_=[ok_device_id, failing_device_id]),           # tenant-ownership guard on body.device_ids
+            _result(first=fw),                                          # firmware lookup
+            _result(all_=[ok_device, failing_device]),                 # devices list
         ])
 
         with patch(

@@ -633,7 +633,10 @@ async def ingest_telemetry(
     if device.device_type_id:
         from app.models.base import DeviceType
         dt_result = await session.execute(
-            select(DeviceType.key_mapping).where(DeviceType.id == device.device_type_id)
+            select(DeviceType.key_mapping).where(
+                DeviceType.id == device.device_type_id,
+                DeviceType.tenant_id == device.tenant_id,
+            )
         )
         key_mapping = dt_result.scalar_one_or_none()
         if key_mapping:
