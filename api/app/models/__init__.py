@@ -27,6 +27,19 @@ from app.models.alarm import Alarm
 from app.models.unified_alert_rule import UnifiedAlertRule
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.device_type import DeviceType
+from app.models.billing import (
+    Plan,
+    PlanPrice,
+    Feature,
+    PlanFeature,
+    Subscription,
+    SubscriptionEvent,
+    UsageCounter,
+    Invoice,
+    Payment,
+    WebhookEvent,
+    TrialFingerprint,
+)
 
 __all__ = [
     "BaseModel",
@@ -55,4 +68,15 @@ __all__ = [
     "OTACampaign",
     "OTACampaignDevice",
     "DeviceFirmwareHistory",
+    "Plan",
+    "PlanPrice",
+    "Feature",
+    "PlanFeature",
+    "Subscription",
+    "SubscriptionEvent",
+    "UsageCounter",
+    "Invoice",
+    "Payment",
+    "WebhookEvent",
+    "TrialFingerprint",
 ]
