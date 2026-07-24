@@ -24,6 +24,7 @@ from app.schemas.user import (
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.security import hash_password, verify_password
 from app.dependencies import get_current_tenant, get_current_user_info
+from app.dependencies_billing import enforce_limit
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,12 @@ async def get_user(
     return SuccessResponse(data=UserResponse.model_validate(user))
 
 
-@router.post("", response_model=SuccessResponse[UserResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SuccessResponse[UserResponse],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(enforce_limit("users.max"))],
+)
 async def create_user(
     tenant_id: UUID,
     request: UserCreate,
@@ -193,7 +199,12 @@ async def create_user(
     return SuccessResponse(data=UserResponse.model_validate(user))
 
 
-@router.post("/invite", response_model=SuccessResponse[UserInviteResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/invite",
+    response_model=SuccessResponse[UserInviteResponse],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(enforce_limit("users.max"))],
+)
 async def invite_user(
     tenant_id: UUID,
     request: UserInviteRequest,

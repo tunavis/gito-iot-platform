@@ -14,6 +14,7 @@ from app.models.base import Device
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse
 from app.schemas.common import SuccessResponse, PaginationMeta
 from app.dependencies import get_current_tenant
+from app.dependencies_billing import enforce_limit
 from app.services.device_management import DeviceManagementService
 from app.services.device_status import fetch_offline_thresholds
 
@@ -128,7 +129,12 @@ async def _validate_device_fks(
             )
 
 
-@router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SuccessResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(enforce_limit("devices.max"))],
+)
 async def create_device(
     tenant_id: UUID,
     device_data: DeviceCreate,
