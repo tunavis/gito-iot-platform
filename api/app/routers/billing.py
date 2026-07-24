@@ -9,18 +9,42 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.database import get_session, RLSSession
-from app.dependencies import get_current_tenant
+from app.dependencies import get_current_tenant, get_current_user_info, get_management_tenant
 from app.services import entitlements as ent_service
 from app.services import usage as usage_service
+from app.services import subscriptions as sub_service
+from app.services.tenant_access import validate_tenant_access
 
 # Public — no auth (the marketing pricing page reads this).
 public_router = APIRouter(prefix="/plans", tags=["billing"])
 
 # Tenant-scoped — authenticated.
 router = APIRouter(prefix="/tenants/{tenant_id}", tags=["billing"])
+
+# Management-only admin surface (invoiced/enterprise plan assignment).
+admin_router = APIRouter(prefix="/admin/tenants/{tenant_id}", tags=["billing-admin"])
+
+
+class TrialRequest(BaseModel):
+    plan_code: str
+
+
+class PlanChangeRequest(BaseModel):
+    plan_code: str
+    billing_interval: str = "month"
+
+
+def _require_tenant_admin(tenant_id: UUID, info: dict) -> str:
+    """Own-tenant + TENANT_ADMIN/SUPER_ADMIN gate. Returns an actor string for the event log."""
+    if str(tenant_id) != str(info["tenant_id"]):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    if info.get("role") not in ("TENANT_ADMIN", "SUPER_ADMIN"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    return f"user:{info['user_id']}"
 
 
 @public_router.get("")
@@ -166,3 +190,90 @@ async def get_usage(
 
     items.sort(key=lambda i: i["metric"])
     return {"plan_code": ent.plan_code, "status": ent.status, "usage": items}
+
+
+# ── Subscription lifecycle (tenant-admin) ─────────────────────────────────────
+# All mutations route through app.services.subscriptions — the sole write path.
+
+@router.post("/subscription/trial")
+async def start_trial(
+    tenant_id: UUID,
+    body: TrialRequest,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    info: Annotated[dict, Depends(get_current_user_info)],
+):
+    """Start a free trial on a plan (one per tenant)."""
+    actor = _require_tenant_admin(tenant_id, info)
+    await session.set_tenant_context(tenant_id)
+    redis = getattr(request.app.state, "redis", None)
+    return await sub_service.start_trial(
+        session, redis, tenant_id, plan_code=body.plan_code, actor=actor,
+    )
+
+
+@router.post("/subscription/change")
+async def change_plan(
+    tenant_id: UUID,
+    body: PlanChangeRequest,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    info: Annotated[dict, Depends(get_current_user_info)],
+):
+    """Upgrade or downgrade to another plan."""
+    actor = _require_tenant_admin(tenant_id, info)
+    await session.set_tenant_context(tenant_id)
+    redis = getattr(request.app.state, "redis", None)
+    return await sub_service.change_plan(session, redis, tenant_id, plan_code=body.plan_code, actor=actor)
+
+
+@router.post("/subscription/cancel")
+async def cancel_subscription(
+    tenant_id: UUID,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    info: Annotated[dict, Depends(get_current_user_info)],
+):
+    """Schedule cancellation at the end of the current period."""
+    actor = _require_tenant_admin(tenant_id, info)
+    await session.set_tenant_context(tenant_id)
+    redis = getattr(request.app.state, "redis", None)
+    return await sub_service.cancel(session, redis, tenant_id, actor=actor)
+
+
+@router.post("/subscription/resume")
+async def resume_subscription(
+    tenant_id: UUID,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    info: Annotated[dict, Depends(get_current_user_info)],
+):
+    """Undo a scheduled cancellation."""
+    actor = _require_tenant_admin(tenant_id, info)
+    await session.set_tenant_context(tenant_id)
+    redis = getattr(request.app.state, "redis", None)
+    return await sub_service.resume(session, redis, tenant_id, actor=actor)
+
+
+# ── Admin/manual assignment (management tenant only) ──────────────────────────
+
+@admin_router.post("/subscription")
+async def admin_assign_plan(
+    tenant_id: UUID,
+    body: PlanChangeRequest,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    mgmt: Annotated[tuple[UUID, UUID], Depends(get_management_tenant)],
+):
+    """Place a tenant on a plan (invoiced/EFT enterprise path). Management tenants only,
+    and only for tenants at or below them in the hierarchy."""
+    mgmt_tenant_id, mgmt_user_id = mgmt
+    if not await validate_tenant_access(session, mgmt_tenant_id, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant not managed by you")
+    await session.set_tenant_context(tenant_id)
+    redis = getattr(request.app.state, "redis", None)
+    return await sub_service.assign_plan(
+        session, redis, tenant_id,
+        plan_code=body.plan_code, billing_interval=body.billing_interval,
+        actor=f"mgmt:{mgmt_user_id}",
+    )
