@@ -127,3 +127,6 @@ mobile/
 # Next.js build info (generated file)
 web/tsconfig.tsbuildinfo
 .playwright-mcp/
+
+# CodeGraph local index (rebuilt via `codegraph init`)
+.codegraph/

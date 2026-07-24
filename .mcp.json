@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    },
+    "agentmemory": {
+      "type": "stdio",
+      "command": "agentmemory",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
