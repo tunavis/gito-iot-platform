@@ -25,6 +25,20 @@ from app.database import get_session
 logger = logging.getLogger(__name__)
 
 
+def _effective_retention_days(pref: int | None, plan_limit: int | None) -> int:
+    """Retention window a tenant actually gets: their preference (historical default
+    90) capped by the plan's retention.days entitlement.
+
+    plan_limit None = unlimited plan (no cap). Floor of 1 day so a misconfiguration
+    can never wipe a tenant's telemetry entirely. This is where a tenant is stopped
+    from self-granting retention beyond its plan (the Settings→Retention value is
+    tenant-controlled and RLS is inert for the app's DB role).
+    """
+    base = pref if pref is not None else 90
+    effective = base if plan_limit is None else min(base, plan_limit)
+    return max(1, effective)
+
+
 class NotificationBackgroundTasks:
     """Background task manager for notification retry and cleanup."""
 
@@ -355,10 +369,13 @@ class NotificationBackgroundTasks:
            retention floor so any fully-expired chunks are physically removed
            from disk (instant — drops entire files, no row scanning).
 
-        retention_days read from tenants.metadata (Settings → Retention tab).
-        Defaults to 90 days if not configured.
+        retention_days read from tenants.metadata (Settings → Retention tab), then
+        CAPPED by the plan's retention.days entitlement (a tenant cannot self-grant
+        more retention than its plan allows). Defaults to 90 days if not configured.
         """
         try:
+            from app.services import entitlements as ent_service
+
             session_gen = get_session()
             session = await session_gen.__anext__()
 
@@ -372,13 +389,20 @@ class NotificationBackgroundTasks:
 
                 total_telemetry = 0
                 total_events    = 0
-                min_retention   = 90  # track minimum across tenants for drop_chunks
+                # Longest retention anyone is entitled to — the ONLY floor at which a
+                # whole chunk can be physically dropped without losing data another
+                # tenant still keeps (chunks are shared across tenants). Using the
+                # minimum here would drop data long-retention tenants are entitled to.
+                max_retention   = 1
 
                 for row in tenants:
-                    tenant_id      = str(row[0])
-                    retention_days = int(row[1]) if row[1] else 90
+                    tenant_id = str(row[0])
+                    pref      = int(row[1]) if row[1] else None
+
+                    ent            = await ent_service.resolve(session, tenant_id, redis=None)
+                    retention_days = _effective_retention_days(pref, ent.limit("retention.days"))
                     cutoff         = datetime.utcnow() - timedelta(days=retention_days)
-                    min_retention  = min(min_retention, retention_days)
+                    max_retention  = max(max_retention, retention_days)
 
                     # Per-tenant DELETE — TimescaleDB chunk pruning makes this fast
                     result = await session.execute(
@@ -404,10 +428,11 @@ class NotificationBackgroundTasks:
 
                 await session.commit()
 
-                # TimescaleDB: physically drop fully-expired chunks at the global
-                # minimum retention floor. This reclaims disk space instantly.
-                # cascade => TRUE propagates to continuous aggregates.
-                global_cutoff = datetime.utcnow() - timedelta(days=min_retention)
+                # TimescaleDB: physically drop chunks older than the LONGEST retention
+                # any tenant is entitled to — i.e. chunks no tenant still needs. Reclaims
+                # disk instantly. (The per-tenant DELETEs above handle granular cleanup;
+                # this only removes chunks that are fully past everyone's window.)
+                global_cutoff = datetime.utcnow() - timedelta(days=max_retention)
                 try:
                     await session.execute(
                         text("SELECT drop_chunks('telemetry', :cutoff)"),
@@ -415,7 +440,7 @@ class NotificationBackgroundTasks:
                     )
                     await session.commit()
                     logger.info(
-                        f"TimescaleDB drop_chunks: removed chunks older than {min_retention} days"
+                        f"TimescaleDB drop_chunks: removed chunks older than {max_retention} days"
                     )
                 except Exception as e:
                     # Non-fatal: drop_chunks may fail if TimescaleDB is not available
