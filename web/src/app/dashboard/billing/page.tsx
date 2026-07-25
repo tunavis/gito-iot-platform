@@ -131,6 +131,7 @@ export default function BillingPage() {
   const badge = sub ? (STATUS_BADGE[sub.status] ?? { variant: 'neutral' as BadgeVariant, label: sub.status }) : null;
   const trialDays = daysUntil(sub?.trial_ends_at);
   const graceDays = daysUntil(sub?.grace_until);
+  const overLimit = (usage?.usage || []).filter((u) => !u.unlimited && u.limit !== null && u.used >= u.limit);
 
   return (
     <PageShell title="Billing & Subscription" subtitle="Your plan, usage and payment status" icon={<CreditCard className="w-5 h-5" />}>
@@ -170,6 +171,18 @@ export default function BillingPage() {
                 Scheduled to cancel at the end of the current period.
               </span>
               {isAdmin && <button onClick={() => post('/resume')} disabled={busy} className="ml-auto text-sm font-semibold text-primary-600 hover:text-primary-700">Resume</button>}
+            </div>
+          )}
+          {overLimit.length > 0 && (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+                 style={{ background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.25)' }}>
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#d97706' }} />
+              <span className="text-sm text-th-primary">
+                Over your plan limits on{' '}
+                <strong>{overLimit.map((u) => `${METRIC_LABELS[u.metric] || u.metric} (${u.used}/${u.limit})`).join(', ')}</strong>.
+                {' '}New items in {overLimit.length === 1 ? 'this area' : 'these areas'} cannot be added until you upgrade or reduce usage.
+              </span>
+              {isAdmin && <button onClick={openPlanModal} className="ml-auto flex-shrink-0 text-sm font-semibold text-primary-600 hover:text-primary-700 whitespace-nowrap">Upgrade →</button>}
             </div>
           )}
 
