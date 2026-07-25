@@ -11,6 +11,7 @@ import {
   FolderTree,
   LayoutGrid,
   Settings,
+  CreditCard,
   ChevronRight,
   Activity,
   GitBranch,
@@ -231,6 +232,7 @@ export default function Sidebar() {
     },
     { label: 'Device Types', href: '/dashboard/device-types', icon: <LayoutGrid className="w-4 h-4" />, single: true },
     { label: 'Connections', href: '/dashboard/connections', icon: <Link2 className="w-4 h-4" />, single: true },
+    { label: 'Billing', href: '/dashboard/billing', icon: <CreditCard className="w-4 h-4" />, single: true },
     {
       label: 'Firmware',
       icon: <Rocket className="w-4 h-4" />,
