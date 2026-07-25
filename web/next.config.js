@@ -36,6 +36,7 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '/api',
   },
 
+  
   // Security headers
   async headers() {
     return [
@@ -61,3 +62,5 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+
+
