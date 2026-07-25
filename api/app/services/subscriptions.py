@@ -32,6 +32,10 @@ from app.services import entitlements as ent_service
 
 LIVE_STATUSES = ent_service.LIVE_STATUSES
 
+# Days a tenant stays in past_due (grace) after a trial/payment lapses before the
+# app goes read-only. Enforcement posture: never drop ingestion, only restrict.
+GRACE_DAYS = 14
+
 
 class SubscriptionError(HTTPException):
     """409-style lifecycle conflict (already subscribed, trial used, no live sub…)."""
@@ -247,3 +251,67 @@ async def assign_plan(session, redis, tenant_id, *, plan_code: str, actor: str,
     await _record_event(session, tid, sid, from_status, "active", f"admin_assign:{plan_code}", actor)
     await _finish(session, redis, tid)
     return await _current(session, tid)
+
+
+# ── Scheduled lifecycle transitions (run by the background scheduler) ─────────
+
+async def run_lifecycle_transitions(session) -> dict:
+    """Advance every subscription whose clock has run out. Idempotent batch sweep.
+
+      trialing, trial_ends_at passed        → past_due  (+ grace_until)
+      past_due, grace_until passed          → restricted
+      cancel_at_period_end, period ended    → canceled
+
+    Each transition appends a subscription_events row with actor 'system'. Returns
+    counts + the set of affected tenant ids so the caller can invalidate their
+    entitlement caches. Does NOT touch anything still within its window, so
+    re-running changes nothing. 'restricted' means the app goes read-only for that
+    tenant (a future mutation-blocking layer); ingestion is never dropped.
+    """
+    now = datetime.utcnow()
+    affected: set[str] = set()
+    counts = {"trial_expired": 0, "restricted": 0, "canceled": 0}
+
+    async def _sweep(select_sql, params, set_sql, frm, to, reason, key):
+        rows = (await session.execute(text(select_sql), params)).mappings().all()
+        for r in rows:
+            await session.execute(text(set_sql), {"id": str(r["id"]), **params})
+            prev = r.get("status", frm)
+            await _record_event(session, r["tenant_id"], r["id"], prev, to, reason, "system")
+            affected.add(str(r["tenant_id"]))
+            counts[key] += 1
+
+    # 1. Trials that ended without conversion → past_due, start the grace clock.
+    # grace_until is computed in Python and passed as a typed param — asyncpg can't
+    # infer the type of `:now + interval '…'` and mismatches it against timestamptz.
+    await _sweep(
+        "SELECT id, tenant_id FROM subscriptions "
+        "WHERE status = 'trialing' AND trial_ends_at IS NOT NULL AND trial_ends_at < :now",
+        {"now": now, "grace": now + timedelta(days=GRACE_DAYS)},
+        "UPDATE subscriptions SET status='past_due', grace_until = :grace, "
+        "updated_at = now() WHERE id = :id",
+        "trialing", "past_due", "trial_expired", "trial_expired",
+    )
+
+    # 2. past_due past its grace window → restricted (read-only).
+    await _sweep(
+        "SELECT id, tenant_id FROM subscriptions "
+        "WHERE status = 'past_due' AND grace_until IS NOT NULL AND grace_until < :now",
+        {"now": now},
+        "UPDATE subscriptions SET status='restricted', updated_at = now() WHERE id = :id",
+        "past_due", "restricted", "grace_expired", "restricted",
+    )
+
+    # 3. Scheduled cancellations whose period has ended → canceled (drops out of 'live').
+    await _sweep(
+        "SELECT id, tenant_id, status FROM subscriptions "
+        "WHERE cancel_at_period_end = true AND status IN ('active','trialing','past_due','restricted') "
+        "AND current_period_end IS NOT NULL AND current_period_end < :now",
+        {"now": now},
+        "UPDATE subscriptions SET status='canceled', updated_at = now() WHERE id = :id",
+        None, "canceled", "cancel_at_period_end", "canceled",
+    )
+
+    await session.commit()
+    counts["affected_tenants"] = sorted(affected)
+    return counts

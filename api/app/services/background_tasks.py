@@ -97,6 +97,17 @@ class NotificationBackgroundTasks:
                 max_instances=1,
             )
 
+            # Advance subscription lifecycle: expire trials, grace→restricted,
+            # scheduled cancellations (runs hourly — these are day-scale clocks)
+            self.scheduler.add_job(
+                self.process_subscription_lifecycle,
+                IntervalTrigger(hours=1),
+                id="process_subscription_lifecycle",
+                name="Advance subscription trials/grace/cancellations",
+                coalesce=True,
+                max_instances=1,
+            )
+
             self.scheduler.start()
             logger.info("✅ Background task scheduler started")
         except Exception as e:
@@ -301,6 +312,38 @@ class NotificationBackgroundTasks:
                 await session_gen.aclose()
         except Exception as e:
             logger.error(f"Error in cleanup processor: {e}")
+
+    async def process_subscription_lifecycle(self) -> None:
+        """Advance subscriptions whose trial/grace/cancellation clock has elapsed.
+
+        Delegates the state machine to subscriptions.run_lifecycle_transitions
+        (unit-tested there); this wrapper just supplies a session, invalidates the
+        entitlement cache for affected tenants, and logs.
+        """
+        try:
+            session_gen = get_session()
+            session = await session_gen.__anext__()
+            try:
+                from app.services.subscriptions import run_lifecycle_transitions
+                from app.services import entitlements as ent_service
+                from app.config import get_settings
+                import redis.asyncio as aioredis
+
+                result = await run_lifecycle_transitions(session)
+                affected = result.pop("affected_tenants", [])
+                if affected:
+                    r = aioredis.from_url(get_settings().REDIS_URL)
+                    try:
+                        for tid in affected:
+                            await ent_service.invalidate(r, tid)
+                    finally:
+                        await r.aclose()
+                if any(result.values()):
+                    logger.info(f"Subscription lifecycle transitions: {result}")
+            finally:
+                await session_gen.aclose()
+        except Exception as e:
+            logger.error(f"Subscription lifecycle job failed: {e}")
 
     async def enforce_telemetry_retention(self) -> None:
         """Enforce per-tenant telemetry and event retention policies.

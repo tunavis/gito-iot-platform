@@ -108,3 +108,62 @@ class TestCancelResumeGuards:
         with pytest.raises(SubscriptionError) as e:
             await subs.resume(_FakeSession(_R(mapping=None)), None, uuid4(), actor="t")
         assert e.value.status_code == 404
+
+
+class _SweepResult:
+    def __init__(self, rows):
+        self._rows = rows
+    def mappings(self):
+        return self
+    def all(self):
+        return self._rows
+
+
+class _SweepSession:
+    """Returns a queued rowset for each SELECT; empties for UPDATE/INSERT."""
+    def __init__(self, sweep1=(), sweep2=(), sweep3=()):
+        self._sweeps = [list(sweep1), list(sweep2), list(sweep3)]
+        self.sql = []
+        self.commits = 0
+    async def execute(self, sql, params=None):
+        s = str(sql)
+        self.sql.append(s)
+        if s.strip().upper().startswith("SELECT"):
+            return _SweepResult(self._sweeps.pop(0) if self._sweeps else [])
+        return _SweepResult([])
+    async def commit(self):
+        self.commits += 1
+
+
+class TestLifecycleTransitions:
+    @pytest.mark.asyncio
+    async def test_expired_trial_goes_past_due_with_grace(self):
+        tid = uuid4()
+        s = _SweepSession(sweep1=[{"id": uuid4(), "tenant_id": tid}])
+        result = await subs.run_lifecycle_transitions(s)
+        assert result["trial_expired"] == 1
+        assert result["affected_tenants"] == [str(tid)]
+        assert any("past_due" in q and "grace_until" in q for q in s.sql)
+        assert s.commits == 1
+
+    @pytest.mark.asyncio
+    async def test_past_due_past_grace_goes_restricted(self):
+        s = _SweepSession(sweep2=[{"id": uuid4(), "tenant_id": uuid4()}])
+        result = await subs.run_lifecycle_transitions(s)
+        assert result["restricted"] == 1
+        assert any("restricted" in q for q in s.sql)
+
+    @pytest.mark.asyncio
+    async def test_scheduled_cancellation_becomes_canceled(self):
+        s = _SweepSession(sweep3=[{"id": uuid4(), "tenant_id": uuid4(), "status": "active"}])
+        result = await subs.run_lifecycle_transitions(s)
+        assert result["canceled"] == 1
+        assert any("canceled" in q for q in s.sql)
+
+    @pytest.mark.asyncio
+    async def test_no_op_when_nothing_due(self):
+        s = _SweepSession()
+        result = await subs.run_lifecycle_transitions(s)
+        assert result["trial_expired"] == 0 and result["restricted"] == 0 and result["canceled"] == 0
+        assert result["affected_tenants"] == []
+        assert s.commits == 1  # still commits (harmless no-op)
