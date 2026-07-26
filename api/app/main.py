@@ -1,5 +1,6 @@
 """Gito IoT Platform - FastAPI Application Factory."""
 
+import logging
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
@@ -11,6 +12,17 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.database import init_db, close_db, _SessionLocal
 
+# Configure logging BEFORE anything logs. Without this the API had no logging
+# config at all: root had no handler, so every logger.info from app code was
+# silently discarded (including detect_offline_devices' "Marked 68 device(s) as
+# offline" during a 43h outage) and warnings/errors only escaped through
+# logging.lastResort — bare messages, no timestamp, no logger name. Same
+# format as processor/mqtt_processor.py so both services read alike.
+logging.basicConfig(
+    level=getattr(logging, get_settings().LOG_LEVEL.upper(), logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
 
 async def _check_database() -> dict:
     """Check database connectivity and measure latency."""
@@ -20,6 +32,23 @@ async def _check_database() -> dict:
             await session.execute(text("SELECT 1"))
         latency = round((time.monotonic() - start) * 1000, 1)
         return {"status": "ok", "latency_ms": latency}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+async def _check_ingestion() -> dict:
+    """Report whether telemetry is still arriving platform-wide.
+
+    Deliberately returns only the status, never the raw uplink age: /api/health
+    is unauthenticated, and the age is cross-tenant operational detail. The age
+    goes to the log, from NotificationBackgroundTasks.detect_ingestion_stall.
+    """
+    from app.services.device_status import check_ingestion_stall
+
+    try:
+        async with _SessionLocal() as session:
+            result = await check_ingestion_stall(session)
+        return {"status": result["status"]}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -127,14 +156,18 @@ def create_app() -> FastAPI:
         """Health check with dependency probing."""
         db_check = await _check_database()
         keydb_check = await _check_keydb()
-        checks = {"database": db_check, "keydb": keydb_check}
+        ingest_check = await _check_ingestion()
+        checks = {"database": db_check, "keydb": keydb_check, "ingestion": ingest_check}
 
         if db_check["status"] != "ok":
             return JSONResponse(
                 status_code=503,
                 content={"status": "unhealthy", "checks": checks, "service": settings.APP_NAME},
             )
-        if keydb_check["status"] != "ok":
+        # A stalled ingest path is reported, never fatal: 503 here would make
+        # Docker restart the API (taking the UI down) over a problem that lives
+        # in the processor and that restarting the API cannot fix.
+        if keydb_check["status"] != "ok" or ingest_check["status"] == "stalled":
             return {"status": "degraded", "checks": checks, "service": settings.APP_NAME}
         return {"status": "healthy", "checks": checks, "service": settings.APP_NAME}
     

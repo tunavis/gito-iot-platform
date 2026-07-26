@@ -1,6 +1,10 @@
 # Build context is the REPO ROOT (see docker-compose.yml) so shared/ is visible.
 FROM python:3.11-slim
 
+# Unbuffered stdout — without this, logging is block-buffered and `docker logs`
+# ran up to 3 days behind, so the crash that killed ingestion was invisible.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install system dependencies
@@ -23,9 +27,11 @@ RUN pip install --no-cache-dir /opt/payload_codec
 # Copy application code
 COPY processor/mqtt_processor.py .
 
-# Health check: verify MQTT broker is reachable using configured env vars
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD python -c "import socket,os; socket.create_connection((os.getenv('MQTT_BROKER','mosquitto'),int(os.getenv('MQTT_PORT',1883))),timeout=5)" || exit 1
+# Health check: verify THIS process still holds a live MQTT subscription.
+# It used to TCP-connect to the broker instead, which reports the broker's
+# health, not the processor's — it stayed green through a 43h ingestion outage.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import os,sys,time; f=os.getenv('MQTT_HEARTBEAT_FILE','/tmp/mqtt_alive'); sys.exit(0 if os.path.exists(f) and time.time()-os.path.getmtime(f) < 60 else 1)"
 
 # Run the processor
 CMD ["python", "mqtt_processor.py"]

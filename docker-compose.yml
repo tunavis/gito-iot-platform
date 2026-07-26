@@ -51,6 +51,13 @@ services:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_logs:/mosquitto/log
+    # log_type all is verbose by design (it's the only broker forensics we have)
+    # so the log MUST be bounded — 150 MB of history, rotated, then dropped.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +98,8 @@ services:
     build:
       context: .
       dockerfile: ./api/Dockerfile
+      args:
+        INSTALL_DEV: "true"   # so `docker exec gito-api pytest` works here
     container_name: gito-api
     environment:
       DATABASE_URL: postgresql+asyncpg://gito:${DB_PASSWORD:-dev-password}@postgres:5432/gito
@@ -101,8 +110,15 @@ services:
       MQTT_BROKER_PORT: 1883
       MQTT_USERNAME: ${MQTT_USERNAME:-admin}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-admin-password}
-      LOG_LEVEL: DEBUG
+      # INFO by default: DEBUG turns on SQLAlchemy echo (see database.py), which
+      # buries every real event under thousands of SELECTs. LOG_LEVEL=DEBUG in
+      # .env when you actually want to read the SQL.
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ENVIRONMENT: development
+      # Card gateway (values come from gitignored .env; disabled if unset)
+      CARD_PROVIDER: ${CARD_PROVIDER:-paystack}
+      PAYSTACK_ENABLED: ${PAYSTACK_ENABLED:-false}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
     ports:
       - "8001:8000"  # host 8001 → container 8000 (8000 free for WSL/other stacks)
     depends_on:

@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# Unbuffered stdout — block-buffered logging left `docker logs` days behind on
+# the processor and hid a 43h outage. Same trap here.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install system dependencies
@@ -12,13 +16,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY shared/alarm_core /opt/alarm_core
 COPY shared/payload_codec /opt/payload_codec
 
+# Install the API's test/lint tooling ([project.optional-dependencies].dev in
+# pyproject.toml). On by default in docker-compose.yml so `docker exec gito-api
+# pytest` just works — pytest previously had to be pip-installed into the
+# running container by hand, and vanished on every rebuild. Registry images for
+# staging/production build with the default false and stay lean.
+ARG INSTALL_DEV=false
+
 # Copy requirements and install
 COPY api/pyproject.toml .
 COPY api/app ./app
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir /opt/alarm_core && \
     pip install --no-cache-dir /opt/payload_codec && \
-    pip install --no-cache-dir -e .
+    if [ "$INSTALL_DEV" = "true" ]; then \
+        pip install --no-cache-dir -e ".[dev]"; \
+    else \
+        pip install --no-cache-dir -e .; \
+    fi
 
 # Copy Alembic migrations and init.sql
 COPY api/alembic ./alembic

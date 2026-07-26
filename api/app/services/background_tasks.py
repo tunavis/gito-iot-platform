@@ -20,6 +20,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.models import Notification, NotificationQueue, AlertEvent
 from app.services.notification_dispatcher import NotificationDispatcher
+from app.services.device_status import (
+    INGESTION_STALL_THRESHOLD_SECONDS,
+    check_ingestion_stall,
+)
 from app.database import get_session
 
 logger = logging.getLogger(__name__)
@@ -45,6 +49,10 @@ class NotificationBackgroundTasks:
     def __init__(self):
         """Initialize background tasks scheduler."""
         self.scheduler: Optional[AsyncIOScheduler] = None
+        # Latch so a stall is logged once per transition instead of every tick —
+        # a line repeated every 5 min is a line nobody reads, which is how the
+        # last outage stayed invisible.
+        self._ingestion_stalled = False
 
     async def start(self) -> None:
         """Start background task scheduler."""
@@ -122,12 +130,23 @@ class NotificationBackgroundTasks:
                 max_instances=1,
             )
 
-            # Charge due card subscriptions (Peach). No-op unless PEACH_ENABLED.
+            # Charge due card subscriptions. No-op unless the card gateway is enabled.
             self.scheduler.add_job(
                 self.process_card_renewals,
                 IntervalTrigger(hours=1),
                 id="process_card_renewals",
                 name="Charge due card subscription renewals",
+                coalesce=True,
+                max_instances=1,
+            )
+
+            # Shout when the whole fleet goes silent — per-device offline
+            # detection can't distinguish "quiet devices" from "dead pipeline".
+            self.scheduler.add_job(
+                self.detect_ingestion_stall,
+                IntervalTrigger(minutes=5),
+                id="detect_ingestion_stall",
+                name="Detect platform-wide telemetry ingestion stall",
                 coalesce=True,
                 max_instances=1,
             )
@@ -370,7 +389,7 @@ class NotificationBackgroundTasks:
             logger.error(f"Subscription lifecycle job failed: {e}")
 
     async def process_card_renewals(self) -> None:
-        """Charge card subscriptions whose period has ended (Peach). No-op if Peach off."""
+        """Charge card subscriptions whose period has ended. No-op if the card gateway is off."""
         try:
             session_gen = get_session()
             session = await session_gen.__anext__()
@@ -543,6 +562,44 @@ class NotificationBackgroundTasks:
                 await session_gen.aclose()
         except Exception as e:
             logger.error(f"Error in offline device detection: {e}")
+
+    async def detect_ingestion_stall(self) -> None:
+        """Log loudly when telemetry stops arriving platform-wide.
+
+        See device_status.check_ingestion_stall for why this exists separately
+        from detect_offline_devices. Logs once per transition in each direction
+        so the ERROR means "this just broke", not "still broken, tick 517".
+        """
+        try:
+            session_gen = get_session()
+            session = await session_gen.__anext__()
+            try:
+                result = await check_ingestion_stall(session)
+            finally:
+                await session_gen.aclose()
+        except Exception as e:
+            logger.error(f"Error in ingestion stall detection: {e}")
+            return
+
+        if result["status"] == "stalled":
+            if not self._ingestion_stalled:
+                self._ingestion_stalled = True
+                # ponytail: log-only. Hook a notification/page in right here if
+                # a stall ever needs to wake someone up.
+                logger.error(
+                    "TELEMETRY INGESTION STALLED — %s. Every device will read "
+                    "offline. Check the processor's MQTT subscription first: "
+                    "docker logs gito-processor | tail -20",
+                    result["detail"],
+                )
+            return
+
+        if self._ingestion_stalled:
+            self._ingestion_stalled = False
+            logger.warning(
+                "Telemetry ingestion recovered — last uplink %ss ago",
+                result["last_uplink_age_seconds"],
+            )
 
     async def expire_timed_out_commands(self) -> None:
         """Mark expired pending/sent/delivered commands as timed_out.

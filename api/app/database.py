@@ -85,7 +85,11 @@ def get_database_engine():
     
     engine = create_async_engine(
         settings.DATABASE_URL,
-        echo=settings.APP_ENV == "development",
+        # Keyed on LOG_LEVEL, not APP_ENV: echoing every query in all of
+        # development drowned the log — an ERROR worth acting on sat between
+        # thousands of SELECTs, which is part of why a 43h outage went unread.
+        # Set LOG_LEVEL=DEBUG when you actually want the SQL.
+        echo=settings.LOG_LEVEL.upper() == "DEBUG",
         pool_size=settings.DATABASE_POOL_SIZE,
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
         pool_recycle=settings.DATABASE_POOL_RECYCLE,

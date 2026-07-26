@@ -26,6 +26,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 import aiomqtt
@@ -55,6 +56,11 @@ MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', 'processor')
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@postgres:5432/gito')
 REDIS_URL    = os.getenv('REDIS_URL', 'redis://keydb:6379')
+
+# Liveness file for the container healthcheck — see MQTTProcessor._heartbeat_loop
+MQTT_HEARTBEAT_FILE       = os.getenv('MQTT_HEARTBEAT_FILE', '/tmp/mqtt_alive')
+MQTT_HEARTBEAT_INTERVAL_S = 15
+MQTT_HEARTBEAT_MAX_AGE_S  = 60
 
 MAX_PAYLOAD_SIZE    = 256 * 1024   # 256 KB
 MAX_TELEMETRY_VALUE = 1e10
@@ -1033,11 +1039,24 @@ class BridgeWorker:
                 await self._flush_count_to_db()
 
     async def _renew_lock_loop(self, redis, lock_key: str, status_key: str) -> None:
-        """Renew the Redis lock and status TTL periodically."""
+        """Renew the Redis lock and status TTL periodically.
+
+        A transient Redis error must not kill this task: nobody awaits it, so it
+        would die unnoticed, the lock would TTL out while this worker keeps
+        consuming, and a second instance would start a duplicate bridge.
+        """
         while True:
             await asyncio.sleep(BRIDGE_LOCK_RENEW_S)
-            await redis.expire(lock_key, BRIDGE_LOCK_TTL_S)
-            await redis.expire(status_key, BRIDGE_LOCK_TTL_S)
+            try:
+                await redis.expire(lock_key, BRIDGE_LOCK_TTL_S)
+                await redis.expire(status_key, BRIDGE_LOCK_TTL_S)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(
+                    "Failed to renew bridge lock for %s: %s — retrying in %ss",
+                    self.integration_id, e, BRIDGE_LOCK_RENEW_S,
+                )
 
     async def _flush_count_loop(self) -> None:
         """Periodically flush accumulated message_count to DB."""
@@ -1126,10 +1145,20 @@ class ChirpStackBridgeManager:
                 await asyncio.sleep(5)
 
     async def _periodic_sync(self) -> None:
-        """Safety-net sync every BRIDGE_SYNC_INTERVAL_S seconds."""
+        """Safety-net sync every BRIDGE_SYNC_INTERVAL_S seconds.
+
+        _sync() only guards its DB read; a failure in start/stop_worker would
+        otherwise end the safety net permanently — and silently, since this is
+        gathered with _listen_for_changes and would take that down with it.
+        """
         while True:
             await asyncio.sleep(BRIDGE_SYNC_INTERVAL_S)
-            await self._sync()
+            try:
+                await self._sync()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("Bridge manager periodic sync failed: %s", e, exc_info=True)
 
     async def _sync(self) -> None:
         """Reconcile running workers against DB desired state."""
@@ -1719,9 +1748,35 @@ class MQTTProcessor:
             await self.stop()
 
     async def run_loop(self):
-        """MQTT listener loop — call after start()."""
-        try:
-            async with aiomqtt.Client(
+        """MQTT listener loop — call after start().
+
+        Reconnects with exponential backoff, same shape as BridgeWorker.run().
+        This used to be a bare try/except around one connection: any broker
+        error returned from run_loop() for good, main()'s gather() kept the
+        process alive on the bridge manager alone, and ingestion was dead until
+        somebody restarted the container — behind a healthcheck that only ever
+        probed the broker's port, so it stayed green the whole time.
+        """
+        self._mqtt_backoff = BRIDGE_BACKOFF_BASE_S
+        while self.running:
+            try:
+                await self._run_mqtt_connection()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("MQTT connection error: %s", e, exc_info=True)
+
+            if not self.running:
+                break
+            logger.warning(
+                "MQTT listener disconnected — reconnecting in %.0fs", self._mqtt_backoff
+            )
+            await asyncio.sleep(self._mqtt_backoff)
+            self._mqtt_backoff = min(self._mqtt_backoff * 2, BRIDGE_BACKOFF_MAX_S)
+
+    async def _run_mqtt_connection(self):
+        """Establish one broker connection and consume until it drops."""
+        async with aiomqtt.Client(
                 MQTT_BROKER,
                 port=MQTT_PORT,
                 username=MQTT_USERNAME,
@@ -1737,12 +1792,20 @@ class MQTTProcessor:
                 await client.subscribe("application/+/device/+/event/up")
                 logger.info("Subscribed to application/+/device/+/event/up (ChirpStack uplinks)")
 
+                # A connection that got this far was healthy — don't carry the
+                # previous failure's backoff into the next one.
+                self._mqtt_backoff = BRIDGE_BACKOFF_BASE_S
+
                 # Run stream consumer concurrently with MQTT listener
                 consumer_task = asyncio.create_task(self.stream_consumer.run())
 
                 # Run Redis→MQTT command bridge concurrently
                 bridge = CommandBridge(REDIS_URL, client)
                 bridge_task = asyncio.create_task(bridge.run())
+
+                # Liveness signal for the container healthcheck — only ticks
+                # while this process actually holds the subscription.
+                heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
                 try:
                     async for message in client.messages:
@@ -1772,14 +1835,21 @@ class MQTTProcessor:
                 finally:
                     consumer_task.cancel()
                     bridge_task.cancel()
-                    for task in (consumer_task, bridge_task):
+                    heartbeat_task.cancel()
+                    for task in (consumer_task, bridge_task, heartbeat_task):
                         try:
                             await task
                         except asyncio.CancelledError:
                             pass
 
-        except Exception as e:
-            logger.error(f"MQTT connection error: {e}", exc_info=True)
+    async def _heartbeat_loop(self) -> None:
+        """Touch MQTT_HEARTBEAT_FILE while the subscription is live."""
+        while True:
+            try:
+                Path(MQTT_HEARTBEAT_FILE).touch()
+            except OSError as e:
+                logger.warning("Failed to write MQTT heartbeat: %s", e)
+            await asyncio.sleep(MQTT_HEARTBEAT_INTERVAL_S)
 
 
 # ---------------------------------------------------------------------------
