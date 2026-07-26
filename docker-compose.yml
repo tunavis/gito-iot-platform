@@ -1,7 +1,12 @@
 services:
   # TimescaleDB (PostgreSQL 16 + time-series extensions)
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    # PINNED, never floating. `latest-pg16` silently moves; binary/extension
+    # drift against the on-disk data makes compressed telemetry chunks read back
+    # EMPTY, which looks exactly like data loss. It also has to match staging
+    # exactly or mirror_to_staging.sh's dump won't restore (it hard-aborts on a
+    # version mismatch). Bump this and docker-compose.staging.yml together.
+    image: timescale/timescaledb:2.25.2-pg16
     container_name: gito-postgres
     environment:
       POSTGRES_DB: gito
