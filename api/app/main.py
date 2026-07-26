@@ -209,6 +209,7 @@ def create_app() -> FastAPI:
     app.include_router(billing_router.public_router, prefix="/api/v1")  # Public pricing
     app.include_router(billing_router.router, prefix="/api/v1")  # Subscription/entitlements/usage
     app.include_router(billing_router.admin_router, prefix="/api/v1")  # Admin/manual plan assignment
+    app.include_router(billing_router.webhook_router, prefix="/api/v1")  # Payment provider webhooks
     
     # Disabled routers (superseded by unified systems):
     # - alert_rules: Replaced by alert_rules_unified

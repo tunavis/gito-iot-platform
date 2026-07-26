@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     CHIRPSTACK_TENANT_ID: str = ""
     CHIRPSTACK_API_KEY: str = ""
 
+    # Billing — Peach Payments (card gateway). Disabled until sandbox creds are set;
+    # all values come from the Peach dashboard, none are committed. When PEACH_ENABLED
+    # is false the checkout endpoint returns 503 and card charging is skipped.
+    PEACH_ENABLED: bool = False
+    PEACH_AUTH_URL: str = ""       # OAuth token endpoint (from Peach dashboard)
+    PEACH_API_URL: str = ""        # Checkout / payments base URL (from Peach dashboard)
+    PEACH_CLIENT_ID: str = ""
+    PEACH_CLIENT_SECRET: str = ""
+    PEACH_MERCHANT_ID: str = ""
+    PEACH_ENTITY_ID: str = ""
+    PEACH_WEBHOOK_SECRET: str = ""  # shared secret for HMAC-SHA256 webhook verification
+
     # Security
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_DEFAULT: str = "60/minute"

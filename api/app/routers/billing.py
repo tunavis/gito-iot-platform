@@ -5,6 +5,7 @@ enforcement here — that's the dependency layer (step 4). Reads are explicitly
 tenant-scoped (RLS is inert for the app's DB role).
 """
 
+import secrets
 from typing import Annotated
 from uuid import UUID
 
@@ -12,11 +13,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from app.config import get_settings
 from app.database import get_session, RLSSession
 from app.dependencies import get_current_tenant, get_current_user_info, get_management_tenant
 from app.services import entitlements as ent_service
 from app.services import usage as usage_service
 from app.services import subscriptions as sub_service
+from app.services import billing_ops
+from app.services.payments import get_provider, ProviderNotSupported
 from app.services.tenant_access import validate_tenant_access
 
 # Public — no auth (the marketing pricing page reads this).
@@ -28,12 +32,20 @@ router = APIRouter(prefix="/tenants/{tenant_id}", tags=["billing"])
 # Management-only admin surface (invoiced/enterprise plan assignment).
 admin_router = APIRouter(prefix="/admin/tenants/{tenant_id}", tags=["billing-admin"])
 
+# Provider webhooks — public (no JWT); authenticated by signature instead.
+webhook_router = APIRouter(prefix="/billing", tags=["billing-webhooks"])
+
 
 class TrialRequest(BaseModel):
     plan_code: str
 
 
 class PlanChangeRequest(BaseModel):
+    plan_code: str
+    billing_interval: str = "month"
+
+
+class CheckoutRequest(BaseModel):
     plan_code: str
     billing_interval: str = "month"
 
@@ -253,6 +265,66 @@ async def resume_subscription(
     await session.set_tenant_context(tenant_id)
     redis = getattr(request.app.state, "redis", None)
     return await sub_service.resume(session, redis, tenant_id, actor=actor)
+
+
+@router.post("/subscription/checkout")
+async def create_checkout(
+    tenant_id: UUID,
+    body: CheckoutRequest,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    info: Annotated[dict, Depends(get_current_user_info)],
+):
+    """Start a card checkout for a paid plan. Returns a redirect_url to Peach's
+    hosted page; on successful payment the webhook activates the subscription."""
+    _require_tenant_admin(tenant_id, info)
+    settings = get_settings()
+    if not settings.PEACH_ENABLED:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Card payments are not configured yet")
+    await session.set_tenant_context(tenant_id)
+
+    subtotal = await billing_ops._plan_price_cents(session, body.plan_code, body.billing_interval, "ZAR")
+    if not subtotal:  # free plan or no price → no checkout needed
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="This plan has no card price (free, or contact sales)")
+    _, total_cents = billing_ops._vat_split(subtotal)  # customer pays VAT-inclusive
+
+    redis = getattr(request.app.state, "redis", None)
+    ref = secrets.token_hex(6)  # 12 chars — within Peach's merchantTransactionId limit
+    await billing_ops.stash_checkout(redis, ref, tenant_id=tenant_id,
+                                     plan_code=body.plan_code, interval=body.billing_interval)
+
+    base = str(request.base_url).rstrip("/")
+    provider = get_provider("peach")
+    result = await provider.create_checkout(
+        amount_cents=total_cents, currency="ZAR", reference=ref,
+        return_url=f"{base}/dashboard/billing?checkout=done",
+        notify_url=f"{base}/api/v1/billing/webhooks/peach",
+    )
+    return {"redirect_url": result.redirect_url, "reference": ref}
+
+
+# ── Provider webhooks (public, signature-authenticated) ───────────────────────
+
+@webhook_router.post("/webhooks/{provider}")
+async def provider_webhook(
+    provider: str,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+):
+    """Receive a payment-provider webhook. No JWT — verified by signature inside
+    process_webhook (idempotent). Always 200 on a handled event so the provider
+    doesn't retry; 400 only on a bad signature."""
+    raw = await request.body()
+    redis = getattr(request.app.state, "redis", None)
+    try:
+        result = await billing_ops.process_webhook(session, redis, provider, dict(request.headers), raw)
+    except ProviderNotSupported as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    if not result.get("ok"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("status"))
+    return result
 
 
 # ── Admin/manual assignment (management tenant only) ──────────────────────────

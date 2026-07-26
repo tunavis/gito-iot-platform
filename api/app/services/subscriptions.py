@@ -211,28 +211,33 @@ async def resume(session, redis, tenant_id, *, actor: str) -> dict:
 
 
 async def assign_plan(session, redis, tenant_id, *, plan_code: str, actor: str,
-                      billing_interval: str = "month") -> dict:
-    """Admin/manual: put a tenant on a plan as active (invoiced/EFT enterprise path).
+                      billing_interval: str = "month", provider: str = "manual",
+                      provider_ref: str | None = None) -> dict:
+    """Activate a tenant on a plan. Used by admin/manual assignment AND by the card
+    webhook on a successful payment.
 
     Any plan by code (incl. non-public), which is how enterprise deals are placed.
     Replaces an existing live subscription in place; otherwise creates one.
+    provider/provider_ref record who's billing it (e.g. 'peach' + the stored-card token).
     """
     tid = str(tenant_id)
     plan = await _plan(session, code=plan_code, active_only=False)
     now = datetime.utcnow()
     period_end = _period_end(now, billing_interval)
     live = await _live_subscription(session, tid)
+    reason = f"{'card_paid' if provider != 'manual' else 'admin_assign'}:{plan_code}"
 
     if live:
         await session.execute(
             text(
-                "UPDATE subscriptions SET plan_id = :pid, status = 'active', provider = 'manual', "
+                "UPDATE subscriptions SET plan_id = :pid, status = 'active', provider = :prov, "
+                "provider_subscription_id = COALESCE(:ref, provider_subscription_id), "
                 "billing_interval = :interval, trial_ends_at = NULL, cancel_at_period_end = false, "
                 "canceled_at = NULL, current_period_start = :now, current_period_end = :pe, "
                 "updated_at = now() WHERE id = :sid"
             ),
-            {"pid": str(plan["id"]), "interval": billing_interval, "now": now,
-             "pe": period_end, "sid": str(live["id"])},
+            {"pid": str(plan["id"]), "prov": provider, "ref": provider_ref,
+             "interval": billing_interval, "now": now, "pe": period_end, "sid": str(live["id"])},
         )
         sid = live["id"]
         from_status = live["status"]
@@ -240,15 +245,16 @@ async def assign_plan(session, redis, tenant_id, *, plan_code: str, actor: str,
         sid = (await session.execute(
             text(
                 "INSERT INTO subscriptions "
-                "(tenant_id, payer_tenant_id, plan_id, status, provider, billing_interval, "
-                " current_period_start, current_period_end) "
-                "VALUES (:tid, :tid, :pid, 'active', 'manual', :interval, :now, :pe) RETURNING id"
+                "(tenant_id, payer_tenant_id, plan_id, status, provider, provider_subscription_id, "
+                " billing_interval, current_period_start, current_period_end) "
+                "VALUES (:tid, :tid, :pid, 'active', :prov, :ref, :interval, :now, :pe) RETURNING id"
             ),
-            {"tid": tid, "pid": str(plan["id"]), "interval": billing_interval, "now": now, "pe": period_end},
+            {"tid": tid, "pid": str(plan["id"]), "prov": provider, "ref": provider_ref,
+             "interval": billing_interval, "now": now, "pe": period_end},
         )).scalar_one()
         from_status = None
 
-    await _record_event(session, tid, sid, from_status, "active", f"admin_assign:{plan_code}", actor)
+    await _record_event(session, tid, sid, from_status, "active", reason, actor)
     await _finish(session, redis, tid)
     return await _current(session, tid)
 

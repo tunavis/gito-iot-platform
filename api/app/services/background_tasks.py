@@ -122,6 +122,16 @@ class NotificationBackgroundTasks:
                 max_instances=1,
             )
 
+            # Charge due card subscriptions (Peach). No-op unless PEACH_ENABLED.
+            self.scheduler.add_job(
+                self.process_card_renewals,
+                IntervalTrigger(hours=1),
+                id="process_card_renewals",
+                name="Charge due card subscription renewals",
+                coalesce=True,
+                max_instances=1,
+            )
+
             self.scheduler.start()
             logger.info("✅ Background task scheduler started")
         except Exception as e:
@@ -358,6 +368,29 @@ class NotificationBackgroundTasks:
                 await session_gen.aclose()
         except Exception as e:
             logger.error(f"Subscription lifecycle job failed: {e}")
+
+    async def process_card_renewals(self) -> None:
+        """Charge card subscriptions whose period has ended (Peach). No-op if Peach off."""
+        try:
+            session_gen = get_session()
+            session = await session_gen.__anext__()
+            try:
+                from app.services.billing_ops import charge_due_card_subscriptions
+                from app.services import entitlements as ent_service
+                from app.config import get_settings
+                import redis.asyncio as aioredis
+
+                r = aioredis.from_url(get_settings().REDIS_URL)
+                try:
+                    result = await charge_due_card_subscriptions(session, r)
+                finally:
+                    await r.aclose()
+                if result.get("charged") or result.get("failed"):
+                    logger.info(f"Card renewals: {result}")
+            finally:
+                await session_gen.aclose()
+        except Exception as e:
+            logger.error(f"Card renewal job failed: {e}")
 
     async def enforce_telemetry_retention(self) -> None:
         """Enforce per-tenant telemetry and event retention policies.
