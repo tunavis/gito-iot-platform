@@ -52,22 +52,42 @@ def verify_signature(secret: str, raw_body: bytes, given: str) -> bool:
     return hmac.compare_digest(expected, given)
 
 
+def _wh_from_txn(d: dict, *, success: bool, raw) -> ProviderWebhook:
+    """Build a normalised ProviderWebhook from a Paystack transaction object. Shared
+    by the webhook parser and the verify-on-return parser so their field mapping
+    (and thus the idempotency key) can never drift apart."""
+    auth = d.get("authorization") or {}
+    return ProviderWebhook(
+        # data.id is the transaction id — identical on the webhook and on verify,
+        # so both activation paths dedupe against the same webhook_events row.
+        event_id=str(d.get("id") or d.get("reference") or ""),
+        kind="payment",
+        success=success,
+        reference=d.get("reference"),
+        token=auth.get("authorization_code"),
+        amount_cents=d.get("amount"),  # already in cents
+        raw=raw,
+    )
+
+
 def parse_event(raw_body: bytes) -> ProviderWebhook:
     """Normalise a Paystack webhook. `charge.success` is the one we act on; the
     transaction `data.id` is unique per charge → our idempotency key."""
     body = json.loads(raw_body.decode() or "{}")
     event = body.get("event", "")
     d = body.get("data") or {}
-    auth = d.get("authorization") or {}
-    return ProviderWebhook(
-        event_id=str(d.get("id") or d.get("reference") or ""),
-        kind="payment" if event.startswith("charge.") else "other",
-        success=(event == "charge.success" and d.get("status") == "success"),
-        reference=d.get("reference"),
-        token=auth.get("authorization_code"),
-        amount_cents=d.get("amount"),  # already in cents
-        raw=body,
-    )
+    if not event.startswith("charge."):
+        wh = _wh_from_txn(d, success=False, raw=body)
+        wh.kind = "other"
+        return wh
+    return _wh_from_txn(d, success=(event == "charge.success" and d.get("status") == "success"), raw=body)
+
+
+def parse_verify(body: dict) -> ProviderWebhook:
+    """Normalise a /transaction/verify response (no `event` wrapper — the payment
+    outcome is `data.status`). Used by the verify-on-return path."""
+    d = body.get("data") or {}
+    return _wh_from_txn(d, success=(bool(body.get("status")) and d.get("status") == "success"), raw=body)
 
 
 class PaystackProvider(PaymentProvider):
@@ -148,6 +168,27 @@ class PaystackProvider(PaymentProvider):
             success=False, provider_ref=str(d.get("reference") or ""),
             failure_reason=d.get("gateway_response") or data.get("message") or "charge failed",
         )
+
+    # ── Verify-on-return (browser comes back → confirm server-side) ──────────
+    async def verify_transaction(self, *, reference: str):
+        """Re-fetch a transaction from Paystack to confirm it. This is an OUTBOUND
+        call, so it works even when Paystack can't reach us with a webhook (e.g. an
+        internal-only server). Returns a normalised ProviderWebhook, or None if the
+        lookup itself failed."""
+        s = self._settings
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.get(
+                    f"{s.PAYSTACK_API_URL}/transaction/verify/{reference}",
+                    headers=self._headers(),
+                )
+                data = resp.json() if resp.content else {}
+        except Exception as e:
+            logger.warning("Paystack verify_transaction error: %s", e)
+            return None
+        if not data.get("status"):
+            return None
+        return parse_verify(data)
 
     # ── Webhooks ─────────────────────────────────────────────────────────────
     def verify_webhook(self, *, headers: dict, raw_body: bytes) -> bool:

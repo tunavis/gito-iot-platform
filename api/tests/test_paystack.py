@@ -16,7 +16,7 @@ import hashlib
 import hmac
 import json
 
-from app.services.paystack import verify_signature, parse_event
+from app.services.paystack import verify_signature, parse_event, parse_verify
 
 
 SECRET = "sk_test_deadbeefcafef00d"
@@ -78,3 +78,25 @@ class TestParseEvent:
         wh = parse_event(b"")
         assert wh.kind == "other"
         assert wh.success is False
+
+
+class TestParseVerify:
+    """The /transaction/verify response has no `event` wrapper — success is data.status."""
+    def _resp(self, txn_status="success", api_status=True):
+        return {"status": api_status, "message": "Verification successful",
+                "data": {"id": 424242, "reference": "ref9", "status": txn_status, "amount": 114885,
+                         "currency": "ZAR", "authorization": {"authorization_code": "AUTH_keep", "reusable": True}}}
+
+    def test_successful_verify(self):
+        wh = parse_verify(self._resp())
+        assert wh.kind == "payment"
+        assert wh.success is True
+        assert wh.event_id == "424242"      # same txn id the webhook carries → shared idempotency key
+        assert wh.token == "AUTH_keep"
+        assert wh.amount_cents == 114885
+
+    def test_unsuccessful_txn(self):
+        assert parse_verify(self._resp(txn_status="failed")).success is False
+
+    def test_api_status_false(self):
+        assert parse_verify(self._resp(api_status=False)).success is False

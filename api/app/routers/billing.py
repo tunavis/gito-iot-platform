@@ -50,6 +50,10 @@ class CheckoutRequest(BaseModel):
     billing_interval: str = "month"
 
 
+class ConfirmRequest(BaseModel):
+    reference: str
+
+
 def _require_tenant_admin(tenant_id: UUID, info: dict) -> str:
     """Own-tenant + TENANT_ADMIN/SUPER_ADMIN gate. Returns an actor string for the event log."""
     if str(tenant_id) != str(info["tenant_id"]):
@@ -310,6 +314,26 @@ async def create_checkout(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
                             detail=f"Payment gateway rejected the request: {e}")
     return {"redirect_url": result.redirect_url, "reference": ref}
+
+
+@router.post("/subscription/checkout/confirm")
+async def confirm_checkout(
+    tenant_id: UUID,
+    body: ConfirmRequest,
+    request: Request,
+    session: Annotated[RLSSession, Depends(get_session)],
+    info: Annotated[dict, Depends(get_current_user_info)],
+):
+    """Called when the shopper returns from the hosted checkout. Re-verifies the
+    transaction with the gateway server-side (never trusts the browser) and, on a
+    confirmed payment, activates the subscription — sharing the webhook's idempotent
+    path, so this and a later webhook can't both activate. Works on an internal-only
+    server the gateway can't reach with a webhook."""
+    _require_tenant_admin(tenant_id, info)
+    await session.set_tenant_context(tenant_id)
+    settings = get_settings()
+    redis = getattr(request.app.state, "redis", None)
+    return await billing_ops.confirm_checkout(session, redis, settings.CARD_PROVIDER, body.reference)
 
 
 # ── Provider webhooks (public, signature-authenticated) ───────────────────────

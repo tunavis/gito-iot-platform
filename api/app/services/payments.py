@@ -78,6 +78,11 @@ class PaymentProvider:
     ) -> ChargeResult:
         raise NotImplementedError
 
+    async def verify_transaction(self, *, reference: str) -> Optional[ProviderWebhook]:
+        """Re-fetch a transaction from the gateway to confirm it (verify-on-return).
+        Returns None if the provider can't verify (default) or the lookup failed."""
+        return None
+
     def verify_webhook(self, *, headers: dict, raw_body: bytes) -> bool:
         raise NotImplementedError
 

@@ -150,15 +150,35 @@ async def _pop_checkout(redis, ref: str) -> dict | None:
 # ── Webhook processing (idempotent) ──────────────────────────────────────────
 
 async def process_webhook(session, redis, provider_name: str, headers: dict, raw_body: bytes) -> dict:
-    """Verify, de-dupe, and act on a provider webhook. Returns a small status dict."""
+    """Verify a provider webhook signature, then run the shared idempotent activation."""
     provider = get_provider(provider_name)
-
     if not provider.verify_webhook(headers=headers, raw_body=raw_body):
         return {"ok": False, "status": "invalid_signature"}
-
     wh = provider.parse_webhook(raw_body=raw_body)
+    return await _record_and_activate(session, redis, provider_name, wh)
 
-    # Idempotency: the first insert wins; a replay collides and is skipped.
+
+async def confirm_checkout(session, redis, provider_name: str, reference: str) -> dict:
+    """Verify-on-return: the shopper's browser comes back from the hosted page, we
+    re-fetch the transaction from the gateway (OUTBOUND — works on an internal-only
+    server the gateway can't webhook) and activate through the SAME idempotent path
+    as the webhook. Keyed on the gateway's transaction id, so whichever of
+    verify-on-return / webhook arrives first activates and the other no-ops — no
+    double activation, no rework when the server later becomes public."""
+    provider = get_provider(provider_name)
+    wh = await provider.verify_transaction(reference=reference)
+    if wh is None:
+        return {"ok": False, "status": "verify_failed"}
+    if not wh.success:
+        return {"ok": True, "status": "not_paid"}
+    return await _record_and_activate(session, redis, provider_name, wh)
+
+
+async def _record_and_activate(session, redis, provider_name: str, wh: ProviderWebhook) -> dict:
+    """The one activation path both the webhook and verify-on-return funnel through.
+    The webhook_events unique(provider, provider_event_id) row is the exactly-once
+    gate: the first caller inserts and activates; any later caller (the other path,
+    or a webhook replay) collides and is skipped."""
     inserted = (await session.execute(
         text(
             "INSERT INTO webhook_events (provider, provider_event_id, event_type, payload, status) "

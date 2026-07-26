@@ -251,3 +251,53 @@ class TestHandlePayment:
         monkeypatch.setattr(billing_ops, "_sub_by_token", _sub)
         result = await billing_ops._handle_payment(_FakeSession(), None, _wh(success=False))
         assert result == "failed_no_match"
+
+
+# ── confirm_checkout: verify-on-return, sharing the webhook's idempotent path ─
+
+class _VerifyProvider:
+    def __init__(self, wh):
+        self._wh = wh
+    async def verify_transaction(self, *, reference):
+        return self._wh
+
+
+class TestConfirmCheckout:
+    @pytest.mark.asyncio
+    async def test_verify_failed_when_lookup_returns_none(self, monkeypatch):
+        monkeypatch.setattr(billing_ops, "get_provider", lambda n: _VerifyProvider(None))
+        session = _FakeSession()
+        result = await billing_ops.confirm_checkout(session, None, "paystack", "ref1")
+        assert result == {"ok": False, "status": "verify_failed"}
+        assert session.sql == []  # nothing written when we can't confirm the payment
+
+    @pytest.mark.asyncio
+    async def test_not_paid_does_not_activate(self, monkeypatch):
+        monkeypatch.setattr(billing_ops, "get_provider", lambda n: _VerifyProvider(_wh(success=False)))
+        session = _FakeSession()
+        result = await billing_ops.confirm_checkout(session, None, "paystack", "ref1")
+        assert result == {"ok": True, "status": "not_paid"}
+        assert session.sql == []
+
+    @pytest.mark.asyncio
+    async def test_success_activates_via_shared_path(self, monkeypatch):
+        monkeypatch.setattr(billing_ops, "get_provider", lambda n: _VerifyProvider(_wh(success=True)))
+        async def _handle(session, redis, wh):
+            return "activated"
+        monkeypatch.setattr(billing_ops, "_handle_payment", _handle)
+        session = _FakeSession(_Result(scalar="wid-1"))  # inserted → first time
+        result = await billing_ops.confirm_checkout(session, None, "paystack", "ref1")
+        assert result == {"ok": True, "status": "activated"}
+
+    @pytest.mark.asyncio
+    async def test_idempotent_when_webhook_already_recorded(self, monkeypatch):
+        # Same txn id already in webhook_events (e.g. the webhook won the race) → no-op.
+        monkeypatch.setattr(billing_ops, "get_provider", lambda n: _VerifyProvider(_wh(success=True)))
+        called = {"handled": False}
+        async def _never(*a, **k):
+            called["handled"] = True
+        monkeypatch.setattr(billing_ops, "_handle_payment", _never)
+        session = _FakeSession(_Result(scalar=None))  # conflict → already processed
+        result = await billing_ops.confirm_checkout(session, None, "paystack", "ref1")
+        assert result == {"ok": True, "status": "duplicate"}
+        assert called["handled"] is False

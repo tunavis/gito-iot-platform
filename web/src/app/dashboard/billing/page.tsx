@@ -95,16 +95,39 @@ export default function BillingPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Returning from the hosted checkout: activation happens via webhook, which can
-  // lag a moment, so acknowledge and refresh rather than promising it's already live.
+  // Returning from the hosted checkout: confirm the payment server-side (the backend
+  // re-verifies with the gateway — never trusts these query params) and activate.
+  // This is the path that works even when the gateway can't reach us with a webhook.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (new URLSearchParams(window.location.search).get('checkout') === 'done') {
-      toast.success('Payment received', 'Your plan will activate once the payment is confirmed.');
-      window.history.replaceState({}, '', '/dashboard/billing');
-      const t = setTimeout(() => load(), 4000);  // give the webhook a beat, then refresh
-      return () => clearTimeout(t);
-    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') !== 'done') return;
+    const reference = params.get('reference') || params.get('trxref');
+    window.history.replaceState({}, '', '/dashboard/billing');
+    (async () => {
+      const a = auth();
+      try {
+        if (!a || !reference) throw new Error('no reference');
+        const r = await fetch(`/api/v1/tenants/${a.tenantId}/subscription/checkout/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.token}` },
+          body: JSON.stringify({ reference }),
+        });
+        const json = await r.json().catch(() => ({}));
+        if (r.ok && ['activated', 'renewed', 'duplicate'].includes(json.status)) {
+          toast.success('Subscription active', 'Payment confirmed — your plan is now active.');
+        } else if (r.ok && json.status === 'not_paid') {
+          toast.error('Payment not completed', 'The payment did not go through. Please try again.');
+        } else {
+          // verify_failed / no reference — the webhook (once public) is the backstop
+          toast.success('Payment received', 'Your plan will update shortly once confirmed.');
+        }
+      } catch {
+        toast.success('Payment received', 'Your plan will update shortly once confirmed.');
+      } finally {
+        await load();
+      }
+    })();
   }, [load, toast]);
 
   async function openPlanModal() {
