@@ -35,7 +35,8 @@ import httpx
 
 from app.config import get_settings
 from app.services.payments import (
-    CheckoutResult, ChargeResult, ProviderWebhook, PaymentProvider, ProviderNotSupported,
+    CheckoutResult, ChargeResult, ProviderWebhook, PaymentProvider,
+    ProviderNotSupported, ProviderError,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,8 +107,11 @@ class PaystackProvider(PaymentProvider):
                 f"{s.PAYSTACK_API_URL}/transaction/initialize",
                 json=payload, headers=self._headers(),
             )
-            resp.raise_for_status()
-            data = resp.json()
+            data = resp.json() if resp.content else {}
+        if resp.status_code >= 400 or not data.get("status"):
+            # Surface Paystack's own reason (e.g. "Invalid Email Address Passed")
+            # instead of letting an HTTPStatusError become an opaque 500.
+            raise ProviderError(data.get("message") or f"Paystack error {resp.status_code}")
         d = data.get("data") or {}
         return CheckoutResult(redirect_url=d.get("authorization_url", ""),
                               provider_ref=d.get("reference") or reference)

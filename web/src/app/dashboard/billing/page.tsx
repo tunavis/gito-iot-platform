@@ -95,6 +95,18 @@ export default function BillingPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Returning from the hosted checkout: activation happens via webhook, which can
+  // lag a moment, so acknowledge and refresh rather than promising it's already live.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('checkout') === 'done') {
+      toast.success('Payment received', 'Your plan will activate once the payment is confirmed.');
+      window.history.replaceState({}, '', '/dashboard/billing');
+      const t = setTimeout(() => load(), 4000);  // give the webhook a beat, then refresh
+      return () => clearTimeout(t);
+    }
+  }, [load, toast]);
+
   async function openPlanModal() {
     setPlanModal(true);
     if (planOptions.length === 0) {
@@ -125,6 +137,31 @@ export default function BillingPage() {
       toast.error('Could not update subscription', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Paid plans go through the card gateway: get a hosted-checkout URL and redirect.
+  // The subscription only activates once the provider webhook confirms payment.
+  async function checkout(plan_code: string) {
+    const a = auth();
+    if (!a) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/v1/tenants/${a.tenantId}/subscription/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.token}` },
+        body: JSON.stringify({ plan_code, billing_interval: 'month' }),
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const detail = typeof json.detail === 'object' ? json.detail?.message : json.detail;
+        throw new Error(detail || `Checkout failed (${r.status})`);
+      }
+      if (!json.redirect_url) throw new Error('No checkout URL returned');
+      window.location.href = json.redirect_url;  // → provider hosted payment page
+    } catch (e) {
+      toast.error('Could not start checkout', e instanceof Error ? e.message : String(e));
+      setBusy(false);  // on success we navigate away, so only reset on failure
     }
   }
 
@@ -260,7 +297,7 @@ export default function BillingPage() {
               <button
                 key={p.code}
                 disabled={busy || isCurrent}
-                onClick={() => post('/change', { plan_code: p.code })}
+                onClick={() => (monthly && monthly > 0 ? checkout(p.code) : post('/change', { plan_code: p.code }))}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-th-default hover:bg-panel disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
               >
                 <span className="font-semibold text-th-primary">{p.name}</span>

@@ -20,7 +20,7 @@ from app.services import entitlements as ent_service
 from app.services import usage as usage_service
 from app.services import subscriptions as sub_service
 from app.services import billing_ops
-from app.services.payments import get_provider, ProviderNotSupported
+from app.services.payments import get_provider, ProviderNotSupported, ProviderError
 from app.services.tenant_access import validate_tenant_access
 
 # Public — no auth (the marketing pricing page reads this).
@@ -298,11 +298,17 @@ async def create_checkout(
     base = str(request.base_url).rstrip("/")
     provider = get_provider(settings.CARD_PROVIDER)
     email = await billing_ops._tenant_billing_email(session, tenant_id)
-    result = await provider.create_checkout(
-        amount_cents=total_cents, currency="ZAR", reference=ref, email=email,
-        return_url=f"{base}/dashboard/billing?checkout=done",
-        notify_url=f"{base}/api/v1/billing/webhooks/{settings.CARD_PROVIDER}",
-    )
+    try:
+        result = await provider.create_checkout(
+            amount_cents=total_cents, currency="ZAR", reference=ref, email=email,
+            return_url=f"{base}/dashboard/billing?checkout=done",
+            notify_url=f"{base}/api/v1/billing/webhooks/{settings.CARD_PROVIDER}",
+        )
+    except ProviderError as e:
+        # Gateway reached but rejected the request (e.g. invalid billing email) —
+        # surface its reason, don't let it become an opaque 500.
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"Payment gateway rejected the request: {e}")
     return {"redirect_url": result.redirect_url, "reference": ref}
 
 

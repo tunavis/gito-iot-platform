@@ -23,6 +23,11 @@ class ProviderNotSupported(Exception):
     """A provider was asked to do something it does not support (e.g. manual + card charge)."""
 
 
+class ProviderError(Exception):
+    """The gateway reached us but rejected the request (validation, decline, bad key).
+    Carries the gateway's own message so the caller can surface it cleanly."""
+
+
 @dataclass
 class CheckoutResult:
     """Where to send the customer to enter/tokenise a card, plus the provider's own id."""
