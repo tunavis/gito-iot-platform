@@ -32,6 +32,22 @@ VAT_RATE = Decimal("0.15")  # South Africa
 CHECKOUT_TTL_SECONDS = 3600  # a pending card checkout is valid for 1 hour
 
 
+def _card_provider() -> str:
+    """The active card gateway name (config-driven; 'paystack' by default)."""
+    from app.config import get_settings
+    return get_settings().CARD_PROVIDER
+
+
+async def _tenant_billing_email(session, tenant_id) -> str | None:
+    """The customer email for the tenant's card gateway. Paystack needs an email on
+    both checkout and each recurring charge; the tenant's earliest (owner) user is a
+    stable identifier that maps to one gateway customer across renewals."""
+    return (await session.execute(
+        text("SELECT email FROM users WHERE tenant_id = :tid ORDER BY created_at ASC LIMIT 1"),
+        {"tid": str(tenant_id)},
+    )).scalar_one_or_none()
+
+
 def _vat_split(subtotal_cents: int) -> tuple[int, int]:
     """(vat_cents, total_cents) for a VAT-exclusive subtotal. 15%, rounded to the cent."""
     vat = int((Decimal(subtotal_cents) * VAT_RATE).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
@@ -177,7 +193,7 @@ async def _mark_webhook(session, webhook_id, status: str) -> None:
 async def _handle_payment(session, redis, wh: ProviderWebhook) -> str:
     """Apply a payment webhook: activate on checkout success, or record a renewal /
     move to past_due on failure. Returns a short status label."""
-    provider = "peach"
+    provider = _card_provider()
 
     if wh.success:
         checkout = await _pop_checkout(redis, wh.reference)
@@ -219,17 +235,18 @@ async def _handle_payment(session, redis, wh: ProviderWebhook) -> str:
 
 
 async def _invoice_and_record(session, tenant_id, plan_code, interval, wh, invoice_status, failed=False):
+    provider = _card_provider()
     sub = await _sub_by_tenant(session, tenant_id)
     subtotal = await _plan_price_cents(session, plan_code, interval, "ZAR") or (wh.amount_cents or 0)
     inv = await create_invoice(
         session, tenant_id, subscription_id=(sub["id"] if sub else None),
-        subtotal_cents=subtotal, currency="ZAR", provider="peach", status=invoice_status,
+        subtotal_cents=subtotal, currency="ZAR", provider=provider, status=invoice_status,
     )
     await record_payment(
-        session, tenant_id, invoice_id=inv["id"], provider="peach",
-        provider_ref=wh.raw.get("id"), amount_cents=(wh.amount_cents or inv["total_cents"]),
+        session, tenant_id, invoice_id=inv["id"], provider=provider,
+        provider_ref=wh.event_id, amount_cents=(wh.amount_cents or inv["total_cents"]),
         currency="ZAR", status="failed" if failed else "succeeded",
-        failure_reason=wh.raw.get("result.description") if failed else None,
+        failure_reason="payment_failed" if failed else None,
     )
 
 
@@ -271,21 +288,24 @@ async def charge_due_card_subscriptions(session, redis) -> dict:
     Peach is configured. Each success extends the period + invoices; each failure
     moves the sub to past_due (grace) so the lifecycle job later restricts it."""
     from app.config import get_settings
-    if not get_settings().PEACH_ENABLED:
-        return {"charged": 0, "failed": 0, "skipped": "peach_disabled"}
+    settings = get_settings()
+    if not settings.card_enabled:
+        return {"charged": 0, "failed": 0, "skipped": "card_disabled"}
+    card = settings.CARD_PROVIDER
 
     due = (await session.execute(
         text(
             "SELECT s.id, s.tenant_id, s.billing_interval, s.provider_subscription_id AS token, "
             "       p.code AS plan_code "
             "FROM subscriptions s JOIN plans p ON p.id = s.plan_id "
-            "WHERE s.provider = 'peach' AND s.status = 'active' "
+            "WHERE s.provider = :card AND s.status = 'active' "
             "AND s.provider_subscription_id IS NOT NULL AND s.cancel_at_period_end = false "
             "AND s.current_period_end IS NOT NULL AND s.current_period_end < now()"
-        )
+        ),
+        {"card": card},
     )).mappings().all()
 
-    provider = get_provider("peach")
+    provider = get_provider(card)
     charged = failed = 0
     for sub in due:
         subtotal = await _plan_price_cents(session, sub["plan_code"], sub["billing_interval"], "ZAR")
@@ -293,14 +313,15 @@ async def charge_due_card_subscriptions(session, redis) -> dict:
             continue
         _, total = _vat_split(subtotal)
         ref = f"rnw{str(sub['id'])[:12].replace('-', '')}"
+        email = await _tenant_billing_email(session, sub["tenant_id"])
         result = await provider.charge_token(
-            token=sub["token"], amount_cents=total, currency="ZAR", reference=ref,
+            token=sub["token"], amount_cents=total, currency="ZAR", reference=ref, email=email,
         )
         if result.success:
             await _extend_period(session, sub)
             inv = await create_invoice(session, sub["tenant_id"], subscription_id=sub["id"],
-                                       subtotal_cents=subtotal, currency="ZAR", provider="peach", status="paid")
-            await record_payment(session, sub["tenant_id"], invoice_id=inv["id"], provider="peach",
+                                       subtotal_cents=subtotal, currency="ZAR", provider=card, status="paid")
+            await record_payment(session, sub["tenant_id"], invoice_id=inv["id"], provider=card,
                                  provider_ref=result.provider_ref, amount_cents=total,
                                  currency="ZAR", status="succeeded")
             charged += 1
@@ -311,7 +332,7 @@ async def charge_due_card_subscriptions(session, redis) -> dict:
             )
             await sub_service._record_event(session, sub["tenant_id"], sub["id"], "active", "past_due",
                                             "renewal_charge_failed", "system:card")
-            await record_payment(session, sub["tenant_id"], invoice_id=None, provider="peach",
+            await record_payment(session, sub["tenant_id"], invoice_id=None, provider=card,
                                  provider_ref=result.provider_ref, amount_cents=total, currency="ZAR",
                                  status="failed", failure_reason=result.failure_reason)
             failed += 1

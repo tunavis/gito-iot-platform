@@ -91,8 +91,8 @@ class PeachProvider(PaymentProvider):
     # ── Checkout (collect + tokenise a card) ─────────────────────────────────
     async def create_checkout(
         self, *, amount_cents: int, currency: str, reference: str,
-        return_url: str, notify_url: str, tokenise: bool = True,
-    ) -> CheckoutResult:
+        return_url: str, notify_url: str, email: str | None = None, tokenise: bool = True,
+    ) -> CheckoutResult:  # email unused — Peach's hosted page collects it
         token = await self._access_token()
         s = self._settings
         payload = {
@@ -122,7 +122,8 @@ class PeachProvider(PaymentProvider):
     # ── Recurring charge against a stored token ──────────────────────────────
     async def charge_token(
         self, *, token: str, amount_cents: int, currency: str, reference: str,
-    ) -> ChargeResult:
+        email: str | None = None,
+    ) -> ChargeResult:  # email unused — Peach charges the stored registration directly
         access = await self._access_token()
         s = self._settings
         payload = {

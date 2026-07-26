@@ -41,9 +41,22 @@ class Settings(BaseSettings):
     CHIRPSTACK_TENANT_ID: str = ""
     CHIRPSTACK_API_KEY: str = ""
 
-    # Billing — Peach Payments (card gateway). Disabled until sandbox creds are set;
-    # all values come from the Peach dashboard, none are committed. When PEACH_ENABLED
-    # is false the checkout endpoint returns 503 and card charging is skipped.
+    # Billing — card gateway. Which provider the checkout/charge/webhook paths use.
+    # Peach paused early-stage onboarding (2026-07), so Paystack is the active gateway;
+    # the Peach adapter stays in the tree for if/when they reopen. Swapping is a
+    # one-line change here — the engine, schema, invoicing and webhook idempotency are
+    # provider-agnostic.
+    CARD_PROVIDER: Literal["paystack", "peach"] = "paystack"
+
+    # Paystack (active card gateway). Disabled until keys are set; all from the
+    # Paystack dashboard, none committed. SA-supported, ZAR, amounts in cents.
+    # The secret key is ALSO the webhook signing key (HMAC-SHA512 over the raw body).
+    PAYSTACK_ENABLED: bool = False
+    PAYSTACK_API_URL: str = "https://api.paystack.co"
+    PAYSTACK_SECRET_KEY: str = ""   # sk_test_... / sk_live_...
+
+    # Peach Payments (parked — onboarding paused). Kept so the adapter still works if
+    # re-enabled: set CARD_PROVIDER=peach + these. All from the Peach dashboard.
     PEACH_ENABLED: bool = False
     PEACH_AUTH_URL: str = ""       # OAuth token endpoint (from Peach dashboard)
     PEACH_API_URL: str = ""        # Checkout / payments base URL (from Peach dashboard)
@@ -52,6 +65,13 @@ class Settings(BaseSettings):
     PEACH_MERCHANT_ID: str = ""
     PEACH_ENTITY_ID: str = ""
     PEACH_WEBHOOK_SECRET: str = ""  # shared secret for HMAC-SHA256 webhook verification
+
+    @property
+    def card_enabled(self) -> bool:
+        """Is the active card gateway configured? Gates checkout + recurring charges."""
+        return {"paystack": self.PAYSTACK_ENABLED, "peach": self.PEACH_ENABLED}.get(
+            self.CARD_PROVIDER, False
+        )
 
     # Security
     RATE_LIMIT_PER_MINUTE: int = 60

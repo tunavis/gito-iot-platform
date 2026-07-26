@@ -187,7 +187,8 @@ class TestHandlePayment:
 
         result = await billing_ops._handle_payment(_FakeSession(), None, _wh(token="TOK-42"))
         assert result == "activated"
-        assert seen == {"provider": "peach", "provider_ref": "TOK-42"}
+        # provider is config-driven (CARD_PROVIDER, default paystack), not hardcoded
+        assert seen == {"provider": billing_ops._card_provider(), "provider_ref": "TOK-42"}
 
     @pytest.mark.asyncio
     async def test_success_no_checkout_renews_matched_token(self, monkeypatch):

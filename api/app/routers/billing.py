@@ -279,7 +279,7 @@ async def create_checkout(
     hosted page; on successful payment the webhook activates the subscription."""
     _require_tenant_admin(tenant_id, info)
     settings = get_settings()
-    if not settings.PEACH_ENABLED:
+    if not settings.card_enabled:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Card payments are not configured yet")
     await session.set_tenant_context(tenant_id)
@@ -291,16 +291,17 @@ async def create_checkout(
     _, total_cents = billing_ops._vat_split(subtotal)  # customer pays VAT-inclusive
 
     redis = getattr(request.app.state, "redis", None)
-    ref = secrets.token_hex(6)  # 12 chars — within Peach's merchantTransactionId limit
+    ref = secrets.token_hex(6)  # 12 chars — safe across gateways' reference limits
     await billing_ops.stash_checkout(redis, ref, tenant_id=tenant_id,
                                      plan_code=body.plan_code, interval=body.billing_interval)
 
     base = str(request.base_url).rstrip("/")
-    provider = get_provider("peach")
+    provider = get_provider(settings.CARD_PROVIDER)
+    email = await billing_ops._tenant_billing_email(session, tenant_id)
     result = await provider.create_checkout(
-        amount_cents=total_cents, currency="ZAR", reference=ref,
+        amount_cents=total_cents, currency="ZAR", reference=ref, email=email,
         return_url=f"{base}/dashboard/billing?checkout=done",
-        notify_url=f"{base}/api/v1/billing/webhooks/peach",
+        notify_url=f"{base}/api/v1/billing/webhooks/{settings.CARD_PROVIDER}",
     )
     return {"redirect_url": result.redirect_url, "reference": ref}
 

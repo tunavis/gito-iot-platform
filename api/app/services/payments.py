@@ -63,12 +63,13 @@ class PaymentProvider:
 
     async def create_checkout(
         self, *, amount_cents: int, currency: str, reference: str,
-        return_url: str, notify_url: str, tokenise: bool = True,
+        return_url: str, notify_url: str, email: str | None = None, tokenise: bool = True,
     ) -> CheckoutResult:
         raise NotImplementedError
 
     async def charge_token(
         self, *, token: str, amount_cents: int, currency: str, reference: str,
+        email: str | None = None,
     ) -> ChargeResult:
         raise NotImplementedError
 
@@ -103,10 +104,13 @@ class ManualProvider(PaymentProvider):
 
 
 def get_provider(name: str) -> PaymentProvider:
-    """Resolve a provider by name. Peach is imported lazily so its httpx dependency
-    and config are only touched when actually used."""
+    """Resolve a provider by name. Card adapters are imported lazily so their httpx
+    dependency and config are only touched when actually used."""
     if name == "manual":
         return ManualProvider()
+    if name == "paystack":
+        from app.services.paystack import PaystackProvider
+        return PaystackProvider()
     if name == "peach":
         from app.services.peach import PeachProvider
         return PeachProvider()
