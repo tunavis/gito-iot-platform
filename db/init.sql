@@ -1022,7 +1022,7 @@ INSERT INTO users (
 ) VALUES (
     '00000000-0000-0000-0000-000000000010'::UUID,
     '00000000-0000-0000-0000-000000000001'::UUID,
-    'admin@gito.demo',
+    'admin@gito.co.za',
     '$2b$12$3XqrhD4oIt2k3vkxdiJv1u6w46v.dRNWKlUBdEihb6nQSII1HAcTC',
     'Admin User',
     'TENANT_ADMIN',
