@@ -611,7 +611,10 @@ function NewRuleForm({
   return (
     <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
       <h3 className="text-lg font-semibold text-th-primary mb-6">Create Alert Rule</h3>
-      <form onSubmit={handleSubmit}>
+      {/* Cap the field width. The card spans the page to match the rule list
+          below it, but a rule *name* does not need 1000px and a description
+          does not need 1500px — unbounded, the fields read as a wall. */}
+      <form onSubmit={handleSubmit} className="max-w-4xl">
         {/* Rule Type Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-th-primary mb-2">Rule Type</label>
@@ -651,7 +654,7 @@ function NewRuleForm({
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="e.g., High Temperature Alert"
               required
             />
@@ -661,7 +664,7 @@ function NewRuleForm({
             <select
               value={severity}
               onChange={e => setSeverity(e.target.value as Severity)}
-              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option value="info">Info</option>
               <option value="warning">Warning</option>
@@ -675,7 +678,7 @@ function NewRuleForm({
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500"
             rows={2}
             placeholder="Optional description..."
           />
@@ -683,7 +686,7 @@ function NewRuleForm({
 
         {/* THRESHOLD-specific fields */}
         {ruleType === 'THRESHOLD' && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lgp-4 mb-6">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-4 gap-4">
               <div>
@@ -691,7 +694,7 @@ function NewRuleForm({
                 <select
                   value={deviceId}
                   onChange={e => { setDeviceId(e.target.value); setMetric(''); }}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="">Global (all devices)</option>
                   {devices.map(d => (
@@ -709,7 +712,7 @@ function NewRuleForm({
                 <select
                   value={metric}
                   onChange={e => { setMetric(e.target.value); if (e.target.value !== '__custom__') setCustomMetric(''); }}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="">Select metric...</option>
                   {availableMetrics.map(m => {
@@ -727,7 +730,7 @@ function NewRuleForm({
                     type="text"
                     value={customMetric}
                     onChange={e => setCustomMetric(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                    className="w-full mt-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                     placeholder="Enter metric key"
                     required
                   />
@@ -750,7 +753,7 @@ function NewRuleForm({
                 <select
                   value={operator}
                   onChange={e => setOperator(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
                   <option value="gte">&ge; Greater or equal</option>
@@ -771,7 +774,7 @@ function NewRuleForm({
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                   step="0.1"
                   placeholder={
                     selectedMetricSchema?.min != null && selectedMetricSchema?.max != null
@@ -791,7 +794,7 @@ function NewRuleForm({
 
         {/* COMPOSITE-specific fields */}
         {ruleType === 'COMPOSITE' && (
-          <div className="bg-teal-50 border border-teal-200 rounded-lgp-4 mb-6">
+          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-6">
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-sm font-semibold text-teal-900">Conditions</h4>
               <div className="flex items-center gap-3">
@@ -806,7 +809,7 @@ function NewRuleForm({
                 <button
                   type="button"
                   onClick={addCondition}
-                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lghover:bg-teal-700"
+                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                 >
                   + Add Condition
                 </button>
@@ -818,7 +821,7 @@ function NewRuleForm({
             ) : (
               <div className="space-y-2">
                 {conditions.map((cond, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lgborder">
+                  <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lg border">
                     <select
                       value={cond.field}
                       onChange={e => updateCondition(idx, { field: e.target.value })}
@@ -902,13 +905,13 @@ function NewRuleForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lghover:bg-page"
+            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lg hover:bg-page"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lghover:bg-primary-700"
+            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             Create Rule
           </button>
@@ -1008,7 +1011,10 @@ function EditRuleForm({
       <h3 className="text-lg font-semibold text-th-primary mb-6">
         Edit {rule.rule_type} Rule
       </h3>
-      <form onSubmit={handleSubmit}>
+      {/* Cap the field width. The card spans the page to match the rule list
+          below it, but a rule *name* does not need 1000px and a description
+          does not need 1500px — unbounded, the fields read as a wall. */}
+      <form onSubmit={handleSubmit} className="max-w-4xl">
         {/* Common Fields */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="col-span-2">
@@ -1017,7 +1023,7 @@ function EditRuleForm({
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500"
               required
             />
           </div>
@@ -1047,7 +1053,7 @@ function EditRuleForm({
 
         {/* THRESHOLD fields */}
         {rule.rule_type === 'THRESHOLD' && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lgp-4 mb-6">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-3 gap-4">
               <div>
@@ -1055,7 +1061,7 @@ function EditRuleForm({
                 <select
                   value={metric}
                   onChange={e => setMetric(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   {availableMetrics.map(m => (
                     <option key={m} value={m}>{formatMetricLabel(m)}</option>
@@ -1070,7 +1076,7 @@ function EditRuleForm({
                 <select
                   value={operator}
                   onChange={e => setOperator(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
                   <option value="gte">&ge; Greater or equal</option>
@@ -1086,7 +1092,7 @@ function EditRuleForm({
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                   step="0.1"
                 />
               </div>
@@ -1096,7 +1102,7 @@ function EditRuleForm({
 
         {/* COMPOSITE fields */}
         {rule.rule_type === 'COMPOSITE' && (
-          <div className="bg-teal-50 border border-teal-200 rounded-lgp-4 mb-6">
+          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-6">
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-sm font-semibold text-teal-900">Conditions</h4>
               <div className="flex items-center gap-3">
@@ -1111,7 +1117,7 @@ function EditRuleForm({
                 <button
                   type="button"
                   onClick={addCondition}
-                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lghover:bg-teal-700"
+                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                 >
                   + Add Condition
                 </button>
@@ -1120,7 +1126,7 @@ function EditRuleForm({
             
             <div className="space-y-2">
               {conditions.map((cond, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lgborder">
+                <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lg border">
                   <select
                     value={cond.field}
                     onChange={e => updateCondition(idx, { field: e.target.value })}
@@ -1192,13 +1198,13 @@ function EditRuleForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lghover:bg-page"
+            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lg hover:bg-page"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lghover:bg-primary-700"
+            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             Update Rule
           </button>
