@@ -104,14 +104,16 @@ async def login(
     # (app/middleware.py) can't catch it; logged explicitly here instead.
     try:
         await session.set_tenant_context(user.tenant_id, user.id)
-        session.add(AuditLog(
-            tenant_id=user.tenant_id,
-            user_id=user.id,
-            action="login",
-            resource_type="auth",
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        ))
+        session.add(
+            AuditLog(
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                action="login",
+                resource_type="auth",
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
         await session.commit()
     except Exception as e:
         logger.error(f"Failed to write login audit log for user {user.id}: {e}")
@@ -221,14 +223,16 @@ async def logout(
             user_id = payload.get("sub")
             if tenant_id and user_id:
                 await session.set_tenant_context(tenant_id, user_id)
-                session.add(AuditLog(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    action="logout",
-                    resource_type="auth",
-                    ip_address=request.client.host if request.client else None,
-                    user_agent=request.headers.get("user-agent"),
-                ))
+                session.add(
+                    AuditLog(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        action="logout",
+                        resource_type="auth",
+                        ip_address=request.client.host if request.client else None,
+                        user_agent=request.headers.get("user-agent"),
+                    )
+                )
                 await session.commit()
         except Exception as e:
             logger.error(f"Failed to write logout audit log: {e}")
@@ -267,7 +271,9 @@ def _determine_cookie_security(
     # Check proxy headers (standard for reverse proxy deployments)
     if trust_proxy and x_forwarded_proto:
         is_https = x_forwarded_proto.lower() == "https"
-        logger.debug(f"Cookie security: from X-Forwarded-Proto={x_forwarded_proto}, secure={is_https}")
+        logger.debug(
+            f"Cookie security: from X-Forwarded-Proto={x_forwarded_proto}, secure={is_https}"
+        )
         return is_https
 
     # Environment default (fallback)

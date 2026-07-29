@@ -36,7 +36,7 @@ jobs:
 
       - name: Upload check results
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mock-data-detection-results
           path: |
@@ -91,7 +91,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install flake8 black
+          # Pinned to match api/pyproject.toml [dev] — an unpinned black
+          # re-breaks this job every time upstream changes its style.
+          pip install flake8 black==23.12.0
 
       - name: Run Flake8
         run: flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics

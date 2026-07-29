@@ -38,6 +38,7 @@ _dispatch = CommandDispatchService()
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def _resolve_device(
     session: RLSSession,
     tenant_id: UUID,
@@ -62,6 +63,7 @@ async def _resolve_device(
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post("", response_model=CommandResponse, status_code=status.HTTP_201_CREATED)
 async def send_command(
@@ -139,9 +141,13 @@ async def list_commands(
         DeviceCommand.tenant_id == tenant_id,
         DeviceCommand.device_id == device_id,
     )
-    count_query = select(func.count()).select_from(DeviceCommand).where(
-        DeviceCommand.tenant_id == tenant_id,
-        DeviceCommand.device_id == device_id,
+    count_query = (
+        select(func.count())
+        .select_from(DeviceCommand)
+        .where(
+            DeviceCommand.tenant_id == tenant_id,
+            DeviceCommand.device_id == device_id,
+        )
     )
 
     if status_filter:

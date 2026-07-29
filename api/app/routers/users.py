@@ -38,12 +38,16 @@ async def list_users(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
-    role: Optional[str] = Query(None, pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$"),
+    role: Optional[str] = Query(
+        None, pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$"
+    ),
     # Named user_status (not status) — a bound parameter named `status`
     # shadows the fastapi.status module for the whole function body, so
     # `status.HTTP_403_FORBIDDEN` below would raise AttributeError instead
     # of returning 403. alias= keeps the actual query string key unchanged.
-    user_status: Optional[str] = Query(None, alias="status", pattern="^(active|inactive|suspended)$"),
+    user_status: Optional[str] = Query(
+        None, alias="status", pattern="^(active|inactive|suspended)$"
+    ),
     search: Optional[str] = Query(None, max_length=255),
 ):
     """List all users for a tenant with pagination and filters.
@@ -76,8 +80,8 @@ async def list_users(
     if search:
         search_pattern = f"%{search.lower()}%"
         query = query.where(
-            (func.lower(User.email).like(search_pattern)) |
-            (func.lower(User.full_name).like(search_pattern))
+            (func.lower(User.email).like(search_pattern))
+            | (func.lower(User.full_name).like(search_pattern))
         )
 
     query = query.order_by(User.created_at.desc())
@@ -162,22 +166,19 @@ async def create_user(
     # Check permission (only TENANT_ADMIN and SUPER_ADMIN can create users)
     if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to create users"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to create users"
         )
 
     await session.set_tenant_context(tenant_id)
 
     # Check if user with email already exists
     existing_query = select(User).where(
-        User.tenant_id == tenant_id,
-        User.email == request.email.lower()
+        User.tenant_id == tenant_id, User.email == request.email.lower()
     )
     result = await session.execute(existing_query)
     if result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists"
+            status_code=status.HTTP_409_CONFLICT, detail="User with this email already exists"
         )
 
     # Create user with hashed password
@@ -231,26 +232,24 @@ async def invite_user(
     # Check permission
     if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to invite users"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to invite users"
         )
 
     await session.set_tenant_context(tenant_id)
 
     # Check if user already exists
     existing_query = select(User).where(
-        User.tenant_id == tenant_id,
-        User.email == request.email.lower()
+        User.tenant_id == tenant_id, User.email == request.email.lower()
     )
     result = await session.execute(existing_query)
     if result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists"
+            status_code=status.HTTP_409_CONFLICT, detail="User with this email already exists"
         )
 
     # Generate temporary password, sent via email below
     import secrets
+
     temp_password = secrets.token_urlsafe(16)
 
     # No self-service activation flow exists (login rejects any non-"active"
@@ -332,13 +331,13 @@ async def update_user(
         if str(current_user_info["user_id"]) != str(user_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to update other users"
+                detail="Insufficient permissions to update other users",
             )
         # Prevent users from changing their own role or status
         if request.role is not None or request.status is not None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot change your own role or status"
+                detail="Cannot change your own role or status",
             )
 
     await session.set_tenant_context(tenant_id)
@@ -359,13 +358,12 @@ async def update_user(
         existing_query = select(User).where(
             User.tenant_id == tenant_id,
             User.email == update_data["email"].lower(),
-            User.id != user_id
+            User.id != user_id,
         )
         result = await session.execute(existing_query)
         if result.scalar_one_or_none():
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="User with this email already exists"
+                status_code=status.HTTP_409_CONFLICT, detail="User with this email already exists"
             )
         update_data["email"] = update_data["email"].lower()
 
@@ -413,8 +411,7 @@ async def update_password(
     # Users can only change their own password
     if str(current_user_info["user_id"]) != str(user_id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Can only change your own password"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Can only change your own password"
         )
 
     await session.set_tenant_context(tenant_id)
@@ -430,8 +427,7 @@ async def update_password(
     # Verify current password
     if not verify_password(request.current_password, user.password_hash):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Current password is incorrect"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect"
         )
 
     # Update password
@@ -470,15 +466,13 @@ async def delete_user(
     # Check permission
     if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to delete users"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to delete users"
         )
 
     # Prevent self-deletion
     if str(current_user_info["user_id"]) == str(user_id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete your own account"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete your own account"
         )
 
     await session.set_tenant_context(tenant_id)

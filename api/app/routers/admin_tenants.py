@@ -34,6 +34,7 @@ router = APIRouter(prefix="/admin/tenants", tags=["admin"])
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
+
 class TenantSummary(BaseModel):
     id: str
     name: str
@@ -53,11 +54,11 @@ class TenantDetail(TenantSummary):
 
 class CreateTenantRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
-    slug: str = Field(..., min_length=2, max_length=100, pattern=r'^[a-z0-9-]+$')
+    slug: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9-]+$")
     admin_email: str
     admin_name: str
     admin_password: Optional[str] = None  # auto-generated if omitted
-    tenant_type: str = Field("client", pattern=r'^(client|sub_client)$')
+    tenant_type: str = Field("client", pattern=r"^(client|sub_client)$")
 
 
 class CreateTenantResponse(BaseModel):
@@ -68,33 +69,40 @@ class CreateTenantResponse(BaseModel):
 
 class UpdateTenantRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=255)
-    status: Optional[str] = Field(None, pattern=r'^(active|inactive|suspended)$')
+    status: Optional[str] = Field(None, pattern=r"^(active|inactive|suspended)$")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _generate_password(length: int = 16) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-async def _tenant_summary(session: RLSSession, tenant: Tenant, management_tenant_id: UUID) -> TenantSummary:
+async def _tenant_summary(
+    session: RLSSession, tenant: Tenant, management_tenant_id: UUID
+) -> TenantSummary:
     """Build TenantSummary with device/user/alarm counts via direct queries (bypass RLS)."""
     # These queries run as management tenant context — use raw SQL to bypass per-tenant RLS
-    device_count = (await session.execute(
-        text("SELECT count(*) FROM devices WHERE tenant_id = :tid"),
-        {"tid": str(tenant.id)}
-    )).scalar() or 0
+    device_count = (
+        await session.execute(
+            text("SELECT count(*) FROM devices WHERE tenant_id = :tid"), {"tid": str(tenant.id)}
+        )
+    ).scalar() or 0
 
-    user_count = (await session.execute(
-        text("SELECT count(*) FROM users WHERE tenant_id = :tid"),
-        {"tid": str(tenant.id)}
-    )).scalar() or 0
+    user_count = (
+        await session.execute(
+            text("SELECT count(*) FROM users WHERE tenant_id = :tid"), {"tid": str(tenant.id)}
+        )
+    ).scalar() or 0
 
-    active_alarms = (await session.execute(
-        text("SELECT count(*) FROM alert_events WHERE tenant_id = :tid AND status = 'ACTIVE'"),
-        {"tid": str(tenant.id)}
-    )).scalar() or 0
+    active_alarms = (
+        await session.execute(
+            text("SELECT count(*) FROM alert_events WHERE tenant_id = :tid AND status = 'ACTIVE'"),
+            {"tid": str(tenant.id)},
+        )
+    ).scalar() or 0
 
     return TenantSummary(
         id=str(tenant.id),
@@ -110,6 +118,7 @@ async def _tenant_summary(session: RLSSession, tenant: Tenant, management_tenant
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
+
 
 @router.get("", response_model=list[TenantSummary])
 async def list_tenants(
@@ -253,6 +262,7 @@ async def update_tenant(
         tenant.status = body.status
 
     from datetime import datetime
+
     tenant.updated_at = datetime.utcnow()
     await session.flush()
     await session.refresh(tenant)

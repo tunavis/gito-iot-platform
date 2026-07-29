@@ -35,14 +35,19 @@ import httpx
 
 from app.config import get_settings
 from app.services.payments import (
-    CheckoutResult, ChargeResult, ProviderWebhook, PaymentProvider,
-    ProviderNotSupported, ProviderError,
+    CheckoutResult,
+    ChargeResult,
+    ProviderWebhook,
+    PaymentProvider,
+    ProviderNotSupported,
+    ProviderError,
 )
 
 logger = logging.getLogger(__name__)
 
 
 # ── Pure helpers (unit-testable without live keys) ───────────────────────────
+
 
 def verify_signature(secret: str, raw_body: bytes, given: str) -> bool:
     """Paystack signs the raw body with HMAC-SHA512 using the secret key."""
@@ -80,14 +85,18 @@ def parse_event(raw_body: bytes) -> ProviderWebhook:
         wh = _wh_from_txn(d, success=False, raw=body)
         wh.kind = "other"
         return wh
-    return _wh_from_txn(d, success=(event == "charge.success" and d.get("status") == "success"), raw=body)
+    return _wh_from_txn(
+        d, success=(event == "charge.success" and d.get("status") == "success"), raw=body
+    )
 
 
 def parse_verify(body: dict) -> ProviderWebhook:
     """Normalise a /transaction/verify response (no `event` wrapper — the payment
     outcome is `data.status`). Used by the verify-on-return path."""
     d = body.get("data") or {}
-    return _wh_from_txn(d, success=(bool(body.get("status")) and d.get("status") == "success"), raw=body)
+    return _wh_from_txn(
+        d, success=(bool(body.get("status")) and d.get("status") == "success"), raw=body
+    )
 
 
 class PaystackProvider(PaymentProvider):
@@ -101,20 +110,29 @@ class PaystackProvider(PaymentProvider):
             )
 
     def _headers(self) -> dict:
-        return {"Authorization": f"Bearer {self._settings.PAYSTACK_SECRET_KEY}",
-                "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {self._settings.PAYSTACK_SECRET_KEY}",
+            "Content-Type": "application/json",
+        }
 
     # ── Checkout (collect + tokenise a card) ─────────────────────────────────
     async def create_checkout(
-        self, *, amount_cents: int, currency: str, reference: str,
-        return_url: str, notify_url: str, email: str | None = None, tokenise: bool = True,
+        self,
+        *,
+        amount_cents: int,
+        currency: str,
+        reference: str,
+        return_url: str,
+        notify_url: str,
+        email: str | None = None,
+        tokenise: bool = True,
     ) -> CheckoutResult:
         if not email:
             raise ProviderNotSupported("Paystack checkout requires a customer email")
         s = self._settings
         payload = {
             "email": email,
-            "amount": amount_cents,      # minor unit (cents) — no conversion
+            "amount": amount_cents,  # minor unit (cents) — no conversion
             "currency": currency,
             "reference": reference,
             "callback_url": return_url,
@@ -125,7 +143,8 @@ class PaystackProvider(PaymentProvider):
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 f"{s.PAYSTACK_API_URL}/transaction/initialize",
-                json=payload, headers=self._headers(),
+                json=payload,
+                headers=self._headers(),
             )
             data = resp.json() if resp.content else {}
         if resp.status_code >= 400 or not data.get("status"):
@@ -133,16 +152,25 @@ class PaystackProvider(PaymentProvider):
             # instead of letting an HTTPStatusError become an opaque 500.
             raise ProviderError(data.get("message") or f"Paystack error {resp.status_code}")
         d = data.get("data") or {}
-        return CheckoutResult(redirect_url=d.get("authorization_url", ""),
-                              provider_ref=d.get("reference") or reference)
+        return CheckoutResult(
+            redirect_url=d.get("authorization_url", ""),
+            provider_ref=d.get("reference") or reference,
+        )
 
     # ── Recurring charge against a stored authorization ──────────────────────
     async def charge_token(
-        self, *, token: str, amount_cents: int, currency: str, reference: str,
+        self,
+        *,
+        token: str,
+        amount_cents: int,
+        currency: str,
+        reference: str,
         email: str | None = None,
     ) -> ChargeResult:
         if not email:
-            return ChargeResult(success=False, failure_reason="no customer email for recurring charge")
+            return ChargeResult(
+                success=False, failure_reason="no customer email for recurring charge"
+            )
         s = self._settings
         payload = {
             "email": email,
@@ -155,7 +183,8 @@ class PaystackProvider(PaymentProvider):
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{s.PAYSTACK_API_URL}/transaction/charge_authorization",
-                    json=payload, headers=self._headers(),
+                    json=payload,
+                    headers=self._headers(),
                 )
                 data = resp.json()
         except Exception as e:  # network/parse — a failed charge, not a crash
@@ -163,9 +192,12 @@ class PaystackProvider(PaymentProvider):
             return ChargeResult(success=False, failure_reason=str(e))
         d = data.get("data") or {}
         if data.get("status") and d.get("status") == "success":
-            return ChargeResult(success=True, provider_ref=str(d.get("reference") or d.get("id") or ""))
+            return ChargeResult(
+                success=True, provider_ref=str(d.get("reference") or d.get("id") or "")
+            )
         return ChargeResult(
-            success=False, provider_ref=str(d.get("reference") or ""),
+            success=False,
+            provider_ref=str(d.get("reference") or ""),
             failure_reason=d.get("gateway_response") or data.get("message") or "charge failed",
         )
 

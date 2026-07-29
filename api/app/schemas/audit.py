@@ -8,6 +8,7 @@ from datetime import datetime
 
 class AuditLogResponse(BaseModel):
     """Schema for audit log response."""
+
     id: UUID
     tenant_id: UUID
     user_id: Optional[UUID]
@@ -25,6 +26,7 @@ class AuditLogResponse(BaseModel):
 
 class AuditLogCreate(BaseModel):
     """Schema for creating audit log entries (internal use)."""
+
     tenant_id: UUID
     user_id: Optional[UUID] = None
     action: str = Field(..., max_length=100)

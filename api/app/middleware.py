@@ -20,7 +20,9 @@ from app.security import decode_token
 logger = logging.getLogger(__name__)
 
 _ACTION_BY_METHOD = {"POST": "create", "PUT": "update", "PATCH": "update", "DELETE": "delete"}
-_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 _TENANT_PREFIX_RE = re.compile(r"^/api/v[0-9]+/tenants/([0-9a-fA-F-]{36})/(.+)$")
 
 
@@ -77,15 +79,17 @@ async def audit_log_middleware(request: Request, call_next):
 
         async with _SessionLocal() as session:
             await session.set_tenant_context(tenant_id, user_id)
-            session.add(AuditLog(
-                tenant_id=UUID(tenant_id),
-                user_id=UUID(user_id) if user_id else None,
-                action=_ACTION_BY_METHOD[request.method],
-                resource_type=resource_type,
-                resource_id=UUID(resource_id) if resource_id else None,
-                ip_address=request.client.host if request.client else None,
-                user_agent=request.headers.get("user-agent"),
-            ))
+            session.add(
+                AuditLog(
+                    tenant_id=UUID(tenant_id),
+                    user_id=UUID(user_id) if user_id else None,
+                    action=_ACTION_BY_METHOD[request.method],
+                    resource_type=resource_type,
+                    resource_id=UUID(resource_id) if resource_id else None,
+                    ip_address=request.client.host if request.client else None,
+                    user_agent=request.headers.get("user-agent"),
+                )
+            )
             await session.commit()
     except Exception as e:
         logger.error(f"Audit log middleware failed for {request.method} {request.url.path}: {e}")

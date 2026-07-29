@@ -106,6 +106,7 @@ class IntegrationCreate(BaseModel):
 
 class MqttConfigValidator(BaseModel):
     """Validates config for chirpstack_mqtt integrations."""
+
     broker_url: str = Field(min_length=1, description="ChirpStack MQTT broker hostname or IP")
     port: int = Field(default=1883, ge=1, le=65535)
     username: Optional[str] = None
@@ -128,6 +129,7 @@ class SetupInstructions(BaseModel):
 
 class IntegrationCreatedResponse(BaseModel):
     """Returned only on create and rotate-key. Contains raw key — shown once."""
+
     id: UUID
     name: str
     provider: ProviderEnum
@@ -142,6 +144,7 @@ class IntegrationCreatedResponse(BaseModel):
 
 class MqttIntegrationCreatedResponse(BaseModel):
     """Returned on create of a chirpstack_mqtt integration."""
+
     id: UUID
     name: str
     provider: ProviderEnum
@@ -155,6 +158,7 @@ class MqttIntegrationCreatedResponse(BaseModel):
 
 class IntegrationResponse(BaseModel):
     """Safe response — never includes the raw key."""
+
     id: UUID
     tenant_id: UUID
     name: str
@@ -182,9 +186,7 @@ class UnknownDevicesResponse(BaseModel):
     unknown_devices: list[UnknownDeviceEntry]
 
 
-def build_setup_instructions(
-    provider: str, webhook_url: str, key_prefix: str
-) -> SetupInstructions:
+def build_setup_instructions(provider: str, webhook_url: str, key_prefix: str) -> SetupInstructions:
     """Build provider-specific setup instructions with URL and key interpolated."""
     meta = PROVIDER_DOCS[provider]
     steps = [

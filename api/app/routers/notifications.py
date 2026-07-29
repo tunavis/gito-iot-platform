@@ -26,6 +26,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}/notifications", tags=["notificat
 # NOTIFICATION CHANNELS
 # ============================================================================
 
+
 @router.get("/channels")
 async def list_channels(
     tenant_id: UUID,
@@ -36,27 +37,27 @@ async def list_channels(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
-        select(NotificationChannel).where(
-            NotificationChannel.tenant_id == current_tenant
-        )
+        select(NotificationChannel).where(NotificationChannel.tenant_id == current_tenant)
     )
     channels = result.scalars().all()
-    
-    return {"data": [
-        {
-            "id": str(c.id),
-            "user_id": str(c.user_id),
-            "channel_type": c.channel_type,
-            "config": c.config,
-            "enabled": c.enabled,
-            "verified": c.verified,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-        }
-        for c in channels
-    ]}
+
+    return {
+        "data": [
+            {
+                "id": str(c.id),
+                "user_id": str(c.user_id),
+                "channel_type": c.channel_type,
+                "config": c.config,
+                "enabled": c.enabled,
+                "verified": c.verified,
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            }
+            for c in channels
+        ]
+    }
 
 
 @router.post("/channels")
@@ -71,7 +72,7 @@ async def create_channel(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     # No verification flow exists (no confirmation email/webhook ping is ever
     # sent, verified_at is never set anywhere) — default to the model's honest
     # False rather than claiming every new channel is pre-verified.
@@ -82,11 +83,11 @@ async def create_channel(
         config=channel_data.get("config", {}),
         enabled=channel_data.get("enabled", True),
     )
-    
+
     session.add(channel)
     await session.commit()
     await session.refresh(channel)
-    
+
     return {
         "id": str(channel.id),
         "user_id": str(channel.user_id),
@@ -109,20 +110,20 @@ async def update_channel(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(NotificationChannel).where(
             and_(
                 NotificationChannel.id == channel_id,
-                NotificationChannel.tenant_id == current_tenant
+                NotificationChannel.tenant_id == current_tenant,
             )
         )
     )
     channel = result.scalar_one_or_none()
-    
+
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    
+
     # Update fields
     if "channel_type" in channel_data:
         channel.channel_type = channel_data["channel_type"]
@@ -132,10 +133,10 @@ async def update_channel(
         channel.enabled = channel_data["enabled"]
     if "verified" in channel_data:
         channel.verified = channel_data["verified"]
-    
+
     await session.commit()
     await session.refresh(channel)
-    
+
     return {
         "id": str(channel.id),
         "user_id": str(channel.user_id),
@@ -157,29 +158,30 @@ async def delete_channel(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(NotificationChannel).where(
             and_(
                 NotificationChannel.id == channel_id,
-                NotificationChannel.tenant_id == current_tenant
+                NotificationChannel.tenant_id == current_tenant,
             )
         )
     )
     channel = result.scalar_one_or_none()
-    
+
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    
+
     await session.delete(channel)
     await session.commit()
-    
+
     return {"success": True}
 
 
 # ============================================================================
 # NOTIFICATION TEMPLATES
 # ============================================================================
+
 
 @router.get("/templates")
 async def list_templates(
@@ -193,16 +195,25 @@ async def list_templates(
     await session.set_tenant_context(current_tenant)
 
     result = await session.execute(
-        select(NotificationTemplate).where(
-            NotificationTemplate.tenant_id == current_tenant
-        ).order_by(NotificationTemplate.created_at.desc())
+        select(NotificationTemplate)
+        .where(NotificationTemplate.tenant_id == current_tenant)
+        .order_by(NotificationTemplate.created_at.desc())
     )
     templates = result.scalars().all()
 
-    return {"data": [NotificationTemplateResponseSchema.model_validate(t, from_attributes=True) for t in templates]}
+    return {
+        "data": [
+            NotificationTemplateResponseSchema.model_validate(t, from_attributes=True)
+            for t in templates
+        ]
+    }
 
 
-@router.post("/templates", response_model=NotificationTemplateResponseSchema, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/templates",
+    response_model=NotificationTemplateResponseSchema,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_template(
     tenant_id: UUID,
     body: NotificationTemplateSchema,
@@ -237,11 +248,16 @@ async def update_template(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
-    template = (await session.execute(
-        select(NotificationTemplate).where(
-            and_(NotificationTemplate.id == template_id, NotificationTemplate.tenant_id == current_tenant)
+    template = (
+        await session.execute(
+            select(NotificationTemplate).where(
+                and_(
+                    NotificationTemplate.id == template_id,
+                    NotificationTemplate.tenant_id == current_tenant,
+                )
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -266,11 +282,16 @@ async def delete_template(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
 
-    template = (await session.execute(
-        select(NotificationTemplate).where(
-            and_(NotificationTemplate.id == template_id, NotificationTemplate.tenant_id == current_tenant)
+    template = (
+        await session.execute(
+            select(NotificationTemplate).where(
+                and_(
+                    NotificationTemplate.id == template_id,
+                    NotificationTemplate.tenant_id == current_tenant,
+                )
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -281,6 +302,7 @@ async def delete_template(
 # ============================================================================
 # NOTIFICATION HISTORY
 # ============================================================================
+
 
 @router.get("")
 async def list_notifications(
@@ -294,9 +316,9 @@ async def list_notifications(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     offset = (page - 1) * per_page
-    
+
     result = await session.execute(
         select(Notification)
         .where(Notification.tenant_id == current_tenant)
@@ -305,15 +327,13 @@ async def list_notifications(
         .limit(per_page)
     )
     notifications = result.scalars().all()
-    
+
     # Get total count
     count_result = await session.execute(
-        select(func.count(Notification.id)).where(
-            Notification.tenant_id == current_tenant
-        )
+        select(func.count(Notification.id)).where(Notification.tenant_id == current_tenant)
     )
     total = count_result.scalar()
-    
+
     return {
         "data": [
             {

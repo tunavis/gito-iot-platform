@@ -58,9 +58,7 @@ async def get_alarm_summary(
     total = total_result.scalar() or 0
 
     # Status counts
-    active_query = select(func.count(Alarm.id)).where(
-        and_(*filters, Alarm.status == "ACTIVE")
-    )
+    active_query = select(func.count(Alarm.id)).where(and_(*filters, Alarm.status == "ACTIVE"))
     active_result = await session.execute(active_query)
     active = active_result.scalar() or 0
 
@@ -70,16 +68,14 @@ async def get_alarm_summary(
     ack_result = await session.execute(acknowledged_query)
     acknowledged = ack_result.scalar() or 0
 
-    cleared_query = select(func.count(Alarm.id)).where(
-        and_(*filters, Alarm.status == "CLEARED")
-    )
+    cleared_query = select(func.count(Alarm.id)).where(and_(*filters, Alarm.status == "CLEARED"))
     cleared_result = await session.execute(cleared_query)
     cleared = cleared_result.scalar() or 0
 
     # Severity counts
-    severity_query = select(
-        Alarm.severity, func.count(Alarm.id)
-    ).where(and_(*filters)).group_by(Alarm.severity)
+    severity_query = (
+        select(Alarm.severity, func.count(Alarm.id)).where(and_(*filters)).group_by(Alarm.severity)
+    )
     severity_result = await session.execute(severity_query)
     by_severity = {row[0]: row[1] for row in severity_result}
 
@@ -157,7 +153,7 @@ async def get_alarm(
     """Get a specific alarm"""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
 
     query = select(Alarm).where(Alarm.id == alarm_id, Alarm.tenant_id == tenant_id)
@@ -180,7 +176,7 @@ async def create_alarm(
     """Create a new alarm (manual alarm creation)"""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
 
     alarm = Alarm(
@@ -264,7 +260,7 @@ async def clear_alarm(
     """
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
 
     # Get alarm
@@ -306,7 +302,7 @@ async def delete_alarm(
     """Delete an alarm (only CLEARED alarms can be deleted)"""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
 
     # Get alarm

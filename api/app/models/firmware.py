@@ -67,9 +67,7 @@ class OTACampaignBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     firmware_version_id: UUID
-    rollout_strategy: str = Field(
-        default="immediate", pattern=r"^(immediate|staggered|scheduled)$"
-    )
+    rollout_strategy: str = Field(default="immediate", pattern=r"^(immediate|staggered|scheduled)$")
     devices_per_hour: Optional[int] = Field(default=100, ge=1)
     auto_rollback_threshold: Optional[float] = Field(default=0.1, ge=0.0, le=1.0)
     scheduled_at: Optional[datetime] = None

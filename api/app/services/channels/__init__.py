@@ -2,7 +2,10 @@
 
 from typing import Union
 from app.services.channels.email_service import EmailNotificationService
-from app.services.channels.slack_and_webhook import SlackNotificationService, WebhookNotificationService
+from app.services.channels.slack_and_webhook import (
+    SlackNotificationService,
+    WebhookNotificationService,
+)
 
 
 class ChannelFactory:

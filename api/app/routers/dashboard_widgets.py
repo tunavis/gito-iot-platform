@@ -9,35 +9,26 @@ import logging
 from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
 from app.models.dashboard import Dashboard, DashboardWidget
-from app.schemas.dashboard import (
-    WidgetCreate,
-    WidgetUpdate,
-    WidgetResponse,
-    DeviceBindingRequest
-)
+from app.schemas.dashboard import WidgetCreate, WidgetUpdate, WidgetResponse, DeviceBindingRequest
 from app.schemas.common import SuccessResponse
 from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/tenants/{tenant_id}/dashboards/{dashboard_id}/widgets",
-    tags=["dashboard-widgets"]
+    prefix="/tenants/{tenant_id}/dashboards/{dashboard_id}/widgets", tags=["dashboard-widgets"]
 )
 
 
 async def verify_dashboard_ownership(
-    tenant_id: UUID,
-    dashboard_id: UUID,
-    current_user_id: UUID,
-    session: RLSSession
+    tenant_id: UUID, dashboard_id: UUID, current_user_id: UUID, session: RLSSession
 ) -> Dashboard:
     """Verify that the dashboard belongs to the current user."""
     result = await session.execute(
         select(Dashboard).where(
             Dashboard.id == dashboard_id,
             Dashboard.tenant_id == tenant_id,
-            Dashboard.user_id == current_user_id
+            Dashboard.user_id == current_user_id,
         )
     )
     dashboard = result.scalar_one_or_none()
@@ -116,8 +107,7 @@ async def update_widget(
     # Get widget
     result = await session.execute(
         select(DashboardWidget).where(
-            DashboardWidget.id == widget_id,
-            DashboardWidget.dashboard_id == dashboard_id
+            DashboardWidget.id == widget_id, DashboardWidget.dashboard_id == dashboard_id
         )
     )
     widget = result.scalar_one_or_none()
@@ -163,8 +153,7 @@ async def delete_widget(
     # Check widget exists
     result = await session.execute(
         select(DashboardWidget).where(
-            DashboardWidget.id == widget_id,
-            DashboardWidget.dashboard_id == dashboard_id
+            DashboardWidget.id == widget_id, DashboardWidget.dashboard_id == dashboard_id
         )
     )
     widget = result.scalar_one_or_none()
@@ -176,9 +165,7 @@ async def delete_widget(
         )
 
     # Delete widget
-    await session.execute(
-        delete(DashboardWidget).where(DashboardWidget.id == widget_id)
-    )
+    await session.execute(delete(DashboardWidget).where(DashboardWidget.id == widget_id))
     await session.commit()
 
     logger.info(f"Widget deleted: {widget_id}")
@@ -212,8 +199,7 @@ async def bind_device_to_widget(
     # Get widget
     result = await session.execute(
         select(DashboardWidget).where(
-            DashboardWidget.id == widget_id,
-            DashboardWidget.dashboard_id == dashboard_id
+            DashboardWidget.id == widget_id, DashboardWidget.dashboard_id == dashboard_id
         )
     )
     widget = result.scalar_one_or_none()
@@ -229,8 +215,7 @@ async def bind_device_to_widget(
 
     # Check if device already bound
     existing_binding = next(
-        (ds for ds in data_sources if ds.get("device_id") == str(binding_data.device_id)),
-        None
+        (ds for ds in data_sources if ds.get("device_id") == str(binding_data.device_id)), None
     )
 
     if existing_binding:

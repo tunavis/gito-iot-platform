@@ -8,6 +8,7 @@ from uuid import UUID
 
 class SiteCreate(BaseModel):
     """Request schema for creating a site."""
+
     organization_id: UUID
     parent_site_id: Optional[UUID] = None
     name: str = Field(..., min_length=1, max_length=255)
@@ -20,6 +21,7 @@ class SiteCreate(BaseModel):
 
 class SiteUpdate(BaseModel):
     """Request schema for updating a site."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     site_type: Optional[str] = Field(None, max_length=50)
     address: Optional[str] = None
@@ -30,6 +32,7 @@ class SiteUpdate(BaseModel):
 
 class SiteResponse(BaseModel):
     """Response schema for a site."""
+
     id: UUID
     tenant_id: UUID
     organization_id: UUID

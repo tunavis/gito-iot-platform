@@ -8,34 +8,34 @@ from uuid import UUID
 
 class BulkOTARequest(BaseModel):
     """Request to start bulk OTA update on device group."""
+
     firmware_version_id: UUID = Field(..., description="Firmware version ID to deploy")
-    
+
     class Config:
         json_schema_extra = {
-            "example": {
-                "firmware_version_id": "550e8400-e29b-41d4-a716-446655440000"
-            }
+            "example": {"firmware_version_id": "550e8400-e29b-41d4-a716-446655440000"}
         }
 
 
 class BulkCommandRequest(BaseModel):
     """Request to send bulk command to device group."""
-    command: str = Field(..., min_length=1, max_length=512, description="Command to send to devices")
+
+    command: str = Field(
+        ..., min_length=1, max_length=512, description="Command to send to devices"
+    )
     payload: Optional[Dict[str, Any]] = Field(None, description="Command payload/parameters")
-    
+
     class Config:
-        json_schema_extra = {
-            "example": {
-                "command": "reboot",
-                "payload": {"delay_seconds": 30}
-            }
-        }
+        json_schema_extra = {"example": {"command": "reboot", "payload": {"delay_seconds": 30}}}
 
 
 class BulkOperationResponse(BaseModel):
     """Response for bulk operation details."""
+
     id: UUID = Field(..., description="Operation ID")
-    operation_type: str = Field(..., description="Operation type (bulk_ota, bulk_command, bulk_sync)")
+    operation_type: str = Field(
+        ..., description="Operation type (bulk_ota, bulk_command, bulk_sync)"
+    )
     status: str = Field(..., description="Operation status (queued, running, completed, failed)")
     cadence_workflow_id: Optional[str] = Field(None, description="Cadence workflow ID")
     devices_total: int = Field(..., description="Total devices in group")
@@ -64,18 +64,19 @@ class BulkOperationResponse(BaseModel):
                 "error_message": None,
                 "metadata": {
                     "firmware_version_id": "550e8400-e29b-41d4-a716-446655440001",
-                    "firmware_version": "2.1.0"
+                    "firmware_version": "2.1.0",
                 },
                 "started_at": "2026-01-14T09:00:00Z",
                 "completed_at": None,
                 "created_at": "2026-01-14T08:55:00Z",
-                "updated_at": "2026-01-14T09:02:00Z"
+                "updated_at": "2026-01-14T09:02:00Z",
             }
         }
 
 
 class BulkOperationListResponse(BaseModel):
     """Response for listing bulk operations."""
+
     data: list[BulkOperationResponse] = Field(..., description="List of operations")
     meta: Dict[str, Any] = Field(..., description="Pagination metadata")
 
@@ -90,20 +91,17 @@ class BulkOperationListResponse(BaseModel):
                         "devices_total": 100,
                         "devices_completed": 100,
                         "devices_failed": 0,
-                        "progress_percent": 100
+                        "progress_percent": 100,
                     }
                 ],
-                "meta": {
-                    "skip": 0,
-                    "limit": 50,
-                    "total": 1
-                }
+                "meta": {"skip": 0, "limit": 50, "total": 1},
             }
         }
 
 
 class BulkOperationStartResponse(BaseModel):
     """Response when bulk operation is started."""
+
     operation_id: UUID = Field(..., description="Operation ID")
     workflow_id: Optional[str] = Field(None, description="Cadence workflow ID")
     status: str = Field(..., description="Initial status")
@@ -117,6 +115,6 @@ class BulkOperationStartResponse(BaseModel):
                 "workflow_id": "iot-platform-bulk-ota-xxxxx",
                 "status": "queued",
                 "devices_total": 100,
-                "message": "Bulk OTA operation started for 100 devices"
+                "message": "Bulk OTA operation started for 100 devices",
             }
         }

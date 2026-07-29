@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class DeviceManagementService:
     """Service for managing devices with ChirpStack sync.
-    
+
     Supports two modes:
     1. With session: For use in routers/endpoints (session-aware)
     2. Standalone: For background tasks/workers
@@ -29,7 +29,7 @@ class DeviceManagementService:
 
     def __init__(self, session: Optional[AsyncSession] = None):
         """Initialize device management service.
-        
+
         Args:
             session: Optional database session for persistence. If None,
                     service operates in read-only/external-sync mode.
@@ -265,28 +265,28 @@ class DeviceManagementService:
 
     async def sync_to_chirpstack(self, device: Device, is_update: bool = False) -> bool:
         """Sync a device object to ChirpStack.
-        
+
         This is the primary interface used by the device router.
         Non-blocking: failures logged but don't raise exceptions.
-        
+
         Args:
             device: Device model instance with ChirpStack fields populated
             is_update: Whether this is an update (True) or create (False)
-        
+
         Returns:
             True if sync successful, False if skipped or failed gracefully
         """
         # Skip if not a LoRaWAN device
         if not device.dev_eui or not device.ttn_app_id:
             return False
-        
+
         if not self.chirpstack_client:
             logger.warning(
                 "chirpstack_not_configured",
                 extra={"device_id": str(device.id), "dev_eui": device.dev_eui},
             )
             return False
-        
+
         try:
             if is_update:
                 await self.chirpstack_client.update_device(
@@ -304,13 +304,13 @@ class DeviceManagementService:
                     device_profile_id=device.device_profile_id,
                     variables={"gito_device_id": str(device.id)},
                 )
-            
+
             # Update device.ttn_synced flag
             device.ttn_synced = True
             if self.session:
                 self.session.add(device)
                 await self.session.commit()
-            
+
             logger.info(
                 "device_synced_to_chirpstack",
                 extra={
@@ -320,7 +320,7 @@ class DeviceManagementService:
                 },
             )
             return True
-            
+
         except Exception as e:
             logger.error(
                 "chirpstack_sync_failed",
@@ -332,27 +332,27 @@ class DeviceManagementService:
                 },
             )
             return False
-    
+
     async def delete_from_chirpstack(self, device: Device) -> bool:
         """Delete device from ChirpStack.
-        
+
         Args:
             device: Device model instance
-        
+
         Returns:
             True if deleted or skip (not LoRaWAN), False if error
         """
         # Skip if not a LoRaWAN device
         if not device.dev_eui:
             return True
-        
+
         if not self.chirpstack_client:
             logger.warning(
                 "chirpstack_not_configured",
                 extra={"device_id": str(device.id), "dev_eui": device.dev_eui},
             )
             return True  # Don't fail local deletion
-        
+
         try:
             await self.chirpstack_client.delete_device(dev_eui=device.dev_eui)
             logger.info(
@@ -375,7 +375,7 @@ class DeviceManagementService:
                 },
             )
             return True  # Don't fail local deletion
-    
+
     async def sync_device_to_chirpstack_retro(
         self,
         tenant_id: UUID,

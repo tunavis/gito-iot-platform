@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class ChannelTypeEnum(str, Enum):
     """Supported notification channels."""
+
     EMAIL = "email"
     SLACK = "slack"
     WEBHOOK = "webhook"
@@ -19,6 +20,7 @@ class ChannelTypeEnum(str, Enum):
 
 class NotificationStatusEnum(str, Enum):
     """Notification delivery status."""
+
     PENDING = "pending"
     SENDING = "sending"
     SENT = "sent"
@@ -29,6 +31,7 @@ class NotificationStatusEnum(str, Enum):
 
 class CreateNotificationChannelSchema(BaseModel):
     """Create a notification channel."""
+
     channel_type: ChannelTypeEnum
     config: Dict[str, Any] = Field(..., description="Channel-specific config")
     enabled: bool = Field(default=True)
@@ -36,6 +39,7 @@ class CreateNotificationChannelSchema(BaseModel):
 
 class NotificationChannelResponseSchema(BaseModel):
     """Response for notification channel."""
+
     id: UUID
     user_id: UUID
     channel_type: ChannelTypeEnum
@@ -53,12 +57,14 @@ class NotificationChannelResponseSchema(BaseModel):
 
 class UpdateNotificationChannelSchema(BaseModel):
     """Update notification channel."""
+
     enabled: Optional[bool] = None
     config: Optional[Dict[str, Any]] = None
 
 
 class NotificationPreferencesSchema(BaseModel):
     """User notification preferences."""
+
     quiet_hours_enabled: bool = Field(default=False)
     quiet_hours_start: str = Field(default="22:00", description="HH:MM format")
     quiet_hours_end: str = Field(default="08:00", description="HH:MM format")
@@ -70,6 +76,7 @@ class NotificationPreferencesSchema(BaseModel):
 
 class CreateNotificationRuleSchema(BaseModel):
     """Link alert rule to notification channel."""
+
     alert_rule_id: UUID
     channel_id: UUID
     enabled: bool = Field(default=True)
@@ -77,6 +84,7 @@ class CreateNotificationRuleSchema(BaseModel):
 
 class NotificationRuleResponseSchema(BaseModel):
     """Response for notification rule."""
+
     id: UUID
     alert_rule_id: UUID
     channel_id: UUID
@@ -90,6 +98,7 @@ class NotificationRuleResponseSchema(BaseModel):
 
 class NotificationResponseSchema(BaseModel):
     """Response for sent notification."""
+
     id: UUID
     alert_event_id: UUID
     channel_id: UUID
@@ -111,6 +120,7 @@ class NotificationResponseSchema(BaseModel):
 
 class NotificationListResponseSchema(BaseModel):
     """List notification response."""
+
     id: UUID
     alert_event_id: UUID
     channel_type: str
@@ -125,6 +135,7 @@ class NotificationListResponseSchema(BaseModel):
 
 class NotificationTemplateSchema(BaseModel):
     """Create notification template."""
+
     channel_type: str = Field(..., pattern=r"^(email|slack|webhook)$")
     alert_type: Optional[str] = Field(None, description="Optional - specific alert type")
     name: str = Field(..., min_length=1, max_length=255)
@@ -136,6 +147,7 @@ class NotificationTemplateSchema(BaseModel):
 
 class NotificationTemplateUpdateSchema(BaseModel):
     """Update notification template - all fields optional, omitted fields are left untouched."""
+
     channel_type: Optional[str] = Field(None, pattern=r"^(email|slack|webhook)$")
     alert_type: Optional[str] = None
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -147,6 +159,7 @@ class NotificationTemplateUpdateSchema(BaseModel):
 
 class NotificationTemplateResponseSchema(BaseModel):
     """Response for notification template."""
+
     id: UUID
     channel_type: str
     alert_type: Optional[str]
@@ -164,11 +177,13 @@ class NotificationTemplateResponseSchema(BaseModel):
 
 class ResendNotificationSchema(BaseModel):
     """Request to resend a notification."""
+
     alert_event_id: UUID
 
 
 class NotificationStatsSchema(BaseModel):
     """Notification delivery statistics."""
+
     total_sent: int = 0
     total_pending: int = 0
     total_failed: int = 0

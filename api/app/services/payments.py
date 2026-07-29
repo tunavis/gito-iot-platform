@@ -31,6 +31,7 @@ class ProviderError(Exception):
 @dataclass
 class CheckoutResult:
     """Where to send the customer to enter/tokenise a card, plus the provider's own id."""
+
     redirect_url: str
     provider_ref: str
 
@@ -38,6 +39,7 @@ class CheckoutResult:
 @dataclass
 class ChargeResult:
     """Outcome of charging a stored token (recurring renewal)."""
+
     success: bool
     provider_ref: Optional[str] = None
     failure_reason: Optional[str] = None
@@ -52,6 +54,7 @@ class ProviderWebhook:
     reference: our merchantTransactionId echoed back (ties it to a subscription/invoice).
     token: the stored-card token (registrationId) if a card was tokenised.
     """
+
     event_id: str
     kind: str
     success: bool
@@ -67,13 +70,25 @@ class PaymentProvider:
     name: str = "base"
 
     async def create_checkout(
-        self, *, amount_cents: int, currency: str, reference: str,
-        return_url: str, notify_url: str, email: str | None = None, tokenise: bool = True,
+        self,
+        *,
+        amount_cents: int,
+        currency: str,
+        reference: str,
+        return_url: str,
+        notify_url: str,
+        email: str | None = None,
+        tokenise: bool = True,
     ) -> CheckoutResult:
         raise NotImplementedError
 
     async def charge_token(
-        self, *, token: str, amount_cents: int, currency: str, reference: str,
+        self,
+        *,
+        token: str,
+        amount_cents: int,
+        currency: str,
+        reference: str,
         email: str | None = None,
     ) -> ChargeResult:
         raise NotImplementedError
@@ -120,8 +135,10 @@ def get_provider(name: str) -> PaymentProvider:
         return ManualProvider()
     if name == "paystack":
         from app.services.paystack import PaystackProvider
+
         return PaystackProvider()
     if name == "peach":
         from app.services.peach import PeachProvider
+
         return PeachProvider()
     raise ProviderNotSupported(f"Unknown payment provider: {name!r}")

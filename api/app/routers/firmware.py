@@ -30,7 +30,13 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session, RLSSession
-from app.models.base import FirmwareVersion, OTACampaign, OTACampaignDevice, DeviceFirmwareHistory, Device
+from app.models.base import (
+    FirmwareVersion,
+    OTACampaign,
+    OTACampaignDevice,
+    DeviceFirmwareHistory,
+    Device,
+)
 from app.models.firmware import (
     FirmwareVersionCreate,
     FirmwareVersionUpdate,
@@ -53,6 +59,7 @@ router = APIRouter(tags=["firmware"])
 # ---------------------------------------------------------------------------
 # Firmware Versions
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/tenants/{tenant_id}/firmware/versions",
@@ -104,10 +111,16 @@ async def list_firmware_versions(
     q = q.order_by(FirmwareVersion.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
 
     rows = (await session.execute(q)).scalars().all()
-    return {"data": [FirmwareVersionResponse.model_validate(r, from_attributes=True) for r in rows], "page": page, "per_page": per_page}
+    return {
+        "data": [FirmwareVersionResponse.model_validate(r, from_attributes=True) for r in rows],
+        "page": page,
+        "per_page": per_page,
+    }
 
 
-@router.get("/tenants/{tenant_id}/firmware/versions/{firmware_id}", response_model=FirmwareVersionResponse)
+@router.get(
+    "/tenants/{tenant_id}/firmware/versions/{firmware_id}", response_model=FirmwareVersionResponse
+)
 async def get_firmware_version(
     tenant_id: UUID,
     firmware_id: UUID,
@@ -118,15 +131,21 @@ async def get_firmware_version(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    fw = (await session.execute(
-        select(FirmwareVersion).where(FirmwareVersion.id == firmware_id, FirmwareVersion.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    fw = (
+        await session.execute(
+            select(FirmwareVersion).where(
+                FirmwareVersion.id == firmware_id, FirmwareVersion.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not fw:
         raise HTTPException(status_code=404, detail="Firmware version not found")
     return fw
 
 
-@router.delete("/tenants/{tenant_id}/firmware/versions/{firmware_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/tenants/{tenant_id}/firmware/versions/{firmware_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_firmware_version(
     tenant_id: UUID,
     firmware_id: UUID,
@@ -137,9 +156,13 @@ async def delete_firmware_version(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    fw = (await session.execute(
-        select(FirmwareVersion).where(FirmwareVersion.id == firmware_id, FirmwareVersion.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    fw = (
+        await session.execute(
+            select(FirmwareVersion).where(
+                FirmwareVersion.id == firmware_id, FirmwareVersion.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not fw:
         raise HTTPException(status_code=404, detail="Firmware version not found")
 
@@ -151,7 +174,12 @@ async def delete_firmware_version(
 # OTA Campaigns
 # ---------------------------------------------------------------------------
 
-@router.post("/tenants/{tenant_id}/ota/campaigns", response_model=OTACampaignResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/tenants/{tenant_id}/ota/campaigns",
+    response_model=OTACampaignResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_campaign(
     tenant_id: UUID,
     body: OTACampaignCreate,
@@ -162,9 +190,14 @@ async def create_campaign(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    fw = (await session.execute(
-        select(FirmwareVersion).where(FirmwareVersion.id == body.firmware_version_id, FirmwareVersion.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    fw = (
+        await session.execute(
+            select(FirmwareVersion).where(
+                FirmwareVersion.id == body.firmware_version_id,
+                FirmwareVersion.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
     if not fw:
         raise HTTPException(status_code=404, detail="Firmware version not found")
 
@@ -202,7 +235,11 @@ async def list_campaigns(
     q = q.order_by(OTACampaign.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
 
     rows = (await session.execute(q)).scalars().all()
-    return {"data": [OTACampaignResponse.model_validate(r, from_attributes=True) for r in rows], "page": page, "per_page": per_page}
+    return {
+        "data": [OTACampaignResponse.model_validate(r, from_attributes=True) for r in rows],
+        "page": page,
+        "per_page": per_page,
+    }
 
 
 @router.get("/tenants/{tenant_id}/ota/campaigns/{campaign_id}", response_model=OTACampaignResponse)
@@ -216,9 +253,13 @@ async def get_campaign(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    campaign = (await session.execute(
-        select(OTACampaign).where(OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    campaign = (
+        await session.execute(
+            select(OTACampaign).where(
+                OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return campaign
@@ -236,9 +277,13 @@ async def update_campaign(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    campaign = (await session.execute(
-        select(OTACampaign).where(OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    campaign = (
+        await session.execute(
+            select(OTACampaign).where(
+                OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.status != "draft":
@@ -252,7 +297,9 @@ async def update_campaign(
     return campaign
 
 
-@router.delete("/tenants/{tenant_id}/ota/campaigns/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/tenants/{tenant_id}/ota/campaigns/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_campaign(
     tenant_id: UUID,
     campaign_id: UUID,
@@ -263,9 +310,13 @@ async def delete_campaign(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    campaign = (await session.execute(
-        select(OTACampaign).where(OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    campaign = (
+        await session.execute(
+            select(OTACampaign).where(
+                OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.status != "draft":
@@ -290,9 +341,13 @@ async def execute_campaign(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    campaign = (await session.execute(
-        select(OTACampaign).where(OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    campaign = (
+        await session.execute(
+            select(OTACampaign).where(
+                OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
@@ -302,12 +357,18 @@ async def execute_campaign(
         # belong to this tenant — otherwise a caller could target another
         # tenant's devices and have firmware dispatched to their hardware.
         # (RLS does not protect us here — the app connects as a superuser.)
-        owned = set((await session.execute(
-            select(Device.id).where(
-                Device.tenant_id == tenant_id,
-                Device.id.in_(body.device_ids),
+        owned = set(
+            (
+                await session.execute(
+                    select(Device.id).where(
+                        Device.tenant_id == tenant_id,
+                        Device.id.in_(body.device_ids),
+                    )
+                )
             )
-        )).scalars().all())
+            .scalars()
+            .all()
+        )
         not_owned = [str(d) for d in body.device_ids if d not in owned]
         if not_owned:
             raise HTTPException(
@@ -316,18 +377,22 @@ async def execute_campaign(
             )
         device_ids = body.device_ids
     else:
-        rows = (await session.execute(
-            select(Device.id).where(Device.tenant_id == tenant_id)
-        )).scalars().all()
+        rows = (
+            (await session.execute(select(Device.id).where(Device.tenant_id == tenant_id)))
+            .scalars()
+            .all()
+        )
         device_ids = list(rows)
 
     if not device_ids:
         raise HTTPException(status_code=400, detail="No devices to update")
 
     # Fetch firmware version for URL/hash
-    fw = (await session.execute(
-        select(FirmwareVersion).where(FirmwareVersion.id == campaign.firmware_version_id)
-    )).scalar_one_or_none()
+    fw = (
+        await session.execute(
+            select(FirmwareVersion).where(FirmwareVersion.id == campaign.firmware_version_id)
+        )
+    ).scalar_one_or_none()
     if not fw:
         raise HTTPException(status_code=404, detail="Firmware version not found")
 
@@ -346,9 +411,15 @@ async def execute_campaign(
     dispatched, failed = 0, 0
     errors = []
 
-    devices = (await session.execute(
-        select(Device).where(Device.id.in_(device_ids), Device.tenant_id == tenant_id)
-    )).scalars().all()
+    devices = (
+        (
+            await session.execute(
+                select(Device).where(Device.id.in_(device_ids), Device.tenant_id == tenant_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     for device in devices:
         ok, err = await dispatcher.dispatch(
@@ -394,15 +465,25 @@ async def campaign_status(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(tenant_id)
 
-    campaign = (await session.execute(
-        select(OTACampaign).where(OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    campaign = (
+        await session.execute(
+            select(OTACampaign).where(
+                OTACampaign.id == campaign_id, OTACampaign.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    devices = (await session.execute(
-        select(OTACampaignDevice).where(OTACampaignDevice.campaign_id == campaign_id)
-    )).scalars().all()
+    devices = (
+        (
+            await session.execute(
+                select(OTACampaignDevice).where(OTACampaignDevice.campaign_id == campaign_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     total = len(devices)
     by_status = {}
@@ -418,13 +499,16 @@ async def campaign_status(
         "progress_percent": progress,
         "total_devices": total,
         "by_status": by_status,
-        "devices": [OTACampaignDeviceResponse.model_validate(d, from_attributes=True) for d in devices],
+        "devices": [
+            OTACampaignDeviceResponse.model_validate(d, from_attributes=True) for d in devices
+        ],
     }
 
 
 # ---------------------------------------------------------------------------
 # Device Firmware History
 # ---------------------------------------------------------------------------
+
 
 @router.get("/tenants/{tenant_id}/devices/{device_id}/ota/history", response_model=dict)
 async def device_firmware_history(
@@ -440,22 +524,32 @@ async def device_firmware_history(
     await session.set_tenant_context(tenant_id)
 
     # Verify device belongs to tenant
-    device = (await session.execute(
-        select(Device).where(Device.id == device_id, Device.tenant_id == tenant_id)
-    )).scalar_one_or_none()
+    device = (
+        await session.execute(
+            select(Device).where(Device.id == device_id, Device.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    rows = (await session.execute(
-        select(DeviceFirmwareHistory)
-        .where(DeviceFirmwareHistory.device_id == device_id)
-        .order_by(DeviceFirmwareHistory.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-    )).scalars().all()
+    rows = (
+        (
+            await session.execute(
+                select(DeviceFirmwareHistory)
+                .where(DeviceFirmwareHistory.device_id == device_id)
+                .order_by(DeviceFirmwareHistory.created_at.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
-        "data": [DeviceFirmwareHistoryResponse.model_validate(r, from_attributes=True) for r in rows],
+        "data": [
+            DeviceFirmwareHistoryResponse.model_validate(r, from_attributes=True) for r in rows
+        ],
         "page": page,
         "per_page": per_page,
     }

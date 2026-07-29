@@ -8,46 +8,50 @@ from datetime import datetime
 
 class UserCreate(BaseModel):
     """Schema for creating a new user."""
+
     email: EmailStr = Field(..., description="User email address")
     password: str = Field(..., min_length=8, description="User password (min 8 chars)")
     full_name: str = Field(..., min_length=1, max_length=255, description="User full name")
     role: str = Field(
         default="VIEWER",
         pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$",
-        description="User role"
+        description="User role",
     )
     status: str = Field(
-        default="active",
-        pattern="^(active|inactive|suspended)$",
-        description="User status"
+        default="active", pattern="^(active|inactive|suspended)$", description="User status"
     )
 
 
 class UserUpdate(BaseModel):
     """Schema for updating an existing user."""
+
     email: Optional[EmailStr] = Field(None, description="User email address")
-    full_name: Optional[str] = Field(None, min_length=1, max_length=255, description="User full name")
-    password: Optional[str] = Field(None, min_length=8, description="New password (min 8 chars) - only for admin password reset")
+    full_name: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="User full name"
+    )
+    password: Optional[str] = Field(
+        None, min_length=8, description="New password (min 8 chars) - only for admin password reset"
+    )
     role: Optional[str] = Field(
         None,
         pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$",
-        description="User role"
+        description="User role",
     )
     status: Optional[str] = Field(
-        None,
-        pattern="^(active|inactive|suspended)$",
-        description="User status"
+        None, pattern="^(active|inactive|suspended)$", description="User status"
     )
 
 
 class UserPasswordUpdate(BaseModel):
     """Schema for updating user password."""
+
     current_password: str = Field(..., description="Current password")
     new_password: str = Field(..., min_length=8, description="New password (min 8 chars)")
 
 
 class UserResponse(BaseModel):
     """Schema for user response (excludes password_hash)."""
+
     id: UUID
     tenant_id: UUID
     email: str
@@ -64,17 +68,19 @@ class UserResponse(BaseModel):
 
 class UserInviteRequest(BaseModel):
     """Schema for inviting a new user."""
+
     email: EmailStr = Field(..., description="User email address")
     full_name: str = Field(..., min_length=1, max_length=255, description="User full name")
     role: str = Field(
         default="VIEWER",
         pattern="^(SUPER_ADMIN|TENANT_ADMIN|SITE_ADMIN|CLIENT|VIEWER)$",
-        description="User role"
+        description="User role",
     )
 
 
 class UserInviteResponse(BaseModel):
     """Schema for user invitation response."""
+
     id: UUID
     email: str
     full_name: str

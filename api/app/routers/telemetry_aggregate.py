@@ -42,12 +42,15 @@ async def get_hourly_aggregate(
     await session.set_tenant_context(tenant_id)
 
     if not metric.replace("_", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid metric key format")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid metric key format"
+        )
 
     try:
         if metric == "messages":
             # Message count — always from raw telemetry (not in continuous aggregate)
-            query = text("""
+            query = text(
+                """
                 SELECT
                     to_char(date_trunc('hour', ts), 'HH24"h"') AS hour,
                     COUNT(*)::numeric AS value
@@ -56,7 +59,8 @@ async def get_hourly_aggregate(
                   AND ts >= NOW() - INTERVAL '1 hour' * :hours
                 GROUP BY date_trunc('hour', ts)
                 ORDER BY date_trunc('hour', ts) ASC
-            """)
+            """
+            )
             result = await session.execute(query, {"tenant_id": str(tenant_id), "hours": hours})
             rows = result.fetchall()
             return SuccessResponse(
@@ -65,7 +69,8 @@ async def get_hourly_aggregate(
 
         # ── Continuous aggregate (pre-computed hourly rollup) ─────────────
         # Covers everything older than 1 hour (within the refresh lag).
-        agg_query = text("""
+        agg_query = text(
+            """
             SELECT
                 to_char(bucket, 'HH24"h"')          AS hour,
                 bucket,
@@ -77,10 +82,12 @@ async def get_hourly_aggregate(
               AND bucket <  NOW() - INTERVAL '1 hour'
             GROUP BY bucket
             ORDER BY bucket ASC
-        """)
+        """
+        )
 
         # ── Raw telemetry for the most recent 2 hours (fills refresh lag) ─
-        raw_query = text("""
+        raw_query = text(
+            """
             SELECT
                 to_char(date_trunc('hour', ts), 'HH24"h"')  AS hour,
                 date_trunc('hour', ts)                       AS bucket,
@@ -92,7 +99,8 @@ async def get_hourly_aggregate(
               AND ts >= NOW() - INTERVAL '2 hours'
             GROUP BY date_trunc('hour', ts)
             ORDER BY date_trunc('hour', ts) ASC
-        """)
+        """
+        )
 
         params = {"tenant_id": str(tenant_id), "metric_key": metric, "hours": hours}
 
@@ -137,10 +145,13 @@ async def get_daily_aggregate(
     await session.set_tenant_context(tenant_id)
 
     if not metric.replace("_", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid metric key format")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid metric key format"
+        )
 
     try:
-        query = text("""
+        query = text(
+            """
             SELECT
                 to_char(bucket, 'YYYY-MM-DD')           AS day,
                 ROUND(AVG(avg_value)::numeric, 2)       AS avg_value,
@@ -153,7 +164,8 @@ async def get_daily_aggregate(
               AND bucket >= NOW() - INTERVAL '1 day' * :days
             GROUP BY bucket
             ORDER BY bucket ASC
-        """)
+        """
+        )
 
         result = await session.execute(
             query,
@@ -161,16 +173,18 @@ async def get_daily_aggregate(
         )
         rows = result.fetchall()
 
-        return SuccessResponse(data=[
-            {
-                "day":          row[0],
-                "avg":          float(row[1]) if row[1] is not None else None,
-                "min":          float(row[2]) if row[2] is not None else None,
-                "max":          float(row[3]) if row[3] is not None else None,
-                "sample_count": int(row[4]) if row[4] else 0,
-            }
-            for row in rows
-        ])
+        return SuccessResponse(
+            data=[
+                {
+                    "day": row[0],
+                    "avg": float(row[1]) if row[1] is not None else None,
+                    "min": float(row[2]) if row[2] is not None else None,
+                    "max": float(row[3]) if row[3] is not None else None,
+                    "sample_count": int(row[4]) if row[4] else 0,
+                }
+                for row in rows
+            ]
+        )
 
     except Exception as e:
         logger.error(f"Daily aggregate error: {e}", exc_info=True)
@@ -197,7 +211,8 @@ async def get_telemetry_summary(
     try:
         if hours <= 2:
             # Short window — raw telemetry is fine
-            query = text("""
+            query = text(
+                """
                 SELECT
                     metric_key,
                     ROUND(MIN(metric_value)::numeric, 2) AS min_value,
@@ -210,10 +225,12 @@ async def get_telemetry_summary(
                   AND ts >= NOW() - INTERVAL '1 hour' * :hours
                 GROUP BY metric_key
                 ORDER BY metric_key
-            """)
+            """
+            )
         else:
             # Longer window — use continuous aggregate
-            query = text("""
+            query = text(
+                """
                 SELECT
                     metric_key,
                     ROUND(MIN(min_value)::numeric, 2)  AS min_value,
@@ -225,21 +242,24 @@ async def get_telemetry_summary(
                   AND bucket >= NOW() - INTERVAL '1 hour' * :hours
                 GROUP BY metric_key
                 ORDER BY metric_key
-            """)
+            """
+            )
 
         result = await session.execute(query, {"tenant_id": str(tenant_id), "hours": hours})
         rows = result.fetchall()
 
-        return SuccessResponse(data=[
-            {
-                "metric":  row[0],
-                "min":     float(row[1]) if row[1] is not None else None,
-                "max":     float(row[2]) if row[2] is not None else None,
-                "avg":     float(row[3]) if row[3] is not None else None,
-                "count":   int(row[4]) if row[4] else 0,
-            }
-            for row in rows
-        ])
+        return SuccessResponse(
+            data=[
+                {
+                    "metric": row[0],
+                    "min": float(row[1]) if row[1] is not None else None,
+                    "max": float(row[2]) if row[2] is not None else None,
+                    "avg": float(row[3]) if row[3] is not None else None,
+                    "count": int(row[4]) if row[4] else 0,
+                }
+                for row in rows
+            ]
+        )
 
     except Exception as e:
         logger.error(f"Telemetry summary error: {e}", exc_info=True)
@@ -264,10 +284,13 @@ async def get_device_comparison(
     await session.set_tenant_context(tenant_id)
 
     if not metric.replace("_", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid metric key format")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid metric key format"
+        )
 
     try:
-        query = text("""
+        query = text(
+            """
             WITH device_stats AS (
                 SELECT
                     h.device_id,
@@ -307,7 +330,8 @@ async def get_device_comparison(
             FROM device_stats ds
             LEFT JOIN latest_values lv ON lv.device_id = ds.device_id
             ORDER BY ds.device_name
-        """)
+        """
+        )
 
         result = await session.execute(
             query,
@@ -315,19 +339,21 @@ async def get_device_comparison(
         )
         rows = result.fetchall()
 
-        return SuccessResponse(data=[
-            {
-                "device_id":    str(row[0]),
-                "device_name":  row[1],
-                "latest_value": float(row[2]) if row[2] is not None else None,
-                "latest_ts":    row[3].isoformat() if row[3] else None,
-                "avg_value":    float(row[4]) if row[4] is not None else None,
-                "min_value":    float(row[5]) if row[5] is not None else None,
-                "max_value":    float(row[6]) if row[6] is not None else None,
-                "sample_count": int(row[7]) if row[7] else 0,
-            }
-            for row in rows
-        ])
+        return SuccessResponse(
+            data=[
+                {
+                    "device_id": str(row[0]),
+                    "device_name": row[1],
+                    "latest_value": float(row[2]) if row[2] is not None else None,
+                    "latest_ts": row[3].isoformat() if row[3] else None,
+                    "avg_value": float(row[4]) if row[4] is not None else None,
+                    "min_value": float(row[5]) if row[5] is not None else None,
+                    "max_value": float(row[6]) if row[6] is not None else None,
+                    "sample_count": int(row[7]) if row[7] else 0,
+                }
+                for row in rows
+            ]
+        )
 
     except Exception as e:
         logger.error(f"Device comparison error: {e}", exc_info=True)

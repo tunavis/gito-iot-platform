@@ -19,15 +19,15 @@ PROVIDERS = ("chirpstack", "ttn", "helium", "actility", "custom")
 
 @dataclass
 class NormalizedUplink:
-    dev_eui: str                          # 16-char hex, lower-cased
-    metrics: dict[str, Any]              # {"temperature": 25.5, ...} — may be EMPTY
-                                           # when the network server hasn't decoded the
-                                           # payload; the router then tries the device
-                                           # type's own decoder against raw_payload.
-    dedup_id: str                         # provider-unique string for deduplication
+    dev_eui: str  # 16-char hex, lower-cased
+    metrics: dict[str, Any]  # {"temperature": 25.5, ...} — may be EMPTY
+    # when the network server hasn't decoded the
+    # payload; the router then tries the device
+    # type's own decoder against raw_payload.
+    dedup_id: str  # provider-unique string for deduplication
     radio: dict[str, Any] = field(default_factory=dict)  # optional radio metadata
-    raw_payload: str | None = None        # base64 raw LoRa payload
-    f_port: int | None = None             # LoRaWAN FPort, for port-scoped decoders
+    raw_payload: str | None = None  # base64 raw LoRa payload
+    f_port: int | None = None  # LoRaWAN FPort, for port-scoped decoders
 
 
 def _safe_float(val: Any) -> float | None:
@@ -47,6 +47,7 @@ def _safe_int(val: Any) -> int | None:
 # ---------------------------------------------------------------------------
 # ChirpStack v4
 # ---------------------------------------------------------------------------
+
 
 def parse_chirpstack(body: dict) -> NormalizedUplink | None:
     """Parse a ChirpStack v4 uplink webhook payload.
@@ -68,7 +69,8 @@ def parse_chirpstack(body: dict) -> NormalizedUplink | None:
         metrics = {}
         logger.info(
             "chirpstack: no decoded 'object' for dev_eui %s — will try the device "
-            "type's own decoder against the raw payload", dev_eui,
+            "type's own decoder against the raw payload",
+            dev_eui,
         )
 
     dedup_id = body.get("deduplicationId") or dev_eui + str(body.get("fCnt", ""))
@@ -109,6 +111,7 @@ def parse_chirpstack(body: dict) -> NormalizedUplink | None:
 # The Things Network v3 (The Things Stack)
 # ---------------------------------------------------------------------------
 
+
 def parse_ttn(body: dict) -> NormalizedUplink | None:
     """Parse a TTN v3 (The Things Stack) uplink webhook payload."""
     ids = body.get("end_device_ids") or {}
@@ -120,7 +123,9 @@ def parse_ttn(body: dict) -> NormalizedUplink | None:
     uplink = body.get("uplink_message") or {}
     metrics = uplink.get("decoded_payload")
     if not metrics or not isinstance(metrics, dict):
-        logger.warning("ttn: missing or empty uplink_message.decoded_payload — configure a payload formatter in TTN")
+        logger.warning(
+            "ttn: missing or empty uplink_message.decoded_payload — configure a payload formatter in TTN"
+        )
         return None
 
     correlation_ids = body.get("correlation_ids") or []
@@ -134,7 +139,7 @@ def parse_ttn(body: dict) -> NormalizedUplink | None:
             radio["rssi"] = rssi
         if (snr := _safe_float(best.get("snr"))) is not None:
             radio["snr"] = snr
-        gw_ids = (best.get("gateway_ids") or {})
+        gw_ids = best.get("gateway_ids") or {}
         if gw := gw_ids.get("gateway_id"):
             radio["gateway_id"] = gw
 
@@ -160,6 +165,7 @@ def parse_ttn(body: dict) -> NormalizedUplink | None:
 # Helium
 # ---------------------------------------------------------------------------
 
+
 def parse_helium(body: dict) -> NormalizedUplink | None:
     """Parse a Helium Console HTTP integration uplink payload."""
     dev_eui = body.get("dev_eui")
@@ -170,7 +176,9 @@ def parse_helium(body: dict) -> NormalizedUplink | None:
     decoded = body.get("decoded") or {}
     metrics = decoded.get("payload")
     if not metrics or not isinstance(metrics, dict):
-        logger.warning("helium: missing or empty decoded.payload — configure a function decoder in Helium")
+        logger.warning(
+            "helium: missing or empty decoded.payload — configure a function decoder in Helium"
+        )
         return None
 
     dedup_id = body.get("id") or dev_eui + str(body.get("fcnt", ""))
@@ -205,6 +213,7 @@ def parse_helium(body: dict) -> NormalizedUplink | None:
 # ---------------------------------------------------------------------------
 # Actility ThingPark
 # ---------------------------------------------------------------------------
+
 
 def parse_actility(body: dict) -> NormalizedUplink | None:
     """Parse an Actility ThingPark uplink webhook payload."""
@@ -248,6 +257,7 @@ def parse_actility(body: dict) -> NormalizedUplink | None:
 # ---------------------------------------------------------------------------
 # Custom / Other — escape hatch for any LNS
 # ---------------------------------------------------------------------------
+
 
 def parse_custom(body: dict) -> NormalizedUplink | None:
     """Parse a custom/generic uplink payload.

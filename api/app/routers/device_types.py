@@ -62,6 +62,7 @@ async def _fetch_device_counts(
 # LIST DEVICE TYPES
 # ============================================================================
 
+
 @router.get("")
 async def list_device_types(
     tenant_id: UUID,
@@ -94,14 +95,14 @@ async def list_device_types(
     if search:
         search_filter = f"%{search}%"
         query = query.where(
-            (DeviceType.name.ilike(search_filter)) |
-            (DeviceType.manufacturer.ilike(search_filter)) |
-            (DeviceType.model.ilike(search_filter))
+            (DeviceType.name.ilike(search_filter))
+            | (DeviceType.manufacturer.ilike(search_filter))
+            | (DeviceType.model.ilike(search_filter))
         )
         count_query = count_query.where(
-            (DeviceType.name.ilike(search_filter)) |
-            (DeviceType.manufacturer.ilike(search_filter)) |
-            (DeviceType.model.ilike(search_filter))
+            (DeviceType.name.ilike(search_filter))
+            | (DeviceType.manufacturer.ilike(search_filter))
+            | (DeviceType.model.ilike(search_filter))
         )
 
     # Get total count
@@ -129,13 +130,14 @@ async def list_device_types(
             "per_page": per_page,
             "total": total,
             "total_pages": (total + per_page - 1) // per_page,
-        }
+        },
     )
 
 
 # ============================================================================
 # CREATE DEVICE TYPE
 # ============================================================================
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_device_type(
@@ -153,16 +155,18 @@ async def create_device_type(
     data_model_json = []
     if device_type_data.data_model:
         for field in device_type_data.data_model:
-            data_model_json.append({
-                "name": field.name,
-                "type": field.type,
-                "unit": field.unit,
-                "description": field.description,
-                "min": field.min_value,
-                "max": field.max_value,
-                "required": field.required,
-                "simulation": field.simulation.model_dump() if field.simulation else None,
-            })
+            data_model_json.append(
+                {
+                    "name": field.name,
+                    "type": field.type,
+                    "unit": field.unit,
+                    "description": field.description,
+                    "min": field.min_value,
+                    "max": field.max_value,
+                    "required": field.required,
+                    "simulation": field.simulation.model_dump() if field.simulation else None,
+                }
+            )
 
     capabilities_json = device_type_data.capabilities or []
 
@@ -213,6 +217,7 @@ async def create_device_type(
 # GET DEVICE TYPE
 # ============================================================================
 
+
 @router.get("/{device_type_id}")
 async def get_device_type(
     tenant_id: UUID,
@@ -256,6 +261,7 @@ async def get_device_type(
 # UPDATE DEVICE TYPE
 # ============================================================================
 
+
 @router.put("/{device_type_id}")
 async def update_device_type(
     tenant_id: UUID,
@@ -289,16 +295,18 @@ async def update_device_type(
     if "data_model" in update_dict and update_data.data_model is not None:
         data_model_json = []
         for field in update_data.data_model:
-            data_model_json.append({
-                "name": field.name,
-                "type": field.type,
-                "unit": field.unit,
-                "description": field.description,
-                "min": field.min_value,
-                "max": field.max_value,
-                "required": field.required,
-                "simulation": field.simulation.model_dump() if field.simulation else None,
-            })
+            data_model_json.append(
+                {
+                    "name": field.name,
+                    "type": field.type,
+                    "unit": field.unit,
+                    "description": field.description,
+                    "min": field.min_value,
+                    "max": field.max_value,
+                    "required": field.required,
+                    "simulation": field.simulation.model_dump() if field.simulation else None,
+                }
+            )
         update_dict["data_model"] = data_model_json
 
     if "default_settings" in update_dict and update_data.default_settings:
@@ -335,6 +343,7 @@ async def update_device_type(
 # ============================================================================
 # DELETE DEVICE TYPE
 # ============================================================================
+
 
 @router.delete("/{device_type_id}")
 async def delete_device_type(
@@ -388,6 +397,7 @@ async def delete_device_type(
 # ============================================================================
 # CLONE DEVICE TYPE
 # ============================================================================
+
 
 @router.post("/{device_type_id}/clone", status_code=status.HTTP_201_CREATED)
 async def clone_device_type(
@@ -448,6 +458,7 @@ async def clone_device_type(
 # ============================================================================
 # DISCOVERED METRICS
 # ============================================================================
+
 
 @router.get("/{device_type_id}/discovered-metrics")
 async def get_discovered_metrics(
@@ -514,11 +525,16 @@ async def get_discovered_metrics(
     """
 
     try:
-        rows = (await session.execute(text(query_sql), {
-            "tenant_id": str(current_tenant),
-            "device_type_id": str(device_type_id),
-            "days": days,
-        })).fetchall()
+        rows = (
+            await session.execute(
+                text(query_sql),
+                {
+                    "tenant_id": str(current_tenant),
+                    "device_type_id": str(device_type_id),
+                    "days": days,
+                },
+            )
+        ).fetchall()
 
         metrics = [
             {
@@ -530,11 +546,13 @@ async def get_discovered_metrics(
             for row in rows
         ]
 
-        return SuccessResponse(data={
-            "metrics": metrics,
-            "total_devices": total_devices,
-            "schema_fields": sorted(schema_fields),
-        })
+        return SuccessResponse(
+            data={
+                "metrics": metrics,
+                "total_devices": total_devices,
+                "schema_fields": sorted(schema_fields),
+            }
+        )
 
     except Exception as e:
         logger.error(f"Discovered metrics query failed: {e}", exc_info=True)

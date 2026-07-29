@@ -35,48 +35,72 @@ class NotificationDispatcher:
 
     async def process_alert_event(self, alert_event_id: UUID) -> List[UUID]:
         """Process alert event and send notifications."""
-        alert_event = (await self.session.execute(
-            select(AlertEvent).where(AlertEvent.id == alert_event_id)
-        )).scalars().first()
+        alert_event = (
+            (await self.session.execute(select(AlertEvent).where(AlertEvent.id == alert_event_id)))
+            .scalars()
+            .first()
+        )
 
         if not alert_event:
             logger.error(f"Alert event {alert_event_id} not found")
             return []
 
-        alert_rule = (await self.session.execute(
-            select(UnifiedAlertRule).where(UnifiedAlertRule.id == alert_event.alert_rule_id)
-        )).scalars().first()
+        alert_rule = (
+            (
+                await self.session.execute(
+                    select(UnifiedAlertRule).where(UnifiedAlertRule.id == alert_event.alert_rule_id)
+                )
+            )
+            .scalars()
+            .first()
+        )
 
-        device = (await self.session.execute(
-            select(Device).where(Device.id == alert_event.device_id)
-        )).scalars().first()
+        device = (
+            (await self.session.execute(select(Device).where(Device.id == alert_event.device_id)))
+            .scalars()
+            .first()
+        )
 
         if not alert_rule or not device:
             return []
 
-        notification_rules = (await self.session.execute(
-            select(NotificationRule).where(
-                and_(
-                    NotificationRule.alert_rule_id == alert_rule.id,
-                    NotificationRule.enabled == True,
+        notification_rules = (
+            (
+                await self.session.execute(
+                    select(NotificationRule).where(
+                        and_(
+                            NotificationRule.alert_rule_id == alert_rule.id,
+                            NotificationRule.enabled == True,
+                        )
+                    )
                 )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
 
         notification_ids = []
         for notif_rule in notification_rules:
-            channel = (await self.session.execute(
-                select(NotificationChannel).where(
-                    NotificationChannel.id == notif_rule.channel_id
+            channel = (
+                (
+                    await self.session.execute(
+                        select(NotificationChannel).where(
+                            NotificationChannel.id == notif_rule.channel_id
+                        )
+                    )
                 )
-            )).scalars().first()
+                .scalars()
+                .first()
+            )
 
             if not channel or not channel.enabled:
                 continue
 
-            user = (await self.session.execute(
-                select(User).where(User.id == channel.user_id)
-            )).scalars().first()
+            user = (
+                (await self.session.execute(select(User).where(User.id == channel.user_id)))
+                .scalars()
+                .first()
+            )
 
             if await self._is_throttled(channel, alert_rule):
                 continue
@@ -91,18 +115,26 @@ class NotificationDispatcher:
 
         return notification_ids
 
-    async def _is_throttled(self, channel: NotificationChannel, alert_rule: UnifiedAlertRule) -> bool:
+    async def _is_throttled(
+        self, channel: NotificationChannel, alert_rule: UnifiedAlertRule
+    ) -> bool:
         """Check if channel is throttled."""
         cutoff = datetime.utcnow() - timedelta(minutes=self.throttle_minutes)
-        recent = (await self.session.execute(
-            select(Notification).where(
-                and_(
-                    Notification.channel_id == channel.id,
-                    Notification.created_at > cutoff,
-                    Notification.status != "skipped",
+        recent = (
+            (
+                await self.session.execute(
+                    select(Notification).where(
+                        and_(
+                            Notification.channel_id == channel.id,
+                            Notification.created_at > cutoff,
+                            Notification.status != "skipped",
+                        )
+                    )
                 )
             )
-        )).scalars().first()
+            .scalars()
+            .first()
+        )
         return recent is not None
 
     async def _send(
@@ -118,15 +150,21 @@ class NotificationDispatcher:
         if not service:
             return None
 
-        template = (await self.session.execute(
-            select(NotificationTemplate).where(
-                and_(
-                    NotificationTemplate.tenant_id == self.tenant_id,
-                    NotificationTemplate.channel_type == channel.channel_type,
-                    NotificationTemplate.enabled == True,
+        template = (
+            (
+                await self.session.execute(
+                    select(NotificationTemplate).where(
+                        and_(
+                            NotificationTemplate.tenant_id == self.tenant_id,
+                            NotificationTemplate.channel_type == channel.channel_type,
+                            NotificationTemplate.enabled == True,
+                        )
+                    )
                 )
             )
-        )).scalars().first()
+            .scalars()
+            .first()
+        )
 
         variables = {
             "device_name": device.name,
@@ -139,7 +177,9 @@ class NotificationDispatcher:
 
         if template:
             message = service.render_template(template.body, variables)
-            subject = service.render_template(template.subject, variables) if template.subject else None
+            subject = (
+                service.render_template(template.subject, variables) if template.subject else None
+            )
         else:
             message = f"{device.name}: Alert triggered"
             subject = None
@@ -207,4 +247,3 @@ class NotificationDispatcher:
             return service.send(webhook_url, payload, secret)
 
         return False, "Unknown channel type"
-

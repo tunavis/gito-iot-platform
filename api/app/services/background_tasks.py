@@ -58,7 +58,7 @@ class NotificationBackgroundTasks:
         """Start background task scheduler."""
         try:
             self.scheduler = AsyncIOScheduler()
-            
+
             # Process notification queue every 10 seconds
             self.scheduler.add_job(
                 self.process_notification_queue,
@@ -68,7 +68,7 @@ class NotificationBackgroundTasks:
                 coalesce=True,
                 max_instances=1,
             )
-            
+
             # Retry failed notifications every 30 seconds
             self.scheduler.add_job(
                 self.retry_failed_notifications,
@@ -78,7 +78,7 @@ class NotificationBackgroundTasks:
                 coalesce=True,
                 max_instances=1,
             )
-            
+
             # Clean up old notifications daily
             self.scheduler.add_job(
                 self.cleanup_old_notifications,
@@ -165,7 +165,7 @@ class NotificationBackgroundTasks:
 
     async def process_notification_queue(self) -> None:
         """Process pending notifications from queue.
-        
+
         This runs periodically and dispatches notifications that are
         waiting in the notification_queue table.
         """
@@ -173,47 +173,50 @@ class NotificationBackgroundTasks:
             # Get a database session
             session_gen = get_session()
             session = await session_gen.__anext__()
-            
+
             try:
                 # Query pending queue items
-                pending_items = (await session.execute(
-                    select(NotificationQueue).where(
-                        NotificationQueue.status == "pending"
-                    ).order_by(NotificationQueue.created_at)
-                )).scalars().all()
-                
+                pending_items = (
+                    (
+                        await session.execute(
+                            select(NotificationQueue)
+                            .where(NotificationQueue.status == "pending")
+                            .order_by(NotificationQueue.created_at)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+
                 if not pending_items:
                     return
-                
+
                 logger.info(f"Processing {len(pending_items)} pending notifications")
-                
+
                 for queue_item in pending_items:
                     try:
                         # Mark as processing
                         queue_item.status = "processing"
                         queue_item.attempted_at = datetime.utcnow()
                         await session.commit()
-                        
+
                         # Dispatch the notification
-                        dispatcher = NotificationDispatcher(
-                            session,
-                            queue_item.tenant_id
-                        )
-                        
+                        dispatcher = NotificationDispatcher(session, queue_item.tenant_id)
+
                         notification_ids = await dispatcher.process_alert_event(
                             queue_item.alert_event_id
                         )
-                        
+
                         # Mark queue item as completed
                         queue_item.status = "completed"
                         queue_item.processed_at = datetime.utcnow()
-                        
+
                         logger.info(
                             f"Notification dispatched",
                             extra={
                                 "alert_event_id": str(queue_item.alert_event_id),
-                                "notification_count": len(notification_ids)
-                            }
+                                "notification_count": len(notification_ids),
+                            },
                         )
                     except Exception as e:
                         queue_item.status = "failed"
@@ -222,8 +225,8 @@ class NotificationBackgroundTasks:
                             f"Failed to process notification queue item",
                             extra={
                                 "alert_event_id": str(queue_item.alert_event_id),
-                                "error": str(e)
-                            }
+                                "error": str(e),
+                            },
                         )
                     finally:
                         await session.commit()
@@ -234,7 +237,7 @@ class NotificationBackgroundTasks:
 
     async def retry_failed_notifications(self) -> None:
         """Retry failed notifications with exponential backoff.
-        
+
         Notifications can be retried up to 5 times with exponential backoff:
         - Attempt 1: immediate
         - Attempt 2: 1 minute
@@ -245,47 +248,57 @@ class NotificationBackgroundTasks:
         try:
             session_gen = get_session()
             session = await session_gen.__anext__()
-            
+
             try:
                 # Find failed notifications ready for retry
-                failed_notifications = (await session.execute(
-                    select(Notification).where(
-                        and_(
-                            Notification.status == "pending",
-                            Notification.retry_count < 5,
-                            Notification.next_retry_at <= datetime.utcnow(),
+                failed_notifications = (
+                    (
+                        await session.execute(
+                            select(Notification)
+                            .where(
+                                and_(
+                                    Notification.status == "pending",
+                                    Notification.retry_count < 5,
+                                    Notification.next_retry_at <= datetime.utcnow(),
+                                )
+                            )
+                            .order_by(Notification.created_at)
                         )
-                    ).order_by(Notification.created_at)
-                )).scalars().all()
-                
+                    )
+                    .scalars()
+                    .all()
+                )
+
                 if not failed_notifications:
                     return
-                
-                logger.info(
-                    f"Retrying {len(failed_notifications)} failed notifications"
-                )
-                
+
+                logger.info(f"Retrying {len(failed_notifications)} failed notifications")
+
                 for notif in failed_notifications:
                     try:
                         # Increment retry count
                         notif.retry_count += 1
-                        
+
                         # Calculate exponential backoff
                         backoff_minutes = self._calculate_backoff(notif.retry_count)
-                        notif.next_retry_at = datetime.utcnow() + timedelta(
-                            minutes=backoff_minutes
-                        )
-                        
+                        notif.next_retry_at = datetime.utcnow() + timedelta(minutes=backoff_minutes)
+
                         # Get the notification service and retry
                         from app.services.channels import ChannelFactory
                         from app.models import NotificationChannel
-                        
-                        channel = (await session.execute(
-                            select(NotificationChannel).where(
-                                NotificationChannel.id == notif.channel_id
+
+                        channel = (
+                            (
+                                await session.execute(
+                                    select(NotificationChannel).where(
+                                        NotificationChannel.id == notif.channel_id
+                                    )
+                                )
                             )
-                        )).scalars().first()
-                        
+                            .scalars()
+                            .first()
+                        )
+
                         if not channel:
                             notif.status = "failed"
                             notif.error_message = "Channel not found"
@@ -301,18 +314,16 @@ class NotificationBackgroundTasks:
                             notif.error_message = f"Service not available: {channel.channel_type}"
                             await session.commit()
                             continue
-                        
+
                         # Attempt to send again (use existing content from notification record)
                         # For now, we'll mark it ready for next attempt
                         logger.debug(
                             f"Scheduled retry for notification {notif.id}",
-                            extra={"retry_count": notif.retry_count}
+                            extra={"retry_count": notif.retry_count},
                         )
-                        
+
                     except Exception as e:
-                        logger.error(
-                            f"Error retrying notification {notif.id}: {e}"
-                        )
+                        logger.error(f"Error retrying notification {notif.id}: {e}")
                     finally:
                         await session.commit()
             finally:
@@ -322,28 +333,34 @@ class NotificationBackgroundTasks:
 
     async def cleanup_old_notifications(self) -> None:
         """Clean up old completed/failed notifications.
-        
+
         Keeps notifications for 30 days then archives/deletes them
         based on tenant retention policy.
         """
         try:
             session_gen = get_session()
             session = await session_gen.__anext__()
-            
+
             try:
                 # Default retention: 30 days
                 cutoff_date = datetime.utcnow() - timedelta(days=30)
-                
+
                 # Find old completed/failed notifications
-                old_notifications = (await session.execute(
-                    select(Notification).where(
-                        and_(
-                            Notification.status.in_(["sent", "failed"]),
-                            Notification.created_at < cutoff_date
+                old_notifications = (
+                    (
+                        await session.execute(
+                            select(Notification).where(
+                                and_(
+                                    Notification.status.in_(["sent", "failed"]),
+                                    Notification.created_at < cutoff_date,
+                                )
+                            )
                         )
                     )
-                )).scalars().all()
-                
+                    .scalars()
+                    .all()
+                )
+
                 if not old_notifications:
                     return
 
@@ -432,44 +449,46 @@ class NotificationBackgroundTasks:
             session = await session_gen.__anext__()
 
             try:
-                tenants = (await session.execute(
-                    text(
-                        "SELECT id, metadata->>'retention_days' AS retention_days "
-                        "FROM tenants WHERE status = 'active'"
+                tenants = (
+                    await session.execute(
+                        text(
+                            "SELECT id, metadata->>'retention_days' AS retention_days "
+                            "FROM tenants WHERE status = 'active'"
+                        )
                     )
-                )).fetchall()
+                ).fetchall()
 
                 total_telemetry = 0
-                total_events    = 0
+                total_events = 0
                 # Longest retention anyone is entitled to — the ONLY floor at which a
                 # whole chunk can be physically dropped without losing data another
                 # tenant still keeps (chunks are shared across tenants). Using the
                 # minimum here would drop data long-retention tenants are entitled to.
-                max_retention   = 1
+                max_retention = 1
 
                 for row in tenants:
                     tenant_id = str(row[0])
-                    pref      = int(row[1]) if row[1] else None
+                    pref = int(row[1]) if row[1] else None
 
-                    ent            = await ent_service.resolve(session, tenant_id, redis=None)
+                    ent = await ent_service.resolve(session, tenant_id, redis=None)
                     retention_days = _effective_retention_days(pref, ent.limit("retention.days"))
-                    cutoff         = datetime.utcnow() - timedelta(days=retention_days)
-                    max_retention  = max(max_retention, retention_days)
+                    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+                    max_retention = max(max_retention, retention_days)
 
                     # Per-tenant DELETE — TimescaleDB chunk pruning makes this fast
                     result = await session.execute(
                         text("DELETE FROM telemetry WHERE tenant_id = :tid AND ts < :cutoff"),
                         {"tid": tenant_id, "cutoff": cutoff},
                     )
-                    deleted_telemetry  = result.rowcount
-                    total_telemetry   += deleted_telemetry
+                    deleted_telemetry = result.rowcount
+                    total_telemetry += deleted_telemetry
 
                     result = await session.execute(
                         text("DELETE FROM events WHERE tenant_id = :tid AND ts < :cutoff"),
                         {"tid": tenant_id, "cutoff": cutoff},
                     )
-                    deleted_events  = result.rowcount
-                    total_events   += deleted_events
+                    deleted_events = result.rowcount
+                    total_events += deleted_events
 
                     if deleted_telemetry or deleted_events:
                         logger.info(
@@ -521,7 +540,8 @@ class NotificationBackgroundTasks:
             try:
                 # Single query: join devices with their device type threshold, filter stale online devices
                 result = await session.execute(
-                    text("""
+                    text(
+                        """
                         UPDATE devices d
                         SET status = 'offline', updated_at = now()
                         FROM device_types dt
@@ -535,13 +555,15 @@ class NotificationBackgroundTasks:
                               ) * interval '1 second'
                           )
                         RETURNING d.id, d.tenant_id
-                    """)
+                    """
+                    )
                 )
                 rows = result.fetchall()
 
                 # Also catch devices with no device_type_id using the default threshold
                 result2 = await session.execute(
-                    text("""
+                    text(
+                        """
                         UPDATE devices
                         SET status = 'offline', updated_at = now()
                         WHERE device_type_id IS NULL
@@ -549,7 +571,8 @@ class NotificationBackgroundTasks:
                           AND last_seen IS NOT NULL
                           AND last_seen < now() - interval '10 minutes'
                         RETURNING id, tenant_id
-                    """)
+                    """
+                    )
                 )
                 rows2 = result2.fetchall()
 
@@ -613,13 +636,15 @@ class NotificationBackgroundTasks:
 
             try:
                 result = await session.execute(
-                    text("""
+                    text(
+                        """
                         UPDATE device_commands
                         SET status = 'timed_out', completed_at = now()
                         WHERE status IN ('pending', 'sent', 'delivered')
                           AND expires_at < now()
                         RETURNING id
-                    """)
+                    """
+                    )
                 )
                 expired = result.fetchall()
                 if expired:
@@ -633,19 +658,19 @@ class NotificationBackgroundTasks:
     @staticmethod
     def _calculate_backoff(attempt: int) -> int:
         """Calculate exponential backoff in minutes.
-        
+
         Args:
             attempt: Retry attempt number (1-5)
-            
+
         Returns:
             Minutes to wait before next attempt
         """
         backoff_schedule = {
-            1: 0,      # Immediate (2nd attempt)
-            2: 1,      # 1 minute
-            3: 2,      # 2 minutes
-            4: 5,      # 5 minutes
-            5: 10,     # 10 minutes
+            1: 0,  # Immediate (2nd attempt)
+            2: 1,  # 1 minute
+            3: 2,  # 2 minutes
+            4: 5,  # 5 minutes
+            5: 10,  # 10 minutes
         }
         return backoff_schedule.get(attempt, 10)
 

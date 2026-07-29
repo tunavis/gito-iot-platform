@@ -4,7 +4,18 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import Column, String, Float, Integer, Boolean, Text, DateTime, ForeignKey, Index, CheckConstraint
+from sqlalchemy import (
+    Column,
+    String,
+    Float,
+    Integer,
+    Boolean,
+    Text,
+    DateTime,
+    ForeignKey,
+    Index,
+    CheckConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import text
 from sqlalchemy.orm import validates
@@ -13,29 +24,18 @@ from app.models.base import BaseModel
 
 
 # Operator mapping between API format and DB format
-OPERATOR_API_TO_DB = {
-    "gt": ">",
-    "gte": ">=",
-    "lt": "<",
-    "lte": "<=",
-    "eq": "==",
-    "neq": "!="
-}
+OPERATOR_API_TO_DB = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "eq": "==", "neq": "!="}
 
 OPERATOR_DB_TO_API = {v: k for k, v in OPERATOR_API_TO_DB.items()}
 
 # Severity mapping between API format and DB format
-SEVERITY_API_TO_DB = {
-    "info": "MINOR",
-    "warning": "WARNING",
-    "critical": "CRITICAL"
-}
+SEVERITY_API_TO_DB = {"info": "MINOR", "warning": "WARNING", "critical": "CRITICAL"}
 
 SEVERITY_DB_TO_API = {
     "MINOR": "info",
     "WARNING": "warning",
     "MAJOR": "warning",  # Map MAJOR to warning
-    "CRITICAL": "critical"
+    "CRITICAL": "critical",
 }
 
 # See the comment above RULE_TYPE_DB_VALUES — same issue applies to severity:
@@ -48,15 +48,9 @@ SEVERITY_DB_VALUES = {
 }
 
 # Rule type mapping between API format and DB format
-RULE_TYPE_API_TO_DB = {
-    "THRESHOLD": "SIMPLE",
-    "COMPOSITE": "COMPLEX"
-}
+RULE_TYPE_API_TO_DB = {"THRESHOLD": "SIMPLE", "COMPOSITE": "COMPLEX"}
 
-RULE_TYPE_DB_TO_API = {
-    "SIMPLE": "THRESHOLD",
-    "COMPLEX": "COMPOSITE"
-}
+RULE_TYPE_DB_TO_API = {"SIMPLE": "THRESHOLD", "COMPLEX": "COMPOSITE"}
 
 # `rule_type`/`severity` are only converted to DB format by the @validates
 # hooks below, which run on Python-side assignment, NOT when SQLAlchemy loads
@@ -97,39 +91,52 @@ class UnifiedAlertRule(BaseModel):
             {"field": "humidity", "operator": "gt", "threshold": 80, "weight": 1}
         ], logic='AND'
     """
+
     __tablename__ = "alert_rules"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     # Common fields (mapped to existing DB columns)
     name = Column(String(255), nullable=True)  # Made nullable to match existing data
     description = Column(Text, nullable=True)
-    rule_type = Column(String(20), nullable=False, default="THRESHOLD", index=True)  # THRESHOLD, COMPOSITE
-    severity = Column(String(20), nullable=False, default="MAJOR", index=True)  # CRITICAL, MAJOR, MINOR, WARNING
-    active = Column("active", Boolean, default=True, nullable=False, index=True)  # DB uses 'active' not 'enabled'
+    rule_type = Column(
+        String(20), nullable=False, default="THRESHOLD", index=True
+    )  # THRESHOLD, COMPOSITE
+    severity = Column(
+        String(20), nullable=False, default="MAJOR", index=True
+    )  # CRITICAL, MAJOR, MINOR, WARNING
+    active = Column(
+        "active", Boolean, default=True, nullable=False, index=True
+    )  # DB uses 'active' not 'enabled'
     cooldown_minutes = Column(Integer, default=5, nullable=False)
-    last_fired_at = Column("last_fired_at", DateTime(timezone=True), nullable=True)  # DB uses 'last_fired_at' not 'last_triggered_at'
-    
+    last_fired_at = Column(
+        "last_fired_at", DateTime(timezone=True), nullable=True
+    )  # DB uses 'last_fired_at' not 'last_triggered_at'
+
     # THRESHOLD-specific fields (nullable for COMPOSITE rules)
-    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True)
+    device_id = Column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     metric = Column(String(50), nullable=True)  # temperature, humidity, battery, rssi, pressure
     operator = Column(String(10), nullable=True)  # gt, gte, lt, lte, eq, neq
     threshold = Column(Float, nullable=True)
-    
+
     # COMPOSITE-specific fields (nullable for THRESHOLD rules)
     conditions = Column(JSONB, nullable=True)  # [{field, operator, threshold, weight}, ...]
     logic = Column(String(10), nullable=True)  # AND, OR
-    
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    __table_args__ = (
-        {"extend_existing": True}  # Use existing table schema
+    updated_at = Column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
-    @validates('operator')
+    __table_args__ = {"extend_existing": True}  # Use existing table schema
+
+    @validates("operator")
     def validate_operator(self, key, value):
         """Convert API operator format (gt, gte) to DB format (>, >=)."""
         if value and value in OPERATOR_API_TO_DB:
@@ -137,7 +144,7 @@ class UnifiedAlertRule(BaseModel):
         # If already in DB format or None, return as-is
         return value
 
-    @validates('severity')
+    @validates("severity")
     def validate_severity(self, key, value):
         """Convert API severity format (info, warning, critical) to DB format (MINOR, WARNING, CRITICAL)."""
         if value and value in SEVERITY_API_TO_DB:
@@ -145,7 +152,7 @@ class UnifiedAlertRule(BaseModel):
         # If already in DB format or None, return as-is
         return value
 
-    @validates('rule_type')
+    @validates("rule_type")
     def validate_rule_type(self, key, value):
         """Convert API rule_type format (THRESHOLD, COMPOSITE) to DB format (SIMPLE, COMPLEX)."""
         if value and value in RULE_TYPE_API_TO_DB:
@@ -182,10 +189,14 @@ class UnifiedAlertRule(BaseModel):
     def to_response_dict(self) -> dict:
         """Convert to response dictionary."""
         # Convert operator from DB format (>) back to API format (gt)
-        operator_api = OPERATOR_DB_TO_API.get(self.operator, self.operator) if self.operator else None
+        operator_api = (
+            OPERATOR_DB_TO_API.get(self.operator, self.operator) if self.operator else None
+        )
 
         # Convert severity from DB format (WARNING, CRITICAL) back to API format (warning, critical)
-        severity_api = SEVERITY_DB_TO_API.get(self.severity, self.severity.lower() if self.severity else None)
+        severity_api = SEVERITY_DB_TO_API.get(
+            self.severity, self.severity.lower() if self.severity else None
+        )
 
         # Convert rule_type from DB format (SIMPLE, COMPLEX) back to API format (THRESHOLD, COMPOSITE)
         rule_type_api = RULE_TYPE_DB_TO_API.get(self.rule_type, self.rule_type)
@@ -193,13 +204,17 @@ class UnifiedAlertRule(BaseModel):
         return {
             "id": str(self.id),
             "tenant_id": str(self.tenant_id),
-            "name": self.name if self.name else (f"{self.metric} Alert" if self.metric else "Alert Rule"),
+            "name": self.name
+            if self.name
+            else (f"{self.metric} Alert" if self.metric else "Alert Rule"),
             "description": self.description,
             "rule_type": rule_type_api,  # Convert DB format to API format
             "severity": severity_api,  # Convert DB format to API format
             "enabled": self.active,  # Map 'active' DB field to 'enabled' API field
             "cooldown_minutes": self.cooldown_minutes,
-            "last_triggered_at": self.last_fired_at.isoformat() if self.last_fired_at else None,  # Map 'last_fired_at' to 'last_triggered_at'
+            "last_triggered_at": self.last_fired_at.isoformat()
+            if self.last_fired_at
+            else None,  # Map 'last_fired_at' to 'last_triggered_at'
             "device_id": str(self.device_id) if self.device_id else None,
             "metric": self.metric,
             "operator": operator_api,  # Convert DB format to API format

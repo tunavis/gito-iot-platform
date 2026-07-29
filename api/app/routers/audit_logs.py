@@ -25,12 +25,18 @@ async def list_audit_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     user_id: Optional[UUID] = Query(None, description="Filter by user"),
-    action: Optional[str] = Query(None, description="Filter by action (create, update, delete, login)"),
-    resource_type: Optional[str] = Query(None, description="Filter by resource type (device, user, alert, etc.)"),
+    action: Optional[str] = Query(
+        None, description="Filter by action (create, update, delete, login)"
+    ),
+    resource_type: Optional[str] = Query(
+        None, description="Filter by resource type (device, user, alert, etc.)"
+    ),
     resource_id: Optional[UUID] = Query(None, description="Filter by specific resource ID"),
     start_date: Optional[datetime] = Query(None, description="Filter logs after this date"),
     end_date: Optional[datetime] = Query(None, description="Filter logs before this date"),
-    search: Optional[str] = Query(None, max_length=255, description="Search in action or resource_type"),
+    search: Optional[str] = Query(
+        None, max_length=255, description="Search in action or resource_type"
+    ),
 ):
     """List audit logs for a tenant with comprehensive filtering.
 
@@ -59,7 +65,7 @@ async def list_audit_logs(
     if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to view audit logs"
+            detail="Insufficient permissions to view audit logs",
         )
 
     await session.set_tenant_context(tenant_id)
@@ -90,7 +96,7 @@ async def list_audit_logs(
         query = query.where(
             or_(
                 func.lower(AuditLog.action).like(search_pattern),
-                func.lower(AuditLog.resource_type).like(search_pattern)
+                func.lower(AuditLog.resource_type).like(search_pattern),
             )
         )
 
@@ -141,7 +147,7 @@ async def get_audit_stats(
     if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to view audit logs"
+            detail="Insufficient permissions to view audit logs",
         )
 
     await session.set_tenant_context(tenant_id)
@@ -151,47 +157,48 @@ async def get_audit_stats(
     start_date = end_date - timedelta(days=days)
 
     # Get action counts
-    action_query = select(
-        AuditLog.action,
-        func.count(AuditLog.id).label('count')
-    ).where(
-        AuditLog.tenant_id == tenant_id,
-        AuditLog.created_at >= start_date
-    ).group_by(AuditLog.action)
+    action_query = (
+        select(AuditLog.action, func.count(AuditLog.id).label("count"))
+        .where(AuditLog.tenant_id == tenant_id, AuditLog.created_at >= start_date)
+        .group_by(AuditLog.action)
+    )
 
     action_result = await session.execute(action_query)
     action_counts = {row[0]: row[1] for row in action_result.fetchall()}
 
     # Get resource type counts
-    resource_query = select(
-        AuditLog.resource_type,
-        func.count(AuditLog.id).label('count')
-    ).where(
-        AuditLog.tenant_id == tenant_id,
-        AuditLog.created_at >= start_date,
-        AuditLog.resource_type.isnot(None)
-    ).group_by(AuditLog.resource_type)
+    resource_query = (
+        select(AuditLog.resource_type, func.count(AuditLog.id).label("count"))
+        .where(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.created_at >= start_date,
+            AuditLog.resource_type.isnot(None),
+        )
+        .group_by(AuditLog.resource_type)
+    )
 
     resource_result = await session.execute(resource_query)
     resource_counts = {row[0]: row[1] for row in resource_result.fetchall()}
 
     # Get top active users
-    user_query = select(
-        AuditLog.user_id,
-        func.count(AuditLog.id).label('count')
-    ).where(
-        AuditLog.tenant_id == tenant_id,
-        AuditLog.created_at >= start_date,
-        AuditLog.user_id.isnot(None)
-    ).group_by(AuditLog.user_id).order_by(func.count(AuditLog.id).desc()).limit(10)
+    user_query = (
+        select(AuditLog.user_id, func.count(AuditLog.id).label("count"))
+        .where(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.created_at >= start_date,
+            AuditLog.user_id.isnot(None),
+        )
+        .group_by(AuditLog.user_id)
+        .order_by(func.count(AuditLog.id).desc())
+        .limit(10)
+    )
 
     user_result = await session.execute(user_query)
     top_users = [{"user_id": str(row[0]), "action_count": row[1]} for row in user_result.fetchall()]
 
     # Get total log count
     total_query = select(func.count(AuditLog.id)).where(
-        AuditLog.tenant_id == tenant_id,
-        AuditLog.created_at >= start_date
+        AuditLog.tenant_id == tenant_id, AuditLog.created_at >= start_date
     )
     total_logs = (await session.execute(total_query)).scalar()
 
@@ -238,7 +245,7 @@ async def get_audit_log(
     if current_user_info["role"] not in ["TENANT_ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to view audit logs"
+            detail="Insufficient permissions to view audit logs",
         )
 
     await session.set_tenant_context(tenant_id)

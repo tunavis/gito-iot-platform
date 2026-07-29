@@ -33,9 +33,7 @@ class CommandDispatchService:
     def __init__(self, redis_url: Optional[str] = None):
         self._redis_url = redis_url or settings.REDIS_URL
 
-    async def dispatch(
-        self, device: Device, command: DeviceCommand
-    ) -> tuple[bool, str]:
+    async def dispatch(self, device: Device, command: DeviceCommand) -> tuple[bool, str]:
         """Dispatch a command to a device.
 
         Returns:
@@ -72,9 +70,7 @@ class CommandDispatchService:
             logger.error(f"Command dispatch failed for device {device.id}: {e}")
             return False, str(e)
 
-    async def _dispatch_mqtt(
-        self, device: Device, payload: dict
-    ) -> tuple[bool, str]:
+    async def _dispatch_mqtt(self, device: Device, payload: dict) -> tuple[bool, str]:
         """Publish command to Redis/KeyDB pub-sub → MQTT broker bridges to device."""
         redis = await aioredis.from_url(self._redis_url, decode_responses=True)
         try:
@@ -84,9 +80,7 @@ class CommandDispatchService:
         finally:
             await redis.aclose()
 
-    async def _dispatch_http(
-        self, device: Device, payload: dict
-    ) -> tuple[bool, str]:
+    async def _dispatch_http(self, device: Device, payload: dict) -> tuple[bool, str]:
         """POST command to the device's registered webhook/callback URL."""
         attrs = device.attributes or {}
         target_url = attrs.get("webhook_url") or attrs.get("callback_url")
@@ -104,9 +98,7 @@ class CommandDispatchService:
                 text = await resp.text()
                 return False, f"HTTP device returned {resp.status}: {text}"
 
-    async def _dispatch_lorawan(
-        self, device: Device, payload: dict
-    ) -> tuple[bool, str]:
+    async def _dispatch_lorawan(self, device: Device, payload: dict) -> tuple[bool, str]:
         """Send command as ChirpStack downlink (base64 JSON on fPort 201)."""
         attrs = device.attributes or {}
         chirpstack_url = attrs.get("chirpstack_server") or settings.CHIRPSTACK_API_URL

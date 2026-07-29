@@ -8,6 +8,7 @@ from uuid import UUID
 
 class OrganizationCreate(BaseModel):
     """Request schema for creating an organization."""
+
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
@@ -18,6 +19,7 @@ class OrganizationCreate(BaseModel):
 
 class OrganizationUpdate(BaseModel):
     """Request schema for updating an organization."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     billing_contact: Optional[str] = None
@@ -28,6 +30,7 @@ class OrganizationUpdate(BaseModel):
 
 class OrganizationResponse(BaseModel):
     """Response schema for an organization."""
+
     id: UUID
     tenant_id: UUID
     name: str

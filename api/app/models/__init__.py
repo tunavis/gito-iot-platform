@@ -60,7 +60,7 @@ __all__ = [
     "NotificationTemplate",
     "NotificationQueue",
     "Alarm",
-    "UnifiedAlertRule",    # Unified alert rules (THRESHOLD + COMPOSITE)
+    "UnifiedAlertRule",  # Unified alert rules (THRESHOLD + COMPOSITE)
     "Dashboard",
     "DashboardWidget",
     "DeviceType",

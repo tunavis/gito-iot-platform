@@ -17,7 +17,7 @@ from app.schemas.dashboard import (
     DashboardListResponse,
     DashboardWithWidgets,
     WidgetResponse,
-    LayoutUpdateRequest
+    LayoutUpdateRequest,
 )
 from app.schemas.common import SuccessResponse
 from app.dependencies import get_current_user
@@ -45,15 +45,13 @@ async def list_dashboards(
     await session.set_tenant_context(tenant_id, current_user_id)
 
     # Get dashboards with widget counts
-    query = select(
-        Dashboard,
-        func.count(DashboardWidget.id).label("widget_count")
-    ).outerjoin(
-        DashboardWidget, Dashboard.id == DashboardWidget.dashboard_id
-    ).where(
-        Dashboard.tenant_id == tenant_id,
-        Dashboard.user_id == current_user_id
-    ).group_by(Dashboard.id).order_by(Dashboard.created_at.desc())
+    query = (
+        select(Dashboard, func.count(DashboardWidget.id).label("widget_count"))
+        .outerjoin(DashboardWidget, Dashboard.id == DashboardWidget.dashboard_id)
+        .where(Dashboard.tenant_id == tenant_id, Dashboard.user_id == current_user_id)
+        .group_by(Dashboard.id)
+        .order_by(Dashboard.created_at.desc())
+    )
 
     result = await session.execute(query)
     rows = result.all()
@@ -143,7 +141,7 @@ async def get_dashboard(
         select(Dashboard).where(
             Dashboard.id == dashboard_id,
             Dashboard.tenant_id == tenant_id,
-            Dashboard.user_id == current_user_id
+            Dashboard.user_id == current_user_id,
         )
     )
     dashboard = result.scalar_one_or_none()
@@ -203,7 +201,7 @@ async def update_dashboard(
         select(Dashboard).where(
             Dashboard.id == dashboard_id,
             Dashboard.tenant_id == tenant_id,
-            Dashboard.user_id == current_user_id
+            Dashboard.user_id == current_user_id,
         )
     )
     dashboard = result.scalar_one_or_none()
@@ -221,7 +219,7 @@ async def update_dashboard(
             .where(
                 Dashboard.tenant_id == tenant_id,
                 Dashboard.user_id == current_user_id,
-                Dashboard.id != dashboard_id
+                Dashboard.id != dashboard_id,
             )
             .values(is_default=False)
         )
@@ -259,7 +257,7 @@ async def delete_dashboard(
         select(Dashboard).where(
             Dashboard.id == dashboard_id,
             Dashboard.tenant_id == tenant_id,
-            Dashboard.user_id == current_user_id
+            Dashboard.user_id == current_user_id,
         )
     )
     dashboard = result.scalar_one_or_none()
@@ -271,9 +269,7 @@ async def delete_dashboard(
         )
 
     # Delete dashboard (widgets will cascade delete)
-    await session.execute(
-        delete(Dashboard).where(Dashboard.id == dashboard_id)
-    )
+    await session.execute(delete(Dashboard).where(Dashboard.id == dashboard_id))
     await session.commit()
 
     logger.info(f"Dashboard deleted: {dashboard_id}")
@@ -302,7 +298,7 @@ async def update_dashboard_layout(
         select(Dashboard).where(
             Dashboard.id == dashboard_id,
             Dashboard.tenant_id == tenant_id,
-            Dashboard.user_id == current_user_id
+            Dashboard.user_id == current_user_id,
         )
     )
     dashboard = result.scalar_one_or_none()
@@ -335,7 +331,7 @@ async def update_dashboard_layout(
                 update(DashboardWidget)
                 .where(
                     DashboardWidget.id == UUID(widget_id),
-                    DashboardWidget.dashboard_id == dashboard_id
+                    DashboardWidget.dashboard_id == dashboard_id,
                 )
                 .values(**update_values)
             )
@@ -345,4 +341,9 @@ async def update_dashboard_layout(
 
     logger.info(f"Dashboard layout updated: {dashboard_id}, {updated_count} widgets")
 
-    return SuccessResponse(data={"message": f"Layout updated: {updated_count} widgets repositioned", "updated_count": updated_count})
+    return SuccessResponse(
+        data={
+            "message": f"Layout updated: {updated_count} widgets repositioned",
+            "updated_count": updated_count,
+        }
+    )

@@ -21,6 +21,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}/device-groups", tags=["device-gr
 # Inline schemas for strict hierarchy (org + site required)
 from pydantic import BaseModel, Field
 
+
 class DeviceGroupCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
@@ -70,41 +71,43 @@ async def list_device_groups(
     """List all device groups for a tenant with optional filtering."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Build query
     query = select(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id)
-    
+
     if organization_id:
         query = query.where(DeviceGroup.organization_id == organization_id)
     if site_id:
         query = query.where(DeviceGroup.site_id == site_id)
     if group_type:
         query = query.where(DeviceGroup.group_type == group_type)
-    
+
     query = query.order_by(DeviceGroup.created_at.desc())
-    
+
     # Count total
-    count_query = select(func.count()).select_from(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id)
+    count_query = (
+        select(func.count()).select_from(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id)
+    )
     if organization_id:
         count_query = count_query.where(DeviceGroup.organization_id == organization_id)
     if site_id:
         count_query = count_query.where(DeviceGroup.site_id == site_id)
     if group_type:
         count_query = count_query.where(DeviceGroup.group_type == group_type)
-    
+
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # Paginate
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await session.execute(query)
     groups = result.scalars().all()
-    
+
     return SuccessResponse(
         data=[DeviceGroupResponse.model_validate(group) for group in groups],
-        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
 
 
@@ -118,9 +121,9 @@ async def create_device_group(
     """Create a new device group."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Create group
     group = DeviceGroup(
         tenant_id=tenant_id,
@@ -132,11 +135,11 @@ async def create_device_group(
         membership_rule=group_data.membership_rule,
         attributes=group_data.attributes,
     )
-    
+
     session.add(group)
     await session.commit()
     await session.refresh(group)
-    
+
     return SuccessResponse(data=DeviceGroupResponse.model_validate(group))
 
 
@@ -150,20 +153,17 @@ async def get_device_group(
     """Get a specific device group."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     result = await session.execute(
-        select(DeviceGroup).where(
-            DeviceGroup.tenant_id == tenant_id,
-            DeviceGroup.id == group_id
-        )
+        select(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id, DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
-    
+
     return SuccessResponse(data=DeviceGroupResponse.model_validate(group))
 
 
@@ -178,30 +178,27 @@ async def update_device_group(
     """Update a device group."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     result = await session.execute(
-        select(DeviceGroup).where(
-            DeviceGroup.tenant_id == tenant_id,
-            DeviceGroup.id == group_id
-        )
+        select(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id, DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
-    
+
     # Update fields
     update_data = group_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(group, field, value)
-    
+
     group.updated_at = datetime.utcnow()
-    
+
     await session.commit()
     await session.refresh(group)
-    
+
     return SuccessResponse(data=DeviceGroupResponse.model_validate(group))
 
 
@@ -215,20 +212,17 @@ async def delete_device_group(
     """Delete a device group."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     result = await session.execute(
-        select(DeviceGroup).where(
-            DeviceGroup.tenant_id == tenant_id,
-            DeviceGroup.id == group_id
-        )
+        select(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id, DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
-    
+
     await session.delete(group)
     await session.commit()
 
@@ -245,47 +239,49 @@ async def list_group_devices(
     """List all devices in a device group."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Verify group exists
     group_result = await session.execute(
-        select(DeviceGroup).where(
-            DeviceGroup.tenant_id == tenant_id,
-            DeviceGroup.id == group_id
-        )
+        select(DeviceGroup).where(DeviceGroup.tenant_id == tenant_id, DeviceGroup.id == group_id)
     )
     if not group_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
-    
+
     # Query devices
-    query = select(Device).where(
-        Device.tenant_id == tenant_id,
-        Device.device_group_id == group_id
-    ).order_by(Device.created_at.desc())
-    
+    query = (
+        select(Device)
+        .where(Device.tenant_id == tenant_id, Device.device_group_id == group_id)
+        .order_by(Device.created_at.desc())
+    )
+
     # Count
-    count_query = select(func.count()).select_from(Device).where(
-        Device.tenant_id == tenant_id,
-        Device.device_group_id == group_id
+    count_query = (
+        select(func.count())
+        .select_from(Device)
+        .where(Device.tenant_id == tenant_id, Device.device_group_id == group_id)
     )
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # Paginate
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await session.execute(query)
     devices = result.scalars().all()
-    
+
     return SuccessResponse(
-        data=[{
-            "id": str(d.id),
-            "name": d.name,
-            "device_type": d.device_type,
-            "status": d.status,
-            "last_seen": d.last_seen.isoformat() if d.last_seen else None,
-            "battery_level": d.battery_level,
-            "signal_strength": d.signal_strength,
-        } for d in devices],
-        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+        data=[
+            {
+                "id": str(d.id),
+                "name": d.name,
+                "device_type": d.device_type,
+                "status": d.status,
+                "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+                "battery_level": d.battery_level,
+                "signal_strength": d.signal_strength,
+            }
+            for d in devices
+        ],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )

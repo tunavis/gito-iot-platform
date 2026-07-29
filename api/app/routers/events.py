@@ -24,6 +24,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}/events", tags=["events"])
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
+
 class EventResponse(BaseModel):
     id: str
     tenant_id: str
@@ -51,6 +52,7 @@ class EventListResponse(BaseModel):
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
 
 @router.get("", response_model=EventListResponse)
 async def list_events(
@@ -87,21 +89,21 @@ async def list_events(
     where_clause = and_(*conditions)
 
     # Count
-    total = (await session.execute(
-        select(func.count(Event.id)).where(where_clause)
-    )).scalar_one()
+    total = (await session.execute(select(func.count(Event.id)).where(where_clause))).scalar_one()
 
     # Fetch events + device names in one join
-    rows = (await session.execute(
-        select(Event, Device.name.label("device_name"))
-        # tenant-scope the join so a foreign device_id can't surface another
-        # tenant's device name (RLS is inert for the app's DB role)
-        .outerjoin(Device, and_(Event.device_id == Device.id, Device.tenant_id == tenant_id))
-        .where(where_clause)
-        .order_by(Event.ts.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-    )).all()
+    rows = (
+        await session.execute(
+            select(Event, Device.name.label("device_name"))
+            # tenant-scope the join so a foreign device_id can't surface another
+            # tenant's device name (RLS is inert for the app's DB role)
+            .outerjoin(Device, and_(Event.device_id == Device.id, Device.tenant_id == tenant_id))
+            .where(where_clause)
+            .order_by(Event.ts.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+    ).all()
 
     events = [
         EventResponse(
@@ -158,9 +160,11 @@ async def create_event(
     # Fetch device name if device_id provided
     device_name = None
     if event.device_id:
-        device = (await session.execute(
-            select(Device).where(Device.id == event.device_id, Device.tenant_id == tenant_id)
-        )).scalar_one_or_none()
+        device = (
+            await session.execute(
+                select(Device).where(Device.id == event.device_id, Device.tenant_id == tenant_id)
+            )
+        ).scalar_one_or_none()
         device_name = device.name if device else None
 
     return EventResponse(

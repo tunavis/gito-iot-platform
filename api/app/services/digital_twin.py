@@ -24,7 +24,9 @@ class DigitalTwinService:
     def __init__(self, redis_client):
         self.redis = redis_client
 
-    async def update_device_state(self, device_id: UUID | str, metrics: dict, timestamp: str | None = None) -> None:
+    async def update_device_state(
+        self, device_id: UUID | str, metrics: dict, timestamp: str | None = None
+    ) -> None:
         """Update cached state for a device."""
         key = _cache_key(device_id)
         if timestamp is None:
