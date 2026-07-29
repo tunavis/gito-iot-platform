@@ -229,6 +229,53 @@ Tracks temporary code and technical debt. Update when:
 
 **Why 1.4.4?** v2.x has breaking changes. Documented in `CLEANUP_TODO.md` for future upgrade.
 
+### Node Graphs — `@xyflow/react`
+
+`@xyflow/react` (v12, MIT) is **the repo's one node-graph library**. Any graph,
+diagram, or node-editor surface uses it — do not hand-roll SVG for a node graph
+and do not add a second graph library.
+
+All of it is wrapped in `web/src/components/flow/`, which is the only place that
+imports `@xyflow/react` for chrome or layout:
+
+- `FlowCanvas.tsx` — themed `<ReactFlow>` wrapper (fitView, controls,
+  `nodesDraggable={false}`; **no minimap** — at these graph sizes it just covers
+  real nodes). **Its parent must have an explicit height** — React
+  Flow measures the DOM, so a zero-height parent renders blank with no error.
+- `treeLayout.ts` — `layoutTree()`, `x = depth * COL_W`, `y` by leaf order.
+  Deliberately no `dagre`/`elkjs`; positions are derived, never persisted.
+- `hierarchyGraph.ts` / `ruleGraph.ts` — pure builders (no React), unit-tested.
+- `HierarchyCanvas` (`/dashboard/hierarchy`) and `RuleCanvas`
+  (`/dashboard/alert-rules`, canvas view) are the two consumers. Both are
+  `next/dynamic` + `ssr: false` so the library stays out of the shared chunk.
+
+**What the rule canvas edits.** `RuleCanvas` edits a rule's *conditions* and
+*logic* in place: clicking a condition node opens `nodes/ConditionEditor.tsx` (a
+popover anchored to the node — not a modal, which would cover the graph being
+edited), the `AND`/`OR` pill toggles on click, and `+ Add condition`
+appends. Everything goes through the one existing
+`PUT /tenants/{id}/alert-rules/{id}`, and the canvas keeps **no local copy of the
+rule** — after a successful write it calls `onRuleChanged()` and the page
+refetches, so the list and the canvas cannot disagree.
+
+The rule *forms* still own name, severity, description, and cooldown; clicking
+the alarm node opens them. Those belong to the rule, not to a node.
+
+`+ Add condition` on a THRESHOLD rule **converts it to COMPOSITE**, behind a
+confirmation that names the effects. The conversion is **one-way** (the router
+400s on COMPOSITE → THRESHOLD — collapsing N conditions into one
+metric/operator/threshold has no correct answer) and it **preserves
+`device_id`**, since the processor selects rules by device irrespective of rule
+type. The router seeds the first condition from the stored columns itself, so the
+client must not send its own copy. A converted rule keeps vestigial
+`metric`/`operator`/`threshold` columns that the composite path ignores.
+
+**Deliberately excluded:** `web/src/components/DeviceTemplates/` and
+`web/src/components/visualization/` are telemetry-driven SVG *artwork* (flow
+animations, pump/valve/tank digital twins), not node graphs. They stay
+hand-rolled — React Flow there would be a regression. `react-grid-layout` in the
+dashboard builder is also out of scope; it is a layout grid, not a graph.
+
 ---
 
 ## 🐛 Common Mistakes to Avoid

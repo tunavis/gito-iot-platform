@@ -50,9 +50,22 @@
       "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python312/python -c \"from app.limiter import limiter; print\\(''Limiter OK:'', limiter\\)\")",
       "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python312/python -m pip install starlette fastapi)",
       "Bash(/c/Users/mmarais/AppData/Local/Programs/Python/Python310/python -c \":*)",
-      "Bash(python3)"
+      "Bash(python3)",
+      "mcp__plugin_playwright_playwright__browser_run_code_unsafe",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "Bash(npx jest *)",
+      "Bash(openspec new *)",
+      "Bash(openspec validate *)",
+      "Bash(openspec status *)",
+      "Skill(openspec-apply-change)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute"
     ]
   },
+  "enabledMcpjsonServers": [
+    "codegraph",
+    "agentmemory"
+  ],
   "hooks": {
     "Stop": [
       {
@@ -67,9 +80,5 @@
         ]
       }
     ]
-  },
-  "enabledMcpjsonServers": [
-    "codegraph",
-    "agentmemory"
-  ]
+  }
 }

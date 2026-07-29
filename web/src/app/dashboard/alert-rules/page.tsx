@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
@@ -8,58 +9,30 @@ import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import { Badge, SeverityBadge } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { btn, input } from '@/components/ui/buttonStyles';
-import { Plus, Edit2, Trash2, Bell } from 'lucide-react';
+import { operatorSymbol } from '@/components/flow/ruleGraph';
+import type {
+  AlertCondition,
+  AlertRule,
+  ConditionLogic,
+  NotificationChannel,
+  NotificationRule,
+  RuleType,
+  Severity,
+} from '@/components/flow/ruleGraph';
+import { getMetricsForDevice, getSchemaForDevice } from '@/lib/deviceSchema';
+import type { Device, DeviceType, SchemaField } from '@/lib/deviceSchema';
+import { Plus, Edit2, Trash2, Bell, List, Workflow } from 'lucide-react';
 
-// ============================================================================
-// TYPES - Unified Alert Rules (THRESHOLD + COMPOSITE)
-// ============================================================================
+// Alert-rule types live in components/flow/ruleGraph so the canvas and these
+// forms cannot drift apart on the shape of a rule.
 
-type RuleType = 'THRESHOLD' | 'COMPOSITE';
-type Severity = 'info' | 'warning' | 'critical';
-type ConditionLogic = 'AND' | 'OR';
-
-interface AlertCondition {
-  field: string;
-  operator: string;
-  threshold: number;
-  weight: number;
-}
-
-interface AlertRule {
-  id: string;
-  tenant_id: string;
-  name: string;
-  description: string | null;
-  rule_type: RuleType;
-  severity: Severity;
-  enabled: boolean;
-  // THRESHOLD fields
-  device_id: string | null;
-  metric: string | null;
-  operator: string | null;
-  threshold: number | null;
-  // COMPOSITE fields
-  conditions: AlertCondition[] | null;
-  logic: ConditionLogic | null;
-  // Common
-  cooldown_minutes: number;
-  last_triggered_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Device {
-  id: string;
-  name: string;
-  device_type_id?: string;
-}
-
-interface DeviceType {
-  id: string;
-  name: string;
-  data_model?: Array<{ name: string; type?: string; unit?: string; description?: string }>;
-  telemetry_schema?: Record<string, { type?: string; unit?: string; description?: string }>;
-}
+// @xyflow/react is ~50KB gzipped — keep it out of the shared chunk.
+const RuleCanvas = dynamic(() => import('@/components/flow/RuleCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full text-sm text-th-secondary">Loading canvas…</div>
+  ),
+});
 
 // Helper to extract tenant_id from JWT token
 function getTenantFromToken(): string | null {
@@ -95,6 +68,12 @@ export default function AlertRulesPage() {
   // Forms
   const [showNewRuleForm, setShowNewRuleForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
+
+  // Canvas view — list stays the default so the forms are always reachable.
+  const [view, setView] = useState<'list' | 'canvas'>('list');
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  const [notificationRules, setNotificationRules] = useState<NotificationRule[]>([]);
 
   useEffect(() => {
     const t = getTenantFromToken();
@@ -149,12 +128,40 @@ export default function AlertRulesPage() {
     }
   }, [tenant]);
 
+  // Channel wiring — only the canvas needs it, so only the canvas pays for it.
+  const loadWiring = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token || !tenant) return;
+
+    const [chanRes, nrRes] = await Promise.all([
+      fetch(`/api/v1/tenants/${tenant}/notifications/channels`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      fetch(`/api/v1/tenants/${tenant}/notification-rules?page=1&per_page=100`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+    ]);
+
+    if (chanRes.ok) {
+      const json = await chanRes.json();
+      setChannels(json.data || []);
+    }
+    if (nrRes.ok) {
+      const json = await nrRes.json();
+      setNotificationRules(json.data || []);
+    }
+  }, [tenant]);
+
   useEffect(() => {
     if (tenant) {
       loadRules();
       loadDevices();
     }
   }, [tenant, loadRules, loadDevices]);
+
+  useEffect(() => {
+    if (tenant && view === 'canvas') loadWiring();
+  }, [tenant, view, loadWiring]);
 
   const deleteRule = async (rule: AlertRule) => {
     const confirmed = await toast.confirm(
@@ -189,13 +196,6 @@ export default function AlertRulesPage() {
     if (res.ok) {
       setRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r));
     }
-  };
-
-  const getOperatorSymbol = (op: string) => {
-    const symbols: Record<string, string> = {
-      gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠'
-    };
-    return symbols[op] || op;
   };
 
   const getDeviceName = (deviceId: string | null) => {
@@ -291,13 +291,37 @@ export default function AlertRulesPage() {
               </div>
             </div>
 
-            <button
-              onClick={() => setShowNewRuleForm(true)}
-              className={`${btn.primary} flex items-center gap-2`}
-            >
-              <Plus className="w-4 h-4" />
-              Create Rule
-            </button>
+            <div className="flex items-end gap-3">
+              {/* View toggle — list is the default; the forms stay reachable. */}
+              <div>
+                <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">View</label>
+                <div className="flex gap-1 p-1 bg-panel rounded-lg border border-[var(--color-border)]">
+                  {([
+                    { key: 'list' as const, label: 'List', icon: <List className="w-3.5 h-3.5" /> },
+                    { key: 'canvas' as const, label: 'Canvas', icon: <Workflow className="w-3.5 h-3.5" /> },
+                  ]).map(({ key, label, icon }) => (
+                    <button
+                      key={key}
+                      onClick={() => setView(key)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                        view === key ? 'bg-primary-600 text-white shadow-sm' : 'text-th-muted hover:text-th-primary'
+                      }`}
+                    >
+                      {icon}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowNewRuleForm(true)}
+                className={`${btn.primary} flex items-center gap-2`}
+              >
+                <Plus className="w-4 h-4" />
+                Create Rule
+              </button>
+            </div>
           </div>
         </div>
 
@@ -341,6 +365,48 @@ export default function AlertRulesPage() {
             action={{ label: 'Create First Rule', onClick: () => setShowNewRuleForm(true) }}
           />
         ) : (
+          view === 'canvas' ? (
+            (() => {
+              const selectedRule = rules.find(r => r.id === selectedRuleId) ?? rules[0];
+              return (
+                <div className="gito-card flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 340px)', minHeight: 440 }}>
+                  <div className="p-3 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <label className="text-xs text-th-muted">Rule</label>
+                    <select
+                      value={selectedRule.id}
+                      onChange={e => setSelectedRuleId(e.target.value)}
+                      className={input.select}
+                      style={{ width: 'auto', minWidth: 260 }}
+                    >
+                      {rules.map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-th-muted ml-auto">
+                      Click a condition or the AND/OR pill to edit it · drag from the alarm to a channel to notify it · select an edge and press Delete to unwire
+                    </span>
+                  </div>
+
+                  {/* min-h-0 gives the canvas a real height inside the flex column. */}
+                  <div className="flex-1 min-h-0">
+                    <RuleCanvas
+                      key={selectedRule.id}
+                      tenant={tenant!}
+                      rule={selectedRule}
+                      channels={channels}
+                      notificationRules={notificationRules}
+                      devices={devices}
+                      deviceTypes={deviceTypes}
+                      deviceName={selectedRule.device_id ? getDeviceName(selectedRule.device_id) : undefined}
+                      onEditRule={() => setEditingRule(selectedRule)}
+                      onWiringChanged={loadWiring}
+                      onRuleChanged={loadRules}
+                    />
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
           <div className="grid gap-4">
             {rules.map(rule => (
               <div key={rule.id} className="gito-card p-5">
@@ -393,7 +459,7 @@ export default function AlertRulesPage() {
                       )}
                       <span className="text-th-muted opacity-40">|</span>
                       <span className="font-mono text-xs font-medium text-th-primary">
-                        {formatMetricLabel(rule.metric || '')} {getOperatorSymbol(rule.operator || '')} {rule.threshold}
+                        {formatMetricLabel(rule.metric || '')} {operatorSymbol(rule.operator || '')} {rule.threshold}
                       </span>
                     </div>
                   ) : (
@@ -404,7 +470,7 @@ export default function AlertRulesPage() {
                       <ul className="space-y-1">
                         {rule.conditions?.map((cond, idx) => (
                           <li key={idx} className="text-xs font-mono text-th-primary">
-                            • {formatMetricLabel(cond.field)} {getOperatorSymbol(cond.operator)} {cond.threshold}
+                            • {formatMetricLabel(cond.field)} {operatorSymbol(cond.operator)} {cond.threshold}
                             {cond.weight > 1 && <span className="text-th-muted ml-2">(weight: {cond.weight})</span>}
                           </li>
                         ))}
@@ -419,6 +485,7 @@ export default function AlertRulesPage() {
               </div>
             ))}
           </div>
+          )
         )}
     </PageShell>
   );
@@ -428,51 +495,6 @@ export default function AlertRulesPage() {
 // ============================================================================
 // NEW RULE FORM - Supports both THRESHOLD and COMPOSITE
 // ============================================================================
-
-// ── Schema helpers ────────────────────────────────────────────────────────────
-
-type SchemaField = { type?: string; unit?: string; description?: string; min?: number; max?: number };
-type Schema = Record<string, SchemaField>;
-
-const NUMERIC_FIELD_TYPES = new Set(['float', 'integer', 'number']);
-
-function getSchemaForDevice(deviceId: string, devices: Device[], deviceTypes: DeviceType[]): Schema {
-  const schemaFromType = (dt: DeviceType): Schema => {
-    if (dt.telemetry_schema) return dt.telemetry_schema as Schema;
-    if (dt.data_model && Array.isArray(dt.data_model)) {
-      return Object.fromEntries(
-        dt.data_model.filter(f => f.name).map(f => [f.name, { type: f.type, unit: f.unit, description: f.description }])
-      );
-    }
-    return {};
-  };
-
-  if (!deviceId) {
-    // Global rule: merge all schemas
-    const merged: Schema = {};
-    deviceTypes.forEach(dt => Object.assign(merged, schemaFromType(dt)));
-    return merged;
-  }
-  const device = devices.find(d => d.id === deviceId);
-  if (!device?.device_type_id) return {};
-  const dt = deviceTypes.find(t => t.id === device.device_type_id);
-  return dt ? schemaFromType(dt) : {};
-}
-
-function getMetricsForDevice(
-  deviceId: string,
-  devices: Device[],
-  deviceTypes: DeviceType[],
-  numericOnly = false,
-): string[] {
-  const schema = getSchemaForDevice(deviceId, devices, deviceTypes);
-  const keys = Object.keys(schema).sort();
-  if (!numericOnly) return keys;
-  return keys.filter(k => {
-    const type = schema[k]?.type;
-    return !type || NUMERIC_FIELD_TYPES.has(type); // include unknown-type fields (may be numeric)
-  });
-}
 
 function NewRuleForm({
   tenant,
@@ -704,7 +726,8 @@ function NewRuleForm({
                 {selectedMetricSchema && (
                   <p className="mt-1 text-xs text-purple-700">
                     {selectedMetricSchema.unit && <span className="font-medium">{selectedMetricSchema.unit}</span>}
-                    {selectedMetricSchema.min !== undefined && selectedMetricSchema.max !== undefined && (
+                    {/* `!= null`: an unbounded data_model field stores min/max as null. */}
+                    {selectedMetricSchema.min != null && selectedMetricSchema.max != null && (
                       <span className="ml-1 text-purple-500">
                         · range {selectedMetricSchema.min} – {selectedMetricSchema.max}
                       </span>
@@ -741,12 +764,12 @@ function NewRuleForm({
                   className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
                   step="0.1"
                   placeholder={
-                    selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined
+                    selectedMetricSchema?.min != null && selectedMetricSchema?.max != null
                       ? `${selectedMetricSchema.min} – ${selectedMetricSchema.max}`
                       : undefined
                   }
                 />
-                {selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined && (
+                {selectedMetricSchema?.min != null && selectedMetricSchema?.max != null && (
                   <p className="mt-1 text-xs text-th-muted">
                     Valid range: {selectedMetricSchema.min} – {selectedMetricSchema.max}
                   </p>

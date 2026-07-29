@@ -19,6 +19,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.28.0",
     "@types/leaflet": "^1.9.21",
+    "@xyflow/react": "^12.11.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
     "jose": "^5.1.0",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "20.19.32",
     "@types/react": "18.3.28",
     "@types/react-dom": "^18.2.18",

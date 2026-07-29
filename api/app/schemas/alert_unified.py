@@ -77,7 +77,17 @@ class AlertRuleUpdate(BaseModel):
     description: Optional[str] = None
     severity: Optional[Severity] = None
     enabled: Optional[bool] = None
-    
+
+    # Optional and additive: omitting it leaves the rule's type alone, so every
+    # existing client is unaffected. Supplying COMPOSITE for a THRESHOLD rule
+    # requests the one-way conversion the router implements; the reverse is
+    # rejected there rather than silently ignored.
+    rule_type: Optional[RuleType] = Field(
+        None,
+        description="Only THRESHOLD -> COMPOSITE conversion is supported",
+    )
+
+
     # THRESHOLD fields
     metric: Optional[str] = Field(None, max_length=255)
     operator: Optional[Literal["gt", "gte", "lt", "lte", "eq", "neq"]] = None

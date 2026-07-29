@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import '@xyflow/react/dist/style.css';
 
 /* ─── Theme Variables ─────────────────────────────────────────────────────── */
 :root {
@@ -100,6 +101,47 @@
   --input: var(--color-input-border);
   --ring: var(--color-primary);
   --radius: 0.5rem;
+}
+
+/* ─── React Flow token bridge ─────────────────────────────────────────────
+   Same approach as the shadcn bridge above: re-point @xyflow/react's own
+   variables at the Gito tokens so the canvas inherits the light/dark switch
+   for free, instead of shipping the library's default light chrome and
+   needing a second set of overrides under .dark. */
+:root {
+  --xy-background-color: var(--color-card);
+  --xy-background-pattern-color: var(--color-border);
+
+  --xy-node-background-color: var(--color-surface);
+  --xy-node-color: var(--color-text-primary);
+  --xy-node-border: 1px solid var(--color-border);
+  --xy-node-border-radius: 8px;
+  --xy-node-boxshadow-hover: 0 0 0 1px var(--color-primary);
+  --xy-node-boxshadow-selected: 0 0 0 2px var(--color-primary);
+
+  --xy-edge-stroke: var(--color-text-muted);
+  --xy-edge-stroke-selected: var(--color-primary);
+  --xy-edge-label-background-color: var(--color-surface);
+  --xy-edge-label-color: var(--color-text-secondary);
+  --xy-connectionline-stroke: var(--color-primary);
+
+  --xy-handle-background-color: var(--color-primary);
+  --xy-handle-border-color: var(--color-surface);
+
+  --xy-controls-button-background-color: var(--color-surface);
+  --xy-controls-button-background-color-hover: var(--color-card-hover);
+  --xy-controls-button-color: var(--color-text-secondary);
+  --xy-controls-button-color-hover: var(--color-text-primary);
+  --xy-controls-button-border-color: var(--color-border);
+  --xy-controls-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+
+  --xy-minimap-background-color: var(--color-panel);
+  --xy-minimap-node-background-color: var(--color-border);
+  --xy-minimap-mask-background-color: rgba(100, 130, 180, 0.15);
+
+  --xy-attribution-background-color: transparent;
+  --xy-selection-background-color: rgba(37, 99, 235, 0.06);
+  --xy-selection-border: 1px dashed var(--color-primary);
 }
 
 /* ─── Global Styles ───────────────────────────────────────────────────────── */
