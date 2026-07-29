@@ -35,6 +35,49 @@ This document tracks all mock data and temporary implementations that MUST be re
 
 ---
 
+## 🧩 Deliberate Ceilings
+
+### Automation Canvas — derived layout, no branching
+**Files:** `web/src/components/flow/`, `/dashboard/alert-rules` (canvas view)
+**Status:** 📌 INTENTIONAL — not a bug, not a half-finished feature
+
+**What it does:** draws an alert rule's real trigger→action path
+(conditions → logic → alarm → channels) from data that already exists, lets
+you wire a notification channel by dragging an edge (which calls the existing
+`notification_rules` endpoints), and edits the rule's conditions and `AND`/`OR`
+logic in place through the existing `PUT /tenants/{id}/alert-rules/{id}`.
+
+**Known debt from in-place editing:**
+- **A converted rule keeps vestigial `metric` / `operator` / `threshold`
+  columns.** `+ Add condition` on a THRESHOLD rule converts it to COMPOSITE and
+  seeds `conditions[0]` from those columns; they are then left in place rather
+  than nulled, because the composite path ignores them and anything still reading
+  the legacy columns keeps seeing something sensible. Clearing them is only worth
+  doing alongside dropping the columns outright.
+- **Conversion is one-way.** COMPOSITE → THRESHOLD is refused with a 400. There
+  is no correct way to collapse N conditions into one metric/operator/threshold;
+  delete and recreate instead.
+
+**What it deliberately does NOT do:**
+- **No stored node positions.** Layout is computed from tree depth / column
+  order at render time, so nodes are not draggable to arbitrary positions —
+  there is nowhere to persist that.
+- **No branching.** `alert_rules` is flat: N conditions, one `AND`/`OR`, one
+  alarm. No if/else, no independent action paths, no transform/enrich nodes.
+- **Alarm → channel is the only connectable handle pair.** Everything else is
+  anchor-only, on purpose: an affordance the data model cannot store is worse
+  than no affordance.
+
+**Upgrade trigger:** the first customer request for multi-branch automations.
+That means a real `automation_nodes` / `automation_edges` model **plus an
+executor** — a separate, much larger change. It does **not** mean another patch
+on this canvas, and in-place condition editing does not change that: every
+affordance added so far maps to a column `alarm_core` already evaluates. If you
+find yourself adding a node type that `alarm_core` cannot evaluate, stop: that is
+the signal to build the model instead.
+
+---
+
 ## 📊 Mock Data - CLEANED UP ✅
 
 ### 1. KPI Card Widget - Real Telemetry Data ✅

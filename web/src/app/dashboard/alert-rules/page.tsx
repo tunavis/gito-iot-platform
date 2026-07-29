@@ -1,65 +1,40 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import PageShell from '@/components/ui/PageShell';
 import { useToast } from '@/components/ToastProvider';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import { Badge, SeverityBadge } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
+import Modal from '@/components/ui/Modal';
+import DevicePicker from '@/components/ui/DevicePicker';
 import { btn, input } from '@/components/ui/buttonStyles';
-import { Plus, Edit2, Trash2, Bell } from 'lucide-react';
+import { operatorSymbol } from '@/components/flow/ruleGraph';
+import type {
+  AlertCondition,
+  AlertRule,
+  ConditionLogic,
+  NotificationChannel,
+  NotificationRule,
+  RuleType,
+  Severity,
+} from '@/components/flow/ruleGraph';
+import { getMetricsForDevice, getSchemaForDevice } from '@/lib/deviceSchema';
+import type { Device, DeviceType, SchemaField } from '@/lib/deviceSchema';
+import { Plus, Edit2, Trash2, Bell, List, Workflow } from 'lucide-react';
 
-// ============================================================================
-// TYPES - Unified Alert Rules (THRESHOLD + COMPOSITE)
-// ============================================================================
+// Alert-rule types live in components/flow/ruleGraph so the canvas and these
+// forms cannot drift apart on the shape of a rule.
 
-type RuleType = 'THRESHOLD' | 'COMPOSITE';
-type Severity = 'info' | 'warning' | 'critical';
-type ConditionLogic = 'AND' | 'OR';
-
-interface AlertCondition {
-  field: string;
-  operator: string;
-  threshold: number;
-  weight: number;
-}
-
-interface AlertRule {
-  id: string;
-  tenant_id: string;
-  name: string;
-  description: string | null;
-  rule_type: RuleType;
-  severity: Severity;
-  enabled: boolean;
-  // THRESHOLD fields
-  device_id: string | null;
-  metric: string | null;
-  operator: string | null;
-  threshold: number | null;
-  // COMPOSITE fields
-  conditions: AlertCondition[] | null;
-  logic: ConditionLogic | null;
-  // Common
-  cooldown_minutes: number;
-  last_triggered_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Device {
-  id: string;
-  name: string;
-  device_type_id?: string;
-}
-
-interface DeviceType {
-  id: string;
-  name: string;
-  data_model?: Array<{ name: string; type?: string; unit?: string; description?: string }>;
-  telemetry_schema?: Record<string, { type?: string; unit?: string; description?: string }>;
-}
+// @xyflow/react is ~50KB gzipped — keep it out of the shared chunk.
+const RuleCanvas = dynamic(() => import('@/components/flow/RuleCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full text-sm text-th-secondary">Loading canvas…</div>
+  ),
+});
 
 // Helper to extract tenant_id from JWT token
 function getTenantFromToken(): string | null {
@@ -96,6 +71,12 @@ export default function AlertRulesPage() {
   const [showNewRuleForm, setShowNewRuleForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
 
+  // Canvas view — list stays the default so the forms are always reachable.
+  const [view, setView] = useState<'list' | 'canvas'>('list');
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  const [notificationRules, setNotificationRules] = useState<NotificationRule[]>([]);
+
   useEffect(() => {
     const t = getTenantFromToken();
     setTenant(t);
@@ -126,11 +107,30 @@ export default function AlertRulesPage() {
     setLoading(false);
   }, [tenant, filterType, filterSeverity, filterEnabled, filterDevice]);
 
+  /** Merge devices into the cache without dropping ones already known.
+   *
+   *  `devices` is not "the tenant's devices" — the list endpoint caps per_page
+   *  at 100, so on a real fleet it never could be. It is "devices this page has
+   *  seen": the first page, anything a DevicePicker search returned, and the
+   *  ones referenced by the loaded rules. getSchemaForDevice/getDeviceName look
+   *  up here, so a device must survive in the cache after the search that found
+   *  it has been replaced. */
+  const rememberDevices = useCallback((incoming: Device[]) => {
+    if (incoming.length === 0) return;
+    setDevices(prev => {
+      const byId = new Map(prev.map(d => [d.id, d]));
+      incoming.forEach(d => byId.set(d.id, d));
+      return [...byId.values()];
+    });
+  }, []);
+
   const loadDevices = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token || !tenant) return;
 
     const [devRes, dtRes] = await Promise.all([
+      // Seed only. Small tenants get a full list for free; large ones reach the
+      // rest through the picker's server-side search.
       fetch(`/api/v1/tenants/${tenant}/devices?page=1&per_page=100`, {
         headers: { Authorization: `Bearer ${token}` }
       }),
@@ -141,11 +141,35 @@ export default function AlertRulesPage() {
 
     if (devRes.ok) {
       const json = await devRes.json();
-      setDevices(json.data || []);
+      rememberDevices(json.data || []);
     }
     if (dtRes.ok) {
       const json = await dtRes.json();
       setDeviceTypes(Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []));
+    }
+  }, [tenant, rememberDevices]);
+
+  // Channel wiring — only the canvas needs it, so only the canvas pays for it.
+  const loadWiring = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token || !tenant) return;
+
+    const [chanRes, nrRes] = await Promise.all([
+      fetch(`/api/v1/tenants/${tenant}/notifications/channels`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      fetch(`/api/v1/tenants/${tenant}/notification-rules?page=1&per_page=100`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+    ]);
+
+    if (chanRes.ok) {
+      const json = await chanRes.json();
+      setChannels(json.data || []);
+    }
+    if (nrRes.ok) {
+      const json = await nrRes.json();
+      setNotificationRules(json.data || []);
     }
   }, [tenant]);
 
@@ -155,6 +179,46 @@ export default function AlertRulesPage() {
       loadDevices();
     }
   }, [tenant, loadRules, loadDevices]);
+
+  useEffect(() => {
+    if (tenant && view === 'canvas') loadWiring();
+  }, [tenant, view, loadWiring]);
+
+  /** Resolve names for devices a rule points at but the seed page missed.
+   *
+   *  Without this a rule bound to device 101+ renders as a UUID fragment on its
+   *  card and on the canvas. Distinct, still-unknown ids only — on a small
+   *  tenant that is zero requests. `attemptedDeviceIds` stops a device that
+   *  404s (deleted, or another tenant's) from being re-fetched on every render. */
+  const attemptedDeviceIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token || !tenant) return;
+
+    const known = new Set(devices.map(d => d.id));
+    const missing = [...new Set(
+      rules
+        .map(r => r.device_id)
+        .filter((id): id is string => !!id && !known.has(id) && !attemptedDeviceIds.current.has(id))
+    )];
+    if (missing.length === 0) return;
+    missing.forEach(id => attemptedDeviceIds.current.add(id));
+
+    let cancelled = false;
+    void Promise.all(
+      missing.map(id =>
+        fetch(`/api/v1/tenants/${tenant}/devices/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    ).then(results => {
+      if (cancelled) return;
+      rememberDevices(results.filter(Boolean) as Device[]);
+    });
+    return () => { cancelled = true; };
+  }, [rules, devices, tenant, rememberDevices]);
 
   const deleteRule = async (rule: AlertRule) => {
     const confirmed = await toast.confirm(
@@ -189,13 +253,6 @@ export default function AlertRulesPage() {
     if (res.ok) {
       setRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r));
     }
-  };
-
-  const getOperatorSymbol = (op: string) => {
-    const symbols: Record<string, string> = {
-      gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠'
-    };
-    return symbols[op] || op;
   };
 
   const getDeviceName = (deviceId: string | null) => {
@@ -274,30 +331,54 @@ export default function AlertRulesPage() {
                 </div>
               </div>
 
-              {/* Device Filter */}
-              <div>
+              {/* Device Filter — searched server-side; this list is not bounded
+                  by what the seed page happened to return. */}
+              <div style={{ minWidth: 240 }}>
                 <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">Device</label>
-                <select
-                  value={filterDevice}
-                  onChange={e => setFilterDevice(e.target.value)}
-                  className={input.select}
-                  style={{ width: 'auto' }}
-                >
-                  <option value="all">All Devices</option>
-                  {devices.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                <DevicePicker
+                  tenant={tenant!}
+                  value={filterDevice === 'all' ? '' : filterDevice}
+                  selectedLabel={filterDevice === 'all' ? undefined : getDeviceName(filterDevice)}
+                  emptyLabel="All Devices"
+                  onChange={d => {
+                    if (d) rememberDevices([d]);
+                    setFilterDevice(d?.id ?? 'all');
+                  }}
+                />
               </div>
             </div>
 
-            <button
-              onClick={() => setShowNewRuleForm(true)}
-              className={`${btn.primary} flex items-center gap-2`}
-            >
-              <Plus className="w-4 h-4" />
-              Create Rule
-            </button>
+            <div className="flex items-end gap-3">
+              {/* View toggle — list is the default; the forms stay reachable. */}
+              <div>
+                <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">View</label>
+                <div className="flex gap-1 p-1 bg-panel rounded-lg border border-[var(--color-border)]">
+                  {([
+                    { key: 'list' as const, label: 'List', icon: <List className="w-3.5 h-3.5" /> },
+                    { key: 'canvas' as const, label: 'Canvas', icon: <Workflow className="w-3.5 h-3.5" /> },
+                  ]).map(({ key, label, icon }) => (
+                    <button
+                      key={key}
+                      onClick={() => setView(key)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                        view === key ? 'bg-primary-600 text-white shadow-sm' : 'text-th-muted hover:text-th-primary'
+                      }`}
+                    >
+                      {icon}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowNewRuleForm(true)}
+                className={`${btn.primary} flex items-center gap-2`}
+              >
+                <Plus className="w-4 h-4" />
+                Create Rule
+              </button>
+            </div>
           </div>
         </div>
 
@@ -307,8 +388,13 @@ export default function AlertRulesPage() {
             tenant={tenant}
             devices={devices}
             deviceTypes={deviceTypes}
-            onSuccess={() => {
+            rememberDevices={rememberDevices}
+            onSuccess={(createdId) => {
               setShowNewRuleForm(false);
+              // Land on the rule that was just created rather than leaving the
+              // canvas on the previous one — otherwise creating from the canvas
+              // looks like it did nothing.
+              if (createdId) setSelectedRuleId(createdId);
               loadRules();
             }}
             onCancel={() => setShowNewRuleForm(false)}
@@ -341,6 +427,49 @@ export default function AlertRulesPage() {
             action={{ label: 'Create First Rule', onClick: () => setShowNewRuleForm(true) }}
           />
         ) : (
+          view === 'canvas' ? (
+            (() => {
+              const selectedRule = rules.find(r => r.id === selectedRuleId) ?? rules[0];
+              return (
+                <div className="gito-card flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 340px)', minHeight: 440 }}>
+                  <div className="p-3 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <label className="text-xs text-th-muted">Rule</label>
+                    <select
+                      value={selectedRule.id}
+                      onChange={e => setSelectedRuleId(e.target.value)}
+                      className={input.select}
+                      style={{ width: 'auto', minWidth: 260 }}
+                    >
+                      {rules.map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-th-muted ml-auto">
+                      Click a condition or the AND/OR pill to edit it · drag from the alarm to a channel to notify it · select an edge and press Delete to unwire
+                    </span>
+                  </div>
+
+                  {/* min-h-0 gives the canvas a real height inside the flex column. */}
+                  <div className="flex-1 min-h-0">
+                    <RuleCanvas
+                      key={selectedRule.id}
+                      tenant={tenant!}
+                      rule={selectedRule}
+                      channels={channels}
+                      notificationRules={notificationRules}
+                      devices={devices}
+                      deviceTypes={deviceTypes}
+                      deviceName={selectedRule.device_id ? getDeviceName(selectedRule.device_id) : undefined}
+                      onEditRule={() => setEditingRule(selectedRule)}
+                      onCreateRule={() => setShowNewRuleForm(true)}
+                      onWiringChanged={loadWiring}
+                      onRuleChanged={loadRules}
+                    />
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
           <div className="grid gap-4">
             {rules.map(rule => (
               <div key={rule.id} className="gito-card p-5">
@@ -393,7 +522,7 @@ export default function AlertRulesPage() {
                       )}
                       <span className="text-th-muted opacity-40">|</span>
                       <span className="font-mono text-xs font-medium text-th-primary">
-                        {formatMetricLabel(rule.metric || '')} {getOperatorSymbol(rule.operator || '')} {rule.threshold}
+                        {formatMetricLabel(rule.metric || '')} {operatorSymbol(rule.operator || '')} {rule.threshold}
                       </span>
                     </div>
                   ) : (
@@ -404,7 +533,7 @@ export default function AlertRulesPage() {
                       <ul className="space-y-1">
                         {rule.conditions?.map((cond, idx) => (
                           <li key={idx} className="text-xs font-mono text-th-primary">
-                            • {formatMetricLabel(cond.field)} {getOperatorSymbol(cond.operator)} {cond.threshold}
+                            • {formatMetricLabel(cond.field)} {operatorSymbol(cond.operator)} {cond.threshold}
                             {cond.weight > 1 && <span className="text-th-muted ml-2">(weight: {cond.weight})</span>}
                           </li>
                         ))}
@@ -419,6 +548,7 @@ export default function AlertRulesPage() {
               </div>
             ))}
           </div>
+          )
         )}
     </PageShell>
   );
@@ -429,62 +559,21 @@ export default function AlertRulesPage() {
 // NEW RULE FORM - Supports both THRESHOLD and COMPOSITE
 // ============================================================================
 
-// ── Schema helpers ────────────────────────────────────────────────────────────
-
-type SchemaField = { type?: string; unit?: string; description?: string; min?: number; max?: number };
-type Schema = Record<string, SchemaField>;
-
-const NUMERIC_FIELD_TYPES = new Set(['float', 'integer', 'number']);
-
-function getSchemaForDevice(deviceId: string, devices: Device[], deviceTypes: DeviceType[]): Schema {
-  const schemaFromType = (dt: DeviceType): Schema => {
-    if (dt.telemetry_schema) return dt.telemetry_schema as Schema;
-    if (dt.data_model && Array.isArray(dt.data_model)) {
-      return Object.fromEntries(
-        dt.data_model.filter(f => f.name).map(f => [f.name, { type: f.type, unit: f.unit, description: f.description }])
-      );
-    }
-    return {};
-  };
-
-  if (!deviceId) {
-    // Global rule: merge all schemas
-    const merged: Schema = {};
-    deviceTypes.forEach(dt => Object.assign(merged, schemaFromType(dt)));
-    return merged;
-  }
-  const device = devices.find(d => d.id === deviceId);
-  if (!device?.device_type_id) return {};
-  const dt = deviceTypes.find(t => t.id === device.device_type_id);
-  return dt ? schemaFromType(dt) : {};
-}
-
-function getMetricsForDevice(
-  deviceId: string,
-  devices: Device[],
-  deviceTypes: DeviceType[],
-  numericOnly = false,
-): string[] {
-  const schema = getSchemaForDevice(deviceId, devices, deviceTypes);
-  const keys = Object.keys(schema).sort();
-  if (!numericOnly) return keys;
-  return keys.filter(k => {
-    const type = schema[k]?.type;
-    return !type || NUMERIC_FIELD_TYPES.has(type); // include unknown-type fields (may be numeric)
-  });
-}
-
 function NewRuleForm({
   tenant,
   devices,
   deviceTypes,
+  rememberDevices,
   onSuccess,
   onCancel
 }: {
   tenant: string | null;
   devices: Device[];
   deviceTypes: DeviceType[];
-  onSuccess: () => void;
+  /** Cache a device the picker found, so its metric schema resolves. */
+  rememberDevices: (devices: Device[]) => void;
+  /** The new rule's id, so the canvas can switch to what was just created. */
+  onSuccess: (createdId: string | null) => void;
   onCancel: () => void;
 }) {
   const toast = useToast();
@@ -569,7 +658,11 @@ function NewRuleForm({
     });
 
     if (res.ok) {
-      onSuccess();
+      // The response is the created rule (the API returns data directly). A
+      // parse failure is not worth failing the create over — the rule exists;
+      // the canvas just stays where it was.
+      const created = await res.json().catch(() => null);
+      onSuccess(typeof created?.id === 'string' ? created.id : null);
     } else {
       const err = await res.json();
       toast.error('Failed to create rule', err.detail || 'Unknown error');
@@ -577,8 +670,10 @@ function NewRuleForm({
   };
 
   return (
-    <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
-      <h3 className="text-lg font-semibold text-th-primary mb-6">Create Alert Rule</h3>
+    // `scrollBody` because a composite rule with several conditions is taller
+    // than the viewport; without it the panel would clip and the submit button
+    // would be unreachable. Modal's own max-w-4xl caps the field width.
+    <Modal open onClose={onCancel} title="Create Alert Rule" size="2xl" scrollBody>
       <form onSubmit={handleSubmit}>
         {/* Rule Type Selection */}
         <div className="mb-6">
@@ -619,7 +714,7 @@ function NewRuleForm({
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="e.g., High Temperature Alert"
               required
             />
@@ -629,7 +724,7 @@ function NewRuleForm({
             <select
               value={severity}
               onChange={e => setSeverity(e.target.value as Severity)}
-              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option value="info">Info</option>
               <option value="warning">Warning</option>
@@ -643,7 +738,7 @@ function NewRuleForm({
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500"
             rows={2}
             placeholder="Optional description..."
           />
@@ -651,21 +746,25 @@ function NewRuleForm({
 
         {/* THRESHOLD-specific fields */}
         {ruleType === 'THRESHOLD' && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lgp-4 mb-6">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm text-th-primary mb-1">Device</label>
-                <select
+                <DevicePicker
+                  label="Device"
+                  tenant={tenant!}
                   value={deviceId}
-                  onChange={e => { setDeviceId(e.target.value); setMetric(''); }}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
-                >
-                  <option value="">Global (all devices)</option>
-                  {devices.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                  selectedLabel={devices.find(d => d.id === deviceId)?.name}
+                  emptyLabel="Global (all devices)"
+                  onChange={d => {
+                    // Push the pick into the page's cache first: the metric list
+                    // below resolves its schema via the device's device_type_id,
+                    // and a searched-for device is not in the seeded list.
+                    if (d) rememberDevices([d]);
+                    setDeviceId(d?.id ?? '');
+                    setMetric('');
+                  }}
+                />
               </div>
               <div>
                 <label className="block text-sm text-th-primary mb-1">
@@ -677,7 +776,7 @@ function NewRuleForm({
                 <select
                   value={metric}
                   onChange={e => { setMetric(e.target.value); if (e.target.value !== '__custom__') setCustomMetric(''); }}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="">Select metric...</option>
                   {availableMetrics.map(m => {
@@ -695,7 +794,7 @@ function NewRuleForm({
                     type="text"
                     value={customMetric}
                     onChange={e => setCustomMetric(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                    className="w-full mt-1 px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                     placeholder="Enter metric key"
                     required
                   />
@@ -704,7 +803,8 @@ function NewRuleForm({
                 {selectedMetricSchema && (
                   <p className="mt-1 text-xs text-purple-700">
                     {selectedMetricSchema.unit && <span className="font-medium">{selectedMetricSchema.unit}</span>}
-                    {selectedMetricSchema.min !== undefined && selectedMetricSchema.max !== undefined && (
+                    {/* `!= null`: an unbounded data_model field stores min/max as null. */}
+                    {selectedMetricSchema.min != null && selectedMetricSchema.max != null && (
                       <span className="ml-1 text-purple-500">
                         · range {selectedMetricSchema.min} – {selectedMetricSchema.max}
                       </span>
@@ -717,7 +817,7 @@ function NewRuleForm({
                 <select
                   value={operator}
                   onChange={e => setOperator(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
                   <option value="gte">&ge; Greater or equal</option>
@@ -738,15 +838,15 @@ function NewRuleForm({
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                   step="0.1"
                   placeholder={
-                    selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined
+                    selectedMetricSchema?.min != null && selectedMetricSchema?.max != null
                       ? `${selectedMetricSchema.min} – ${selectedMetricSchema.max}`
                       : undefined
                   }
                 />
-                {selectedMetricSchema?.min !== undefined && selectedMetricSchema?.max !== undefined && (
+                {selectedMetricSchema?.min != null && selectedMetricSchema?.max != null && (
                   <p className="mt-1 text-xs text-th-muted">
                     Valid range: {selectedMetricSchema.min} – {selectedMetricSchema.max}
                   </p>
@@ -758,7 +858,7 @@ function NewRuleForm({
 
         {/* COMPOSITE-specific fields */}
         {ruleType === 'COMPOSITE' && (
-          <div className="bg-teal-50 border border-teal-200 rounded-lgp-4 mb-6">
+          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-6">
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-sm font-semibold text-teal-900">Conditions</h4>
               <div className="flex items-center gap-3">
@@ -773,7 +873,7 @@ function NewRuleForm({
                 <button
                   type="button"
                   onClick={addCondition}
-                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lghover:bg-teal-700"
+                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                 >
                   + Add Condition
                 </button>
@@ -785,7 +885,7 @@ function NewRuleForm({
             ) : (
               <div className="space-y-2">
                 {conditions.map((cond, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lgborder">
+                  <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lg border">
                     <select
                       value={cond.field}
                       onChange={e => updateCondition(idx, { field: e.target.value })}
@@ -869,19 +969,19 @@ function NewRuleForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lghover:bg-page"
+            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lg hover:bg-page"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lghover:bg-primary-700"
+            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             Create Rule
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -971,10 +1071,13 @@ function EditRuleForm({
   };
 
   return (
-    <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
-      <h3 className="text-lg font-semibold text-th-primary mb-6">
-        Edit {rule.rule_type} Rule
-      </h3>
+    <Modal
+      open
+      onClose={onCancel}
+      title={`Edit ${rule.rule_type} Rule`}
+      size="2xl"
+      scrollBody
+    >
       <form onSubmit={handleSubmit}>
         {/* Common Fields */}
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -984,7 +1087,7 @@ function EditRuleForm({
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgfocus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg focus:ring-2 focus:ring-primary-500"
               required
             />
           </div>
@@ -1014,7 +1117,7 @@ function EditRuleForm({
 
         {/* THRESHOLD fields */}
         {rule.rule_type === 'THRESHOLD' && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lgp-4 mb-6">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-3 gap-4">
               <div>
@@ -1022,7 +1125,7 @@ function EditRuleForm({
                 <select
                   value={metric}
                   onChange={e => setMetric(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   {availableMetrics.map(m => (
                     <option key={m} value={m}>{formatMetricLabel(m)}</option>
@@ -1037,7 +1140,7 @@ function EditRuleForm({
                 <select
                   value={operator}
                   onChange={e => setOperator(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                 >
                   <option value="gt">&gt; Greater than</option>
                   <option value="gte">&ge; Greater or equal</option>
@@ -1053,7 +1156,7 @@ function EditRuleForm({
                   type="number"
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lgtext-sm"
+                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
                   step="0.1"
                 />
               </div>
@@ -1063,7 +1166,7 @@ function EditRuleForm({
 
         {/* COMPOSITE fields */}
         {rule.rule_type === 'COMPOSITE' && (
-          <div className="bg-teal-50 border border-teal-200 rounded-lgp-4 mb-6">
+          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-6">
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-sm font-semibold text-teal-900">Conditions</h4>
               <div className="flex items-center gap-3">
@@ -1078,7 +1181,7 @@ function EditRuleForm({
                 <button
                   type="button"
                   onClick={addCondition}
-                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lghover:bg-teal-700"
+                  className="px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                 >
                   + Add Condition
                 </button>
@@ -1087,7 +1190,7 @@ function EditRuleForm({
             
             <div className="space-y-2">
               {conditions.map((cond, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lgborder">
+                <div key={idx} className="flex items-center gap-2 bg-surface p-2 rounded-lg border">
                   <select
                     value={cond.field}
                     onChange={e => updateCondition(idx, { field: e.target.value })}
@@ -1159,18 +1262,18 @@ function EditRuleForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lghover:bg-page"
+            className="px-4 py-2 text-sm font-medium border border-[var(--color-input-border)] rounded-lg hover:bg-page"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lghover:bg-primary-700"
+            className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             Update Rule
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

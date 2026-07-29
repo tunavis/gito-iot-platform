@@ -1,207 +1,31 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import PageShell from '@/components/ui/PageShell';
 import IconTile from '@/components/ui/IconTile';
-import {
-  Building2, MapPin, Layers, Cpu, ChevronRight, ChevronDown,
-  Bell, Wifi, Search, GitBranch, AlertTriangle, CheckCircle2,
-} from 'lucide-react';
+import { healthColor } from '@/components/ui/HealthIndicators';
+import type {
+  DeviceGroupNode,
+  OrgNode,
+  SelectedNode,
+  SiteNode,
+} from '@/components/flow/hierarchyGraph';
+import { Building2, MapPin, Layers, Cpu, Bell, Wifi, Search, GitBranch } from 'lucide-react';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface DeviceGroupNode {
-  id: string;
-  name: string;
-  group_type: string | null;
-  device_count: number;
-  online_count: number;
-  active_alarms: number;
-}
-
-interface SiteNode {
-  id: string;
-  name: string;
-  site_type: string | null;
-  address: string | null;
-  coordinates: { lat: number; lng: number } | null;
-  device_count: number;
-  online_count: number;
-  active_alarms: number;
-  device_groups: DeviceGroupNode[];
-  children: SiteNode[];
-}
-
-interface OrgNode {
-  id: string;
-  name: string;
-  status: 'active' | 'inactive' | 'suspended';
-  billing_contact: string | null;
-  device_count: number;
-  online_count: number;
-  active_alarms: number;
-  sites: SiteNode[];
-}
-
-type SelectedNode =
-  | { type: 'org';   data: OrgNode }
-  | { type: 'site';  data: SiteNode }
-  | { type: 'group'; data: DeviceGroupNode };
-
-// ── Health helpers ─────────────────────────────────────────────────────────────
-
-function healthColor(alarms: number, online: number, total: number): string {
-  if (alarms > 0)                         return '#ef4444';   // red
-  if (total > 0 && online / total < 0.8)  return '#f59e0b';   // amber
-  return '#22c55e';                                            // green
-}
-
-function HealthDot({ alarms, online, total }: { alarms: number; online: number; total: number }) {
-  const color = healthColor(alarms, online, total);
-  return (
-    <span
-      className="w-2 h-2 rounded-full flex-shrink-0"
-      style={{ background: color, boxShadow: `0 0 5px ${color}60` }}
-    />
-  );
-}
-
-function AlarmBadge({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <span
-      className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
-      style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
-    >
-      {count}
-    </span>
-  );
-}
-
-// ── Tree node components ───────────────────────────────────────────────────────
-
-function GroupNode({
-  group, selected, onSelect,
-}: {
-  group: DeviceGroupNode;
-  selected: SelectedNode | null;
-  onSelect: (n: SelectedNode) => void;
-}) {
-  const isSelected = selected?.type === 'group' && selected.data.id === group.id;
-  return (
-    <div
-      className="flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors"
-      style={{
-        background: isSelected ? 'var(--color-sidebar-active)' : 'transparent',
-        color: isSelected ? 'var(--color-sidebar-active-text)' : 'var(--color-text-secondary)',
-      }}
-      onClick={() => onSelect({ type: 'group', data: group })}
-    >
-      <HealthDot alarms={group.active_alarms} online={group.online_count} total={group.device_count} />
-      <Layers className="w-3 h-3 flex-shrink-0 opacity-60" />
-      <span className="flex-1 truncate">{group.name}</span>
-      <span className="text-[10px] opacity-50 flex-shrink-0">{group.online_count}/{group.device_count}</span>
-      <AlarmBadge count={group.active_alarms} />
-    </div>
-  );
-}
-
-function SiteNodeTree({
-  site, depth, selected, onSelect,
-}: {
-  site: SiteNode;
-  depth: number;
-  selected: SelectedNode | null;
-  onSelect: (n: SelectedNode) => void;
-}) {
-  const [open, setOpen] = useState(depth === 0);
-  const isSelected = selected?.type === 'site' && selected.data.id === site.id;
-  const hasChildren = site.children.length > 0 || site.device_groups.length > 0;
-
-  return (
-    <div style={{ paddingLeft: depth > 0 ? 12 : 0 }}>
+// @xyflow/react is ~50KB gzipped — keep it out of the shared chunk.
+const HierarchyCanvas = dynamic(() => import('@/components/flow/HierarchyCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full">
       <div
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors"
-        style={{
-          background: isSelected ? 'var(--color-sidebar-active)' : 'transparent',
-          color: isSelected ? 'var(--color-sidebar-active-text)' : 'var(--color-text-secondary)',
-        }}
-        onClick={() => { onSelect({ type: 'site', data: site }); if (hasChildren) setOpen(o => !o); }}
-      >
-        <HealthDot alarms={site.active_alarms} online={site.online_count} total={site.device_count} />
-        {hasChildren
-          ? open
-            ? <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-50" />
-            : <ChevronRight className="w-3 h-3 flex-shrink-0 opacity-50" />
-          : <span className="w-3 h-3 flex-shrink-0" />
-        }
-        <MapPin className="w-3 h-3 flex-shrink-0 opacity-60" />
-        <span className="flex-1 truncate">{site.name}</span>
-        <span className="text-[10px] opacity-50 flex-shrink-0">{site.online_count}/{site.device_count}</span>
-        <AlarmBadge count={site.active_alarms} />
-      </div>
-
-      {open && hasChildren && (
-        <div className="ml-3 pl-2.5" style={{ borderLeft: '1px solid var(--color-border)' }}>
-          {site.device_groups.map(g => (
-            <GroupNode key={g.id} group={g} selected={selected} onSelect={onSelect} />
-          ))}
-          {site.children.map(child => (
-            <SiteNodeTree key={child.id} site={child} depth={depth + 1} selected={selected} onSelect={onSelect} />
-          ))}
-        </div>
-      )}
+        className="w-6 h-6 border-2 rounded-full animate-spin"
+        style={{ borderColor: 'var(--color-border)', borderTopColor: '#3b82f6' }}
+      />
     </div>
-  );
-}
-
-function OrgNodeTree({
-  org, selected, onSelect,
-}: {
-  org: OrgNode;
-  selected: SelectedNode | null;
-  onSelect: (n: SelectedNode) => void;
-}) {
-  const [open, setOpen] = useState(true);
-  const isSelected = selected?.type === 'org' && selected.data.id === org.id;
-
-  return (
-    <div className="mb-1">
-      <div
-        className="flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer text-[13px] font-medium transition-colors"
-        style={{
-          background: isSelected ? 'var(--color-sidebar-active)' : 'var(--color-panel)',
-          color: isSelected ? 'var(--color-sidebar-active-text)' : 'var(--color-text-primary)',
-          border: '1px solid var(--color-border)',
-        }}
-        onClick={() => { onSelect({ type: 'org', data: org }); setOpen(o => !o); }}
-      >
-        <HealthDot alarms={org.active_alarms} online={org.online_count} total={org.device_count} />
-        {open
-          ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
-          : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
-        }
-        <Building2 className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
-        <span className="flex-1 truncate">{org.name}</span>
-        <span className="text-[11px] opacity-50 flex-shrink-0 font-normal">{org.online_count}/{org.device_count}</span>
-        <AlarmBadge count={org.active_alarms} />
-      </div>
-
-      {open && org.sites.length > 0 && (
-        <div className="mt-1 ml-2 pl-3" style={{ borderLeft: '1px solid var(--color-border)' }}>
-          {org.sites.map(site => (
-            <SiteNodeTree key={site.id} site={site} depth={0} selected={selected} onSelect={onSelect} />
-          ))}
-        </div>
-      )}
-
-      {open && org.sites.length === 0 && (
-        <p className="ml-5 mt-1 text-[11px] italic" style={{ color: 'var(--color-text-muted)' }}>No sites configured</p>
-      )}
-    </div>
-  );
-}
+  ),
+});
 
 // ── Detail panel ───────────────────────────────────────────────────────────────
 
@@ -215,10 +39,20 @@ function DetailPanel({ node }: { node: SelectedNode | null }) {
     );
   }
 
+  // The value truncates rather than widening the card. It has to carry
+  // `min-w-0` and be a flex child for that to work — `truncate` on a nested
+  // inline <span> does nothing, which is what pushed long addresses out of the
+  // panel and gave it a horizontal scrollbar.
   const StatRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div className="flex items-center justify-between py-2.5" style={{ borderBottom: '1px solid var(--color-border)' }}>
-      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
-      <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{value}</span>
+    <div className="flex items-center justify-between gap-3 py-2.5" style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+      <span
+        className="text-sm font-medium min-w-0 truncate text-right"
+        style={{ color: 'var(--color-text-primary)' }}
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </span>
     </div>
   );
 
@@ -286,7 +120,7 @@ function DetailPanel({ node }: { node: SelectedNode | null }) {
               ? <span style={{ color: '#ef4444' }}>{site.active_alarms}</span>
               : <span style={{ color: '#22c55e' }}>None</span>
           } />
-          {site.address && <StatRow label="Address" value={<span className="text-right max-w-[180px] truncate">{site.address}</span>} />}
+          {site.address && <StatRow label="Address" value={site.address} />}
           {site.coordinates && (
             <StatRow label="Coordinates" value={`${site.coordinates.lat.toFixed(4)}, ${site.coordinates.lng.toFixed(4)}`} />
           )}
@@ -345,7 +179,6 @@ function SummaryBar({ orgs }: { orgs: OrgNode[] }) {
   const totalOnline   = orgs.reduce((s, o) => s + o.online_count,  0);
   const totalAlarms   = orgs.reduce((s, o) => s + o.active_alarms, 0);
   const totalOrgs     = orgs.length;
-  const healthyOrgs   = orgs.filter(o => o.active_alarms === 0).length;
 
   return (
     <div className="grid grid-cols-4 gap-3 mb-4">
@@ -388,7 +221,8 @@ export default function HierarchyPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  // Filter tree by search term (name match anywhere in tree)
+  // Filter by search term. The canvas is built from this, so dropping a node
+  // drops its edges structurally — nothing can point at something undrawn.
   const filteredOrgs = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return orgs;
@@ -426,11 +260,11 @@ export default function HierarchyPage() {
           <SummaryBar orgs={orgs} />
 
           <div className="flex gap-4" style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}>
-            {/* ── Left: tree ────────────────────────────────────────────── */}
-            <div className="gito-card flex flex-col flex-shrink-0 overflow-hidden" style={{ width: 300 }}>
+            {/* ── Left: canvas ──────────────────────────────────────────── */}
+            <div className="gito-card flex flex-col flex-1 overflow-hidden">
               {/* Search */}
               <div className="p-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-                <div className="relative">
+                <div className="relative" style={{ maxWidth: 320 }}>
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
                     style={{ color: 'var(--color-text-muted)' }} />
                   <input
@@ -448,8 +282,9 @@ export default function HierarchyPage() {
                 </div>
               </div>
 
-              {/* Tree */}
-              <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {/* Graph — min-h-0 gives the canvas a real height inside the flex column.
+                  React Flow measures the DOM; a zero-height parent renders blank. */}
+              <div className="flex-1 min-h-0">
                 {filteredOrgs.length === 0 ? (
                   <div className="text-center py-8">
                     <IconTile color="#64748b" icon={<Building2 className="w-4 h-4" />} size="sm" className="mx-auto mb-2" />
@@ -464,15 +299,13 @@ export default function HierarchyPage() {
                     )}
                   </div>
                 ) : (
-                  filteredOrgs.map(org => (
-                    <OrgNodeTree key={org.id} org={org} selected={selected} onSelect={setSelected} />
-                  ))
+                  <HierarchyCanvas orgs={filteredOrgs} selected={selected} onSelect={setSelected} />
                 )}
               </div>
             </div>
 
             {/* ── Right: detail ─────────────────────────────────────────── */}
-            <div className="gito-card flex-1 overflow-y-auto">
+            <div className="gito-card overflow-y-auto overflow-x-hidden flex-shrink-0" style={{ width: 320 }}>
               <DetailPanel node={selected} />
             </div>
           </div>

@@ -28,6 +28,7 @@ from app.models.unified_alert_rule import (
     UnifiedAlertRule,
     RULE_TYPE_DB_VALUES,
     SEVERITY_DB_VALUES,
+    OPERATOR_DB_TO_API,
     normalize_rule_type,
 )
 from app.models.base import Device
@@ -329,6 +330,66 @@ async def update_alert_rule(
     # compare the normalized value, not the raw attribute.
     current_rule_type = normalize_rule_type(rule.rule_type)
 
+    # ── Optional THRESHOLD -> COMPOSITE conversion ───────────────────────────
+    # Applied *before* the per-type field blocks below, so a single request can
+    # both convert the rule and set its conditions. Doing it in two requests
+    # would persist a COMPOSITE rule with no conditions in between — a rule that
+    # can never fire.
+    if rule_data.rule_type is not None:
+        requested_rule_type = normalize_rule_type(rule_data.rule_type.value)
+
+        if requested_rule_type != current_rule_type:
+            if requested_rule_type == "THRESHOLD":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Cannot convert a COMPOSITE rule to THRESHOLD: collapsing "
+                        "several conditions into one metric and threshold has no "
+                        "correct answer. Delete the rule and create a THRESHOLD one."
+                    ),
+                )
+
+            if not rule.metric:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Cannot convert a THRESHOLD rule with no metric to "
+                        "COMPOSITE — there is nothing to seed the first condition from."
+                    ),
+                )
+
+            # Seed the first condition from the stored THRESHOLD columns. The
+            # operator is resolved here rather than trusted from the client: the
+            # column may hold either API ('gt') or DB ('>') format and only the
+            # server can tell which (see unified_alert_rule.py:61-75).
+            seeded = {
+                "field": rule.metric,
+                "operator": OPERATOR_DB_TO_API.get(rule.operator, rule.operator),
+                "threshold": rule.threshold if rule.threshold is not None else 0,
+                "weight": 1,
+            }
+
+            incoming = [
+                {
+                    "field": c.field,
+                    "operator": c.operator,
+                    "threshold": c.threshold,
+                    "weight": c.weight,
+                }
+                for c in (rule_data.conditions or [])
+            ]
+
+            # `device_id` is deliberately untouched: the processor selects rules
+            # by device regardless of rule type (mqtt_processor.py:477-488), so
+            # leaving it preserves the exact scope the rule already had.
+            rule.rule_type = "COMPOSITE"
+            rule.conditions = [seeded, *incoming] if incoming else [seeded]
+            rule.logic = rule_data.logic.value if rule_data.logic is not None else "AND"
+            current_rule_type = "COMPOSITE"
+            # Already applied above; don't let the COMPOSITE block below replace
+            # the seeded first condition with the client's array alone.
+            rule_data.conditions = None
+
     # Update THRESHOLD-specific fields (only for THRESHOLD rules)
     if current_rule_type == "THRESHOLD":
         if rule_data.metric is not None:
@@ -341,6 +402,15 @@ async def update_alert_rule(
     # Update COMPOSITE-specific fields (only for COMPOSITE rules)
     if current_rule_type == "COMPOSITE":
         if rule_data.conditions is not None:
+            if len(rule_data.conditions) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "A COMPOSITE rule needs at least one condition — the "
+                        "evaluation engine treats an empty rule as unevaluable, "
+                        "so it could never fire."
+                    ),
+                )
             rule.conditions = [
                 {
                     "field": c.field,
