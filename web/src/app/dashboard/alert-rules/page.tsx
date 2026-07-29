@@ -8,6 +8,7 @@ import { useToast } from '@/components/ToastProvider';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import { Badge, SeverityBadge } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
+import Modal from '@/components/ui/Modal';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { operatorSymbol } from '@/components/flow/ruleGraph';
 import type {
@@ -609,12 +610,11 @@ function NewRuleForm({
   };
 
   return (
-    <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
-      <h3 className="text-lg font-semibold text-th-primary mb-6">Create Alert Rule</h3>
-      {/* Cap the field width. The card spans the page to match the rule list
-          below it, but a rule *name* does not need 1000px and a description
-          does not need 1500px — unbounded, the fields read as a wall. */}
-      <form onSubmit={handleSubmit} className="max-w-4xl">
+    // `scrollBody` because a composite rule with several conditions is taller
+    // than the viewport; without it the panel would clip and the submit button
+    // would be unreachable. Modal's own max-w-4xl caps the field width.
+    <Modal open onClose={onCancel} title="Create Alert Rule" size="2xl" scrollBody>
+      <form onSubmit={handleSubmit}>
         {/* Rule Type Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-th-primary mb-2">Rule Type</label>
@@ -917,7 +917,7 @@ function NewRuleForm({
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -1007,14 +1007,14 @@ function EditRuleForm({
   };
 
   return (
-    <div className="bg-surface border border-th-default rounded-lg p-6 mb-6 shadow-sm">
-      <h3 className="text-lg font-semibold text-th-primary mb-6">
-        Edit {rule.rule_type} Rule
-      </h3>
-      {/* Cap the field width. The card spans the page to match the rule list
-          below it, but a rule *name* does not need 1000px and a description
-          does not need 1500px — unbounded, the fields read as a wall. */}
-      <form onSubmit={handleSubmit} className="max-w-4xl">
+    <Modal
+      open
+      onClose={onCancel}
+      title={`Edit ${rule.rule_type} Rule`}
+      size="2xl"
+      scrollBody
+    >
+      <form onSubmit={handleSubmit}>
         {/* Common Fields */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="col-span-2">
@@ -1210,6 +1210,6 @@ function EditRuleForm({
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
