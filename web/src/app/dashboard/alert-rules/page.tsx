@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import PageShell from '@/components/ui/PageShell';
@@ -9,6 +9,7 @@ import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import { Badge, SeverityBadge } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import Modal from '@/components/ui/Modal';
+import DevicePicker from '@/components/ui/DevicePicker';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { operatorSymbol } from '@/components/flow/ruleGraph';
 import type {
@@ -106,11 +107,30 @@ export default function AlertRulesPage() {
     setLoading(false);
   }, [tenant, filterType, filterSeverity, filterEnabled, filterDevice]);
 
+  /** Merge devices into the cache without dropping ones already known.
+   *
+   *  `devices` is not "the tenant's devices" — the list endpoint caps per_page
+   *  at 100, so on a real fleet it never could be. It is "devices this page has
+   *  seen": the first page, anything a DevicePicker search returned, and the
+   *  ones referenced by the loaded rules. getSchemaForDevice/getDeviceName look
+   *  up here, so a device must survive in the cache after the search that found
+   *  it has been replaced. */
+  const rememberDevices = useCallback((incoming: Device[]) => {
+    if (incoming.length === 0) return;
+    setDevices(prev => {
+      const byId = new Map(prev.map(d => [d.id, d]));
+      incoming.forEach(d => byId.set(d.id, d));
+      return [...byId.values()];
+    });
+  }, []);
+
   const loadDevices = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token || !tenant) return;
 
     const [devRes, dtRes] = await Promise.all([
+      // Seed only. Small tenants get a full list for free; large ones reach the
+      // rest through the picker's server-side search.
       fetch(`/api/v1/tenants/${tenant}/devices?page=1&per_page=100`, {
         headers: { Authorization: `Bearer ${token}` }
       }),
@@ -121,13 +141,13 @@ export default function AlertRulesPage() {
 
     if (devRes.ok) {
       const json = await devRes.json();
-      setDevices(json.data || []);
+      rememberDevices(json.data || []);
     }
     if (dtRes.ok) {
       const json = await dtRes.json();
       setDeviceTypes(Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []));
     }
-  }, [tenant]);
+  }, [tenant, rememberDevices]);
 
   // Channel wiring — only the canvas needs it, so only the canvas pays for it.
   const loadWiring = useCallback(async () => {
@@ -163,6 +183,42 @@ export default function AlertRulesPage() {
   useEffect(() => {
     if (tenant && view === 'canvas') loadWiring();
   }, [tenant, view, loadWiring]);
+
+  /** Resolve names for devices a rule points at but the seed page missed.
+   *
+   *  Without this a rule bound to device 101+ renders as a UUID fragment on its
+   *  card and on the canvas. Distinct, still-unknown ids only — on a small
+   *  tenant that is zero requests. `attemptedDeviceIds` stops a device that
+   *  404s (deleted, or another tenant's) from being re-fetched on every render. */
+  const attemptedDeviceIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token || !tenant) return;
+
+    const known = new Set(devices.map(d => d.id));
+    const missing = [...new Set(
+      rules
+        .map(r => r.device_id)
+        .filter((id): id is string => !!id && !known.has(id) && !attemptedDeviceIds.current.has(id))
+    )];
+    if (missing.length === 0) return;
+    missing.forEach(id => attemptedDeviceIds.current.add(id));
+
+    let cancelled = false;
+    void Promise.all(
+      missing.map(id =>
+        fetch(`/api/v1/tenants/${tenant}/devices/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    ).then(results => {
+      if (cancelled) return;
+      rememberDevices(results.filter(Boolean) as Device[]);
+    });
+    return () => { cancelled = true; };
+  }, [rules, devices, tenant, rememberDevices]);
 
   const deleteRule = async (rule: AlertRule) => {
     const confirmed = await toast.confirm(
@@ -275,20 +331,20 @@ export default function AlertRulesPage() {
                 </div>
               </div>
 
-              {/* Device Filter */}
-              <div>
+              {/* Device Filter — searched server-side; this list is not bounded
+                  by what the seed page happened to return. */}
+              <div style={{ minWidth: 240 }}>
                 <label className="block text-[10px] font-bold text-th-muted uppercase tracking-wider mb-1.5">Device</label>
-                <select
-                  value={filterDevice}
-                  onChange={e => setFilterDevice(e.target.value)}
-                  className={input.select}
-                  style={{ width: 'auto' }}
-                >
-                  <option value="all">All Devices</option>
-                  {devices.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                <DevicePicker
+                  tenant={tenant!}
+                  value={filterDevice === 'all' ? '' : filterDevice}
+                  selectedLabel={filterDevice === 'all' ? undefined : getDeviceName(filterDevice)}
+                  emptyLabel="All Devices"
+                  onChange={d => {
+                    if (d) rememberDevices([d]);
+                    setFilterDevice(d?.id ?? 'all');
+                  }}
+                />
               </div>
             </div>
 
@@ -332,6 +388,7 @@ export default function AlertRulesPage() {
             tenant={tenant}
             devices={devices}
             deviceTypes={deviceTypes}
+            rememberDevices={rememberDevices}
             onSuccess={(createdId) => {
               setShowNewRuleForm(false);
               // Land on the rule that was just created rather than leaving the
@@ -506,12 +563,15 @@ function NewRuleForm({
   tenant,
   devices,
   deviceTypes,
+  rememberDevices,
   onSuccess,
   onCancel
 }: {
   tenant: string | null;
   devices: Device[];
   deviceTypes: DeviceType[];
+  /** Cache a device the picker found, so its metric schema resolves. */
+  rememberDevices: (devices: Device[]) => void;
   /** The new rule's id, so the canvas can switch to what was just created. */
   onSuccess: (createdId: string | null) => void;
   onCancel: () => void;
@@ -690,17 +750,21 @@ function NewRuleForm({
             <h4 className="text-sm font-semibold text-purple-900 mb-3">Threshold Configuration</h4>
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm text-th-primary mb-1">Device</label>
-                <select
+                <DevicePicker
+                  label="Device"
+                  tenant={tenant!}
                   value={deviceId}
-                  onChange={e => { setDeviceId(e.target.value); setMetric(''); }}
-                  className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm"
-                >
-                  <option value="">Global (all devices)</option>
-                  {devices.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                  selectedLabel={devices.find(d => d.id === deviceId)?.name}
+                  emptyLabel="Global (all devices)"
+                  onChange={d => {
+                    // Push the pick into the page's cache first: the metric list
+                    // below resolves its schema via the device's device_type_id,
+                    // and a searched-for device is not in the seeded list.
+                    if (d) rememberDevices([d]);
+                    setDeviceId(d?.id ?? '');
+                    setMetric('');
+                  }}
+                />
               </div>
               <div>
                 <label className="block text-sm text-th-primary mb-1">

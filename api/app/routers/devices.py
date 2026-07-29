@@ -1,7 +1,7 @@
 """Device management routes - CRUD operations with RLS enforcement."""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
 from uuid import UUID
@@ -46,6 +46,11 @@ async def list_devices(
     organization_id: Optional[UUID] = Query(None),
     site_id: Optional[UUID] = Query(None),
     device_group_id: Optional[UUID] = Query(None),
+    search: Optional[str] = Query(
+        None,
+        max_length=255,
+        description="Case-insensitive substring match on name, serial number or dev_eui",
+    ),
 ):
     """List all devices for tenant with pagination and optional hierarchy filtering.
 
@@ -73,6 +78,15 @@ async def list_devices(
     if device_group_id:
         query = query.where(Device.device_group_id == device_group_id)
         count_query = count_query.where(Device.device_group_id == device_group_id)
+    if search and search.strip():
+        pattern = device_search_pattern(search)
+        search_filter = or_(
+            Device.name.ilike(pattern, escape="\\"),
+            Device.serial_number.ilike(pattern, escape="\\"),
+            Device.dev_eui.ilike(pattern, escape="\\"),
+        )
+        query = query.where(search_filter)
+        count_query = count_query.where(search_filter)
 
     count_result = await session.execute(count_query)
     total = count_result.scalar() or 0
@@ -91,6 +105,25 @@ async def list_devices(
         data=[_to_response(d, thresholds) for d in devices],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
+
+
+def device_search_pattern(search: str) -> str:
+    """Build the LIKE pattern for a device search term.
+
+    `per_page` is capped at 100, so a client that cannot narrow the list
+    server-side never reaches device 101+ on a fleet of thousands.
+
+    The wildcards are escaped: without this, a term containing `%` matches every
+    row, and `_` matches any character — so searching for a serial like
+    `WM_0042` would quietly return `WM-0042` and `WMx0042` too. The backslash
+    must be escaped first, or it would double-escape the escapes added after it.
+
+    ilike() is used at the call site rather than `lower(col) LIKE`, because a
+    functional lower() on the column would not be usable by a pg_trgm index if
+    one is added later.
+    """
+    term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{term}%"
 
 
 async def _validate_device_fks(
