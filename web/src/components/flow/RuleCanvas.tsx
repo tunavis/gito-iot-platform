@@ -12,6 +12,7 @@ import {
 import FlowCanvas from './FlowCanvas';
 import {
   AddConditionNode,
+  AddRuleNode,
   AlarmNode,
   ChannelNode,
   ConditionNode,
@@ -43,6 +44,7 @@ import {
 const NODE_TYPES: NodeTypes = {
   condition: ConditionNode,
   addCondition: AddConditionNode,
+  addRule: AddRuleNode,
   logic: LogicNode,
   alarm: AlarmNode,
   channel: ChannelNode,
@@ -61,6 +63,8 @@ export interface RuleCanvasProps {
   deviceName?: string;
   /** Clicking the alarm node — opens the page's form for name/severity/cooldown. */
   onEditRule: () => void;
+  /** Clicking the `New alert rule` node — opens the page's create form. */
+  onCreateRule: () => void;
   /** Wiring changed on the server; the page should refetch notification rules. */
   onWiringChanged: () => void;
   /** The rule itself changed; the page should refetch rules so the list agrees. */
@@ -76,6 +80,7 @@ export default function RuleCanvas({
   deviceTypes,
   deviceName,
   onEditRule,
+  onCreateRule,
   onWiringChanged,
   onRuleChanged,
 }: RuleCanvasProps) {
@@ -342,6 +347,9 @@ export default function RuleCanvas({
         case 'addCondition':
           void startAdd();
           break;
+        case 'addRule':
+          onCreateRule();
+          break;
         case 'alarm':
           onEditRule();
           break;
@@ -349,7 +357,7 @@ export default function RuleCanvas({
           break; // a channel node has nothing of its own to edit here
       }
     },
-    [busy, conditions, toggleLogic, startAdd, onEditRule],
+    [busy, conditions, toggleLogic, startAdd, onEditRule, onCreateRule],
   );
 
   return (

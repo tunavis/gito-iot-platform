@@ -131,6 +131,7 @@ export const channelDetail = (channel: NotificationChannel): string =>
 export const ALARM_NODE_ID = 'alarm';
 export const LOGIC_NODE_ID = 'logic';
 export const ADD_CONDITION_NODE_ID = 'add-condition';
+export const ADD_RULE_NODE_ID = 'add-rule';
 export const conditionNodeId = (index: number) => `condition:${index}`;
 export const channelNodeId = (channelId: string) => `channel:${channelId}`;
 /** Alarm→channel edges carry the notification-rule id so deleting one can undo it. */
@@ -289,6 +290,18 @@ export function buildRuleGraph(
       enabled: rule.enabled,
       color: SEVERITY_COLOR[severity] ?? SEVERITY_COLOR.warning,
     },
+  });
+
+  // Directly under the alarm, the same way `+ Add condition` sits under the last
+  // condition: an action in its column, no edges, not part of what is evaluated.
+  // Rules are siblings — each is its own alarm — so this is the one place on the
+  // canvas where "another one of these" belongs.
+  nodes.push({
+    id: ADD_RULE_NODE_ID,
+    type: 'addRule',
+    deletable: false,
+    position: { x: alarmCol * COL_W, y: alarmY + ROW_H },
+    data: { color: SEVERITY_COLOR[severity] ?? SEVERITY_COLOR.warning },
   });
 
   // Last column — every tenant channel, wired or not, centred on the alarm.

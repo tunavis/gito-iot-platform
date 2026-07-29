@@ -147,6 +147,14 @@ export const AddConditionNode = memo(function AddConditionNode({
     <div className="relative">
       <div
         className="rounded-lg px-3 py-2 flex items-center gap-1.5 cursor-pointer"
+        // The full sentence does not fit the node width and truncated to
+        // "converts to compo…", which reads as a broken label rather than a
+        // warning. The confirmation dialog states the consequences in full.
+        title={
+          data.converts
+            ? 'Adding a condition converts this threshold rule to a composite rule. You will be asked to confirm.'
+            : 'Add a condition to this rule'
+        }
         style={{
           width: RULE_NODE_WIDTH,
           background: 'transparent',
@@ -156,10 +164,41 @@ export const AddConditionNode = memo(function AddConditionNode({
       >
         <Plus className="w-3 h-3 flex-shrink-0" />
         <span className="text-[10px] font-bold uppercase tracking-wider truncate">
-          {data.converts ? 'Add condition — converts to composite' : 'Add condition'}
+          {data.converts ? 'Add condition (converts)' : 'Add condition'}
         </span>
       </div>
       {data.edit && <ConditionEditor {...data.edit} />}
+    </div>
+  );
+});
+
+// ── Add rule ──────────────────────────────────────────────────────────────────
+//
+// A canvas-level action, not part of *this* rule's graph: no handles, no edges.
+// It opens the page's create form rather than authoring a rule on the canvas —
+// a rule being drawn is an unsaved draft, and this canvas deliberately keeps no
+// local copy of a rule (see CLEANUP_TODO.md). Once the form saves, the canvas
+// switches to the new rule, so creating still ends where you were working.
+
+export type AddRuleNodeData = { color: string };
+export type AddRuleFlowNode = Node<AddRuleNodeData, 'addRule'>;
+
+export const AddRuleNode = memo(function AddRuleNode({ data }: NodeProps<AddRuleFlowNode>) {
+  return (
+    <div
+      className="rounded-lg px-3 py-2 flex items-center gap-1.5 cursor-pointer"
+      title="Create another alert rule"
+      style={{
+        width: RULE_NODE_WIDTH,
+        background: 'transparent',
+        border: '1px dashed var(--color-border)',
+        color: data.color,
+      }}
+    >
+      <Plus className="w-3 h-3 flex-shrink-0" />
+      <span className="text-[10px] font-bold uppercase tracking-wider truncate">
+        New alert rule
+      </span>
     </div>
   );
 });

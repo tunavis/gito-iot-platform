@@ -331,8 +331,12 @@ export default function AlertRulesPage() {
             tenant={tenant}
             devices={devices}
             deviceTypes={deviceTypes}
-            onSuccess={() => {
+            onSuccess={(createdId) => {
               setShowNewRuleForm(false);
+              // Land on the rule that was just created rather than leaving the
+              // canvas on the previous one — otherwise creating from the canvas
+              // looks like it did nothing.
+              if (createdId) setSelectedRuleId(createdId);
               loadRules();
             }}
             onCancel={() => setShowNewRuleForm(false)}
@@ -399,6 +403,7 @@ export default function AlertRulesPage() {
                       deviceTypes={deviceTypes}
                       deviceName={selectedRule.device_id ? getDeviceName(selectedRule.device_id) : undefined}
                       onEditRule={() => setEditingRule(selectedRule)}
+                      onCreateRule={() => setShowNewRuleForm(true)}
                       onWiringChanged={loadWiring}
                       onRuleChanged={loadRules}
                     />
@@ -506,7 +511,8 @@ function NewRuleForm({
   tenant: string | null;
   devices: Device[];
   deviceTypes: DeviceType[];
-  onSuccess: () => void;
+  /** The new rule's id, so the canvas can switch to what was just created. */
+  onSuccess: (createdId: string | null) => void;
   onCancel: () => void;
 }) {
   const toast = useToast();
@@ -591,7 +597,11 @@ function NewRuleForm({
     });
 
     if (res.ok) {
-      onSuccess();
+      // The response is the created rule (the API returns data directly). A
+      // parse failure is not worth failing the create over — the rule exists;
+      // the canvas just stays where it was.
+      const created = await res.json().catch(() => null);
+      onSuccess(typeof created?.id === 'string' ? created.id : null);
     } else {
       const err = await res.json();
       toast.error('Failed to create rule', err.detail || 'Unknown error');

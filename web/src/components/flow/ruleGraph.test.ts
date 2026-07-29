@@ -1,5 +1,6 @@
 import {
   ADD_CONDITION_NODE_ID,
+  ADD_RULE_NODE_ID,
   ALARM_NODE_ID,
   LOGIC_NODE_ID,
   buildRuleGraph,
@@ -46,6 +47,22 @@ describe('buildRuleGraph', () => {
     expect(nodes.find((n) => n.type === 'logic')).toBeUndefined();
     expect(edges.filter((e) => e.target === ALARM_NODE_ID)).toHaveLength(1);
     expect(nodes.find((n) => n.id === 'condition:0')?.data.expression).toBe('< 20');
+  });
+
+  it('offers a `New alert rule` node in the alarm column, detached from the graph', () => {
+    const { nodes, edges } = buildRuleGraph(BASE, [], CHANNELS);
+
+    const addRule = nodes.find((n) => n.id === ADD_RULE_NODE_ID);
+    const alarm = nodes.find((n) => n.id === ALARM_NODE_ID);
+
+    expect(addRule).toBeDefined();
+    // An action, not part of what is evaluated: no edges touch it, and Delete
+    // must not be able to drop it from local state with no server call.
+    expect(edges.some((e) => e.source === ADD_RULE_NODE_ID || e.target === ADD_RULE_NODE_ID)).toBe(false);
+    expect(addRule!.deletable).toBe(false);
+    // Under the alarm, the way `+ Add condition` sits under the last condition.
+    expect(addRule!.position.x).toBe(alarm!.position.x);
+    expect(addRule!.position.y).toBeGreaterThan(alarm!.position.y);
   });
 
   it('draws one logic node with three inbound edges for a 3-condition COMPOSITE rule', () => {
