@@ -140,6 +140,14 @@ jobs:
   security-scan:
     name: 🔒 Security Scan
     runs-on: ubuntu-latest
+    # The repo's default GITHUB_TOKEN is read-only. pull_request events are
+    # granted security-events: write implicitly, push events are not — which
+    # is why this job passed on every PR and failed on every push to main,
+    # taking Deployment Ready (and so all of main) red with it. Scoped to this
+    # job rather than raising the repo-wide default.
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -156,7 +164,7 @@ jobs:
 
       - name: Upload Trivy results to GitHub Security
         if: always()
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
