@@ -53,13 +53,13 @@ class Settings(BaseSettings):
     # The secret key is ALSO the webhook signing key (HMAC-SHA512 over the raw body).
     PAYSTACK_ENABLED: bool = False
     PAYSTACK_API_URL: str = "https://api.paystack.co"
-    PAYSTACK_SECRET_KEY: str = ""   # sk_test_... / sk_live_...
+    PAYSTACK_SECRET_KEY: str = ""  # sk_test_... / sk_live_...
 
     # Peach Payments (parked — onboarding paused). Kept so the adapter still works if
     # re-enabled: set CARD_PROVIDER=peach + these. All from the Peach dashboard.
     PEACH_ENABLED: bool = False
-    PEACH_AUTH_URL: str = ""       # OAuth token endpoint (from Peach dashboard)
-    PEACH_API_URL: str = ""        # Checkout / payments base URL (from Peach dashboard)
+    PEACH_AUTH_URL: str = ""  # OAuth token endpoint (from Peach dashboard)
+    PEACH_API_URL: str = ""  # Checkout / payments base URL (from Peach dashboard)
     PEACH_CLIENT_ID: str = ""
     PEACH_CLIENT_SECRET: str = ""
     PEACH_MERCHANT_ID: str = ""
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
 
     # Cookie Security (for auth tokens)
     COOKIE_SECURE: bool = False  # Set to True to force secure cookies (HTTPS only)
-    TRUST_PROXY: bool = True     # Trust X-Forwarded-Proto header from reverse proxy
+    TRUST_PROXY: bool = True  # Trust X-Forwarded-Proto header from reverse proxy
 
     # Logging
     LOG_LEVEL: str = "INFO"

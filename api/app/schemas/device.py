@@ -11,6 +11,7 @@ from app.services.device_status import DEFAULT_OFFLINE_THRESHOLD_SECONDS, is_eff
 
 class DeviceStatus(str, Enum):
     """Device status enumeration."""
+
     ONLINE = "online"
     OFFLINE = "offline"
     IDLE = "idle"
@@ -20,6 +21,7 @@ class DeviceStatus(str, Enum):
 
 class DeviceCreate(BaseModel):
     """Create device request."""
+
     name: str = Field(min_length=1, max_length=255, description="Device name")
     device_type: Optional[str] = Field(None, max_length=100, description="Device type string")
     device_type_id: Optional[UUID] = Field(None, description="Device type template UUID")
@@ -32,7 +34,9 @@ class DeviceCreate(BaseModel):
     site_id: Optional[UUID] = Field(None, description="Site ID")
     device_group_id: Optional[UUID] = Field(None, description="Device group ID")
     # LoRaWAN fields
-    dev_eui: Optional[str] = Field(None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)")
+    dev_eui: Optional[str] = Field(
+        None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
+    )
     app_key: Optional[str] = Field(None, description="LoRaWAN Application Key")
     ttn_app_id: Optional[str] = Field(None, description="TTN application ID")
     device_profile_id: Optional[str] = Field(None, description="Device profile UUID")
@@ -45,6 +49,7 @@ class DeviceCreate(BaseModel):
 
 class DeviceUpdate(BaseModel):
     """Update device request."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     serial_number: Optional[str] = Field(None, max_length=255)
@@ -56,13 +61,16 @@ class DeviceUpdate(BaseModel):
     site_id: Optional[UUID] = Field(None, description="Site ID")
     device_group_id: Optional[UUID] = Field(None, description="Device group ID")
     # LoRaWAN fields
-    dev_eui: Optional[str] = Field(None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)")
+    dev_eui: Optional[str] = Field(
+        None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
+    )
     ttn_app_id: Optional[str] = Field(None, description="TTN application ID")
     device_profile_id: Optional[str] = Field(None, description="Device profile UUID")
 
 
 class DeviceResponse(BaseModel):
     """Device response model."""
+
     id: UUID
     tenant_id: UUID
     name: str

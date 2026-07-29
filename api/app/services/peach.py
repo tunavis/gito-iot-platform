@@ -31,7 +31,11 @@ import httpx
 
 from app.config import get_settings
 from app.services.payments import (
-    CheckoutResult, ChargeResult, ProviderWebhook, PaymentProvider, ProviderNotSupported,
+    CheckoutResult,
+    ChargeResult,
+    ProviderWebhook,
+    PaymentProvider,
+    ProviderNotSupported,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,8 +94,15 @@ class PeachProvider(PaymentProvider):
 
     # ── Checkout (collect + tokenise a card) ─────────────────────────────────
     async def create_checkout(
-        self, *, amount_cents: int, currency: str, reference: str,
-        return_url: str, notify_url: str, email: str | None = None, tokenise: bool = True,
+        self,
+        *,
+        amount_cents: int,
+        currency: str,
+        reference: str,
+        return_url: str,
+        notify_url: str,
+        email: str | None = None,
+        tokenise: bool = True,
     ) -> CheckoutResult:  # email unused — Peach's hosted page collects it
         token = await self._access_token()
         s = self._settings
@@ -121,7 +132,12 @@ class PeachProvider(PaymentProvider):
 
     # ── Recurring charge against a stored token ──────────────────────────────
     async def charge_token(
-        self, *, token: str, amount_cents: int, currency: str, reference: str,
+        self,
+        *,
+        token: str,
+        amount_cents: int,
+        currency: str,
+        reference: str,
         email: str | None = None,
     ) -> ChargeResult:  # email unused — Peach charges the stored registration directly
         access = await self._access_token()
@@ -151,7 +167,8 @@ class PeachProvider(PaymentProvider):
         if is_success_code(code):
             return ChargeResult(success=True, provider_ref=data.get("id"))
         return ChargeResult(
-            success=False, provider_ref=data.get("id"),
+            success=False,
+            provider_ref=data.get("id"),
             failure_reason=(data.get("result") or {}).get("description", code or "charge failed"),
         )
 

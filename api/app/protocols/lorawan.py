@@ -17,16 +17,16 @@ class LoRaWANAdapter(BaseProtocolAdapter):
 
     async def validate_config(self, config: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """Validate LoRaWAN configuration."""
-        lorawan_config = config.get('lorawan', {})
+        lorawan_config = config.get("lorawan", {})
 
         # Validate LoRaWAN class
-        lorawan_class = lorawan_config.get('lorawan_class', 'A')
-        if lorawan_class not in ['A', 'B', 'C']:
+        lorawan_class = lorawan_config.get("lorawan_class", "A")
+        if lorawan_class not in ["A", "B", "C"]:
             return False, "LoRaWAN class must be A, B, or C"
 
         # Validate activation mode
-        activation = lorawan_config.get('activation', 'OTAA')
-        if activation not in ['OTAA', 'ABP']:
+        activation = lorawan_config.get("activation", "OTAA")
+        if activation not in ["OTAA", "ABP"]:
             return False, "Activation must be OTAA or ABP"
 
         return True, None
@@ -39,22 +39,20 @@ class LoRaWANAdapter(BaseProtocolAdapter):
         # Generate AppKey (16 bytes hex for OTAA)
         app_key = secrets.token_hex(16)
 
-        lorawan_config = self.config.get('lorawan', {})
+        lorawan_config = self.config.get("lorawan", {})
 
         protocol_config = {
-            'dev_eui': dev_eui,
-            'app_key': app_key,
-            'lorawan_class': lorawan_config.get('lorawan_class', 'A'),
-            'activation': lorawan_config.get('activation', 'OTAA'),
-            'app_eui': lorawan_config.get('app_eui', '0000000000000000'),  # ChirpStack JoinEUI
-            'data_rate': lorawan_config.get('data_rate', 'SF7BW125'),
-            'frequency_plan': lorawan_config.get('frequency_plan', 'EU868')
+            "dev_eui": dev_eui,
+            "app_key": app_key,
+            "lorawan_class": lorawan_config.get("lorawan_class", "A"),
+            "activation": lorawan_config.get("activation", "OTAA"),
+            "app_eui": lorawan_config.get("app_eui", "0000000000000000"),  # ChirpStack JoinEUI
+            "data_rate": lorawan_config.get("data_rate", "SF7BW125"),
+            "frequency_plan": lorawan_config.get("frequency_plan", "EU868"),
         }
 
         return DeviceCredentials(
-            device_id=device_id,
-            tenant_id=tenant_id,
-            protocol_config=protocol_config
+            device_id=device_id, tenant_id=tenant_id, protocol_config=protocol_config
         )
 
     async def provision_device(self, credentials: DeviceCredentials) -> Dict[str, Any]:
@@ -77,10 +75,10 @@ class LoRaWANAdapter(BaseProtocolAdapter):
         # }
 
         return {
-            'status': 'provisioned',
-            'protocol': 'lorawan',
-            'dev_eui': credentials.protocol_config['dev_eui'],
-            'chirpstack_status': 'pending_integration'  # TODO: actual status
+            "status": "provisioned",
+            "protocol": "lorawan",
+            "dev_eui": credentials.protocol_config["dev_eui"],
+            "chirpstack_status": "pending_integration",  # TODO: actual status
         }
 
     async def deprovision_device(self, device_id: str) -> bool:
@@ -97,41 +95,38 @@ class LoRaWANAdapter(BaseProtocolAdapter):
         cfg = credentials.protocol_config
 
         return {
-            'protocol': 'LoRaWAN',
-            'network_server': 'ChirpStack',
-            'credentials': {
-                'dev_eui': cfg['dev_eui'],
-                'app_eui': cfg['app_eui'],
-                'app_key': cfg['app_key']
+            "protocol": "LoRaWAN",
+            "network_server": "ChirpStack",
+            "credentials": {
+                "dev_eui": cfg["dev_eui"],
+                "app_eui": cfg["app_eui"],
+                "app_key": cfg["app_key"],
             },
-            'configuration': {
-                'class': cfg['lorawan_class'],
-                'activation': cfg['activation'],
-                'data_rate': cfg['data_rate'],
-                'frequency_plan': cfg['frequency_plan']
+            "configuration": {
+                "class": cfg["lorawan_class"],
+                "activation": cfg["activation"],
+                "data_rate": cfg["data_rate"],
+                "frequency_plan": cfg["frequency_plan"],
             },
-            'setup_instructions': [
-                '1. Flash your LoRaWAN device with the credentials above',
-                '2. Ensure your device is configured for ' + cfg['activation'] + ' activation',
-                '3. Set LoRaWAN class to ' + cfg['lorawan_class'],
-                '4. Power on the device and wait for JOIN request',
-                '5. Verify successful join in ChirpStack Console',
-                '6. Device will appear online when first uplink received'
+            "setup_instructions": [
+                "1. Flash your LoRaWAN device with the credentials above",
+                "2. Ensure your device is configured for " + cfg["activation"] + " activation",
+                "3. Set LoRaWAN class to " + cfg["lorawan_class"],
+                "4. Power on the device and wait for JOIN request",
+                "5. Verify successful join in ChirpStack Console",
+                "6. Device will appear online when first uplink received",
             ],
-            'example_payload_format': {
-                'type': 'Cayenne LPP or custom binary',
-                'example_hex': '01670110026873',
-                'decoded': {
-                    'temperature': 27.2,
-                    'humidity': 58.3
-                }
-            }
+            "example_payload_format": {
+                "type": "Cayenne LPP or custom binary",
+                "example_hex": "01670110026873",
+                "decoded": {"temperature": 27.2, "humidity": 58.3},
+            },
         }
 
     async def test_connection(self, credentials: DeviceCredentials) -> tuple[bool, Optional[str]]:
         """Test LoRaWAN connection."""
         cfg = credentials.protocol_config
-        if not cfg.get('dev_eui') or not cfg.get('app_key'):
+        if not cfg.get("dev_eui") or not cfg.get("app_key"):
             return False, "Missing DevEUI or AppKey"
 
         # TODO: Check ChirpStack API for device status
@@ -139,4 +134,4 @@ class LoRaWANAdapter(BaseProtocolAdapter):
 
 
 # Register LoRaWAN adapter
-ProtocolRegistry.register('lorawan', LoRaWANAdapter)
+ProtocolRegistry.register("lorawan", LoRaWANAdapter)

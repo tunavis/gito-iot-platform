@@ -8,6 +8,7 @@ from uuid import UUID
 
 class SolutionTemplateListResponse(BaseModel):
     """Lightweight solution template response for list views."""
+
     id: UUID
     name: str
     slug: str
@@ -21,6 +22,7 @@ class SolutionTemplateListResponse(BaseModel):
 
 class SolutionTemplateResponse(BaseModel):
     """Full solution template response including device types, dashboard config, and alert rules."""
+
     id: UUID
     name: str
     slug: str
@@ -37,6 +39,7 @@ class SolutionTemplateResponse(BaseModel):
 
 class ApplyTemplateRequest(BaseModel):
     """Request body for applying a solution template."""
+
     dashboard_name: Optional[str] = Field(
         None,
         max_length=200,

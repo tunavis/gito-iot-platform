@@ -17,8 +17,17 @@ from datetime import datetime
 import uuid
 
 from sqlalchemy import (
-    Column, String, DateTime, Date, ForeignKey, CheckConstraint, Text,
-    Integer, BigInteger, Boolean, Index,
+    Column,
+    String,
+    DateTime,
+    Date,
+    ForeignKey,
+    CheckConstraint,
+    Text,
+    Integer,
+    BigInteger,
+    Boolean,
+    Index,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
 
@@ -27,8 +36,10 @@ from app.models.base import BaseModel
 
 # ── Catalogue ────────────────────────────────────────────────────────────────
 
+
 class Plan(BaseModel):
     """A sellable plan. Configuration, not code — new plans are INSERTs."""
+
     __tablename__ = "plans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -46,6 +57,7 @@ class Plan(BaseModel):
 
 class PlanPrice(BaseModel):
     """A plan's price for one (currency, interval). amount_cents NULL = contact sales."""
+
     __tablename__ = "plan_prices"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -66,6 +78,7 @@ class PlanPrice(BaseModel):
 
 class Feature(BaseModel):
     """A capability the platform can gate on. `key` is the stable entitlement id."""
+
     __tablename__ = "features"
 
     key = Column(String(80), primary_key=True)
@@ -86,22 +99,33 @@ class PlanFeature(BaseModel):
     value is JSONB — true/false for boolean features, a number (or JSON null =
     unlimited) for limits, a quoted string for enums.
     """
+
     __tablename__ = "plan_features"
 
-    plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.id", ondelete="CASCADE"), primary_key=True)
-    feature_key = Column(String(80), ForeignKey("features.key", ondelete="CASCADE"), primary_key=True)
+    plan_id = Column(
+        UUID(as_uuid=True), ForeignKey("plans.id", ondelete="CASCADE"), primary_key=True
+    )
+    feature_key = Column(
+        String(80), ForeignKey("features.key", ondelete="CASCADE"), primary_key=True
+    )
     value = Column(JSONB, nullable=False)
 
 
 # ── Subscriptions ──────────────────────────────────────────────────────────────
 
+
 class Subscription(BaseModel):
     """A tenant's subscription. At most one live row per tenant (partial unique index)."""
+
     __tablename__ = "subscriptions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    payer_tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    payer_tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True
+    )
     plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.id"), nullable=False)
     status = Column(String(20), nullable=False)
     provider = Column(String(30), nullable=False, default="manual")
@@ -123,17 +147,24 @@ class Subscription(BaseModel):
             "status IN ('trialing', 'active', 'past_due', 'restricted', 'canceled', 'expired')",
             name="valid_subscription_status",
         ),
-        CheckConstraint("billing_interval IN ('month', 'year')", name="valid_subscription_interval"),
+        CheckConstraint(
+            "billing_interval IN ('month', 'year')", name="valid_subscription_interval"
+        ),
     )
 
 
 class SubscriptionEvent(BaseModel):
     """Append-only ledger of subscription status transitions."""
+
     __tablename__ = "subscription_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subscription_id = Column(
+        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False
+    )
     from_status = Column(String(20))
     to_status = Column(String(20), nullable=False)
     reason = Column(String(100))
@@ -144,15 +175,19 @@ class SubscriptionEvent(BaseModel):
 
 # ── Usage ────────────────────────────────────────────────────────────────────
 
+
 class UsageCounter(BaseModel):
     """Period-cumulative metering (API requests, notifications sent).
 
     Point-in-time counts (devices, users) are derived live from their own tables,
     not stored here.
     """
+
     __tablename__ = "usage_counters"
 
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
     metric = Column(String(60), primary_key=True)
     period_start = Column(Date, primary_key=True)
     value = Column(BigInteger, nullable=False, default=0)
@@ -161,13 +196,19 @@ class UsageCounter(BaseModel):
 
 # ── Invoices & payments ────────────────────────────────────────────────────────
 
+
 class Invoice(BaseModel):
     """An invoice — provider-issued (Stripe) or manual (enterprise EFT/PO)."""
+
     __tablename__ = "invoices"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subscription_id = Column(
+        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=True
+    )
     number = Column(String(50), nullable=False, unique=True)
     status = Column(String(20), nullable=False)
     currency = Column(String(3), nullable=False, default="ZAR")
@@ -197,11 +238,16 @@ class Invoice(BaseModel):
 
 class Payment(BaseModel):
     """A payment attempt — failures are rows too, for dunning history."""
+
     __tablename__ = "payments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    invoice_id = Column(
+        UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True
+    )
     provider = Column(String(30), nullable=False, default="manual")
     provider_payment_id = Column(String(255))
     amount_cents = Column(BigInteger, nullable=False)
@@ -222,8 +268,10 @@ class Payment(BaseModel):
 
 # ── Webhooks & abuse prevention ──────────────────────────────────────────────
 
+
 class WebhookEvent(BaseModel):
     """Provider webhook envelope. UNIQUE(provider, provider_event_id) = idempotency."""
+
     __tablename__ = "webhook_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -247,10 +295,13 @@ class WebhookEvent(BaseModel):
 
 class TrialFingerprint(BaseModel):
     """Signals used to block repeat trial signups (abuse prevention)."""
+
     __tablename__ = "trial_fingerprints"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
     email_domain = Column(String(255))
     email_hash = Column(String(64))
     signup_ip = Column(INET)

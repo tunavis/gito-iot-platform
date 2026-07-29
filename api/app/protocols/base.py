@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DeviceCredentials:
     """Device credentials for protocol connection."""
+
     device_id: str
     tenant_id: str
     protocol_config: Dict[str, Any]
@@ -19,6 +20,7 @@ class DeviceCredentials:
 @dataclass
 class TelemetryMessage:
     """Standardized telemetry message format."""
+
     device_id: str
     tenant_id: str
     timestamp: str
@@ -115,7 +117,9 @@ class BaseProtocolAdapter(ABC):
         """
         pass
 
-    def parse_telemetry(self, raw_message: bytes, metadata: Dict[str, Any]) -> Optional[TelemetryMessage]:
+    def parse_telemetry(
+        self, raw_message: bytes, metadata: Dict[str, Any]
+    ) -> Optional[TelemetryMessage]:
         """Parse raw telemetry message into standardized format.
 
         Override this if protocol needs custom parsing.
@@ -129,14 +133,15 @@ class BaseProtocolAdapter(ABC):
         """
         # Default: assume JSON payload
         import json
+
         try:
-            data = json.loads(raw_message.decode('utf-8'))
+            data = json.loads(raw_message.decode("utf-8"))
             return TelemetryMessage(
-                device_id=metadata.get('device_id'),
-                tenant_id=metadata.get('tenant_id'),
-                timestamp=metadata.get('timestamp'),
+                device_id=metadata.get("device_id"),
+                tenant_id=metadata.get("tenant_id"),
+                timestamp=metadata.get("timestamp"),
                 data=data,
-                metadata=metadata
+                metadata=metadata,
             )
         except Exception as e:
             logger.error(f"Failed to parse telemetry: {e}")

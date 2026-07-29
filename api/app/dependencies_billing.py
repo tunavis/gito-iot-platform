@@ -38,6 +38,7 @@ def enforce_limit(feature_key: str):
     Checks `used >= limit` (about to create the (limit+1)th). Unlimited (None)
     always passes. Applied to CREATE routes only — never reads.
     """
+
     async def _dep(
         tenant_id: UUID,
         request: Request,
@@ -75,6 +76,7 @@ def enforce_limit(feature_key: str):
 
 def require_feature(feature_key: str):
     """Dependency: 403 if the plan doesn't grant this boolean feature."""
+
     async def _dep(
         tenant_id: UUID,
         request: Request,

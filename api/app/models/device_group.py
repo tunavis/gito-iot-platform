@@ -10,20 +10,34 @@ from app.models.base import BaseModel
 
 class DeviceGroup(BaseModel):
     """Device group - logical grouping of devices for bulk operations."""
+
     __tablename__ = "device_groups"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
     # Hierarchy: Groups belong to organizations and sites (STRICT — both required)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+    organization_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    site_id = Column(
+        UUID(as_uuid=True), ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
     name = Column(String(255), nullable=False)
     description = Column(Text)
     group_type = Column(String(50))  # logical, physical, functional
-    membership_rule = Column(JSONB, default={}, nullable=False)  # Dynamic membership rules (e.g., tags, status)
-    attributes = Column(JSONB, default={}, nullable=False)  # Custom attributes (renamed from metadata to avoid SQLAlchemy conflict)
+    membership_rule = Column(
+        JSONB, default={}, nullable=False
+    )  # Dynamic membership rules (e.g., tags, status)
+    attributes = Column(
+        JSONB, default={}, nullable=False
+    )  # Custom attributes (renamed from metadata to avoid SQLAlchemy conflict)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
@@ -36,11 +50,19 @@ class DeviceGroup(BaseModel):
 
 class GroupDevice(BaseModel):
     """Device group membership - explicit mapping of devices to groups."""
+
     __tablename__ = "group_devices"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    group_id = Column(UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="CASCADE"), nullable=False, index=True)
-    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    group_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("device_groups.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    device_id = Column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     added_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
@@ -51,13 +73,23 @@ class GroupDevice(BaseModel):
 
 class BulkOperation(BaseModel):
     """Bulk operations - track group-level operations like OTA or commands."""
+
     __tablename__ = "group_bulk_operations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    group_id = Column(UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    group_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("device_groups.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     operation_type = Column(String(50), nullable=False)  # bulk_ota, bulk_command, bulk_sync
-    status = Column(String(50), default="queued", nullable=False)  # queued, running, completed, failed
+    status = Column(
+        String(50), default="queued", nullable=False
+    )  # queued, running, completed, failed
     cadence_workflow_id = Column(String(255))  # Cadence workflow ID for tracking
     devices_total = Column(Integer, nullable=False)
     devices_completed = Column(Integer, default=0, nullable=False)

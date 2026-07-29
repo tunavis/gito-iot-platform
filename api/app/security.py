@@ -12,17 +12,17 @@ from app.config import get_settings
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt."""
-    password_bytes = password.encode('utf-8')
+    password_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash."""
     try:
-        password_bytes = plain_password.encode('utf-8')
-        hashed_bytes = hashed_password.encode('utf-8')
+        password_bytes = plain_password.encode("utf-8")
+        hashed_bytes = hashed_password.encode("utf-8")
         return bcrypt.checkpw(password_bytes, hashed_bytes)
     except Exception:
         return False
@@ -52,15 +52,15 @@ def create_access_token(
     expire = datetime.now(timezone.utc) + expires_delta
 
     payload = {
-        "sub":         user_id,
-        "tenant_id":   tenant_id,
+        "sub": user_id,
+        "tenant_id": tenant_id,
         "tenant_type": tenant_type,
-        "role":        user_role,
-        "email":       email,
-        "name":        name,
+        "role": user_role,
+        "email": email,
+        "name": name,
         "tenant_name": tenant_name,
-        "exp":         expire,
-        "iat":         datetime.now(timezone.utc),
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
     }
 
     token = jwt.encode(
@@ -75,7 +75,7 @@ def create_access_token(
 def decode_token(token: str) -> dict:
     """Decode and verify JWT token."""
     settings = get_settings()
-    
+
     try:
         payload = jwt.decode(
             token,

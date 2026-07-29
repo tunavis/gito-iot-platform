@@ -151,7 +151,15 @@ async def resolve(session, tenant_id: UUID | str, redis=None) -> Entitlements:
 
 
 async def _resolve_from_db(session, tid: str) -> Entitlements:
-    rows = (await session.execute(_LIVE_SUBSCRIPTION_SQL, {"tid": tid, "statuses": list(LIVE_STATUSES)})).mappings().all()
+    rows = (
+        (
+            await session.execute(
+                _LIVE_SUBSCRIPTION_SQL, {"tid": tid, "statuses": list(LIVE_STATUSES)}
+            )
+        )
+        .mappings()
+        .all()
+    )
 
     if not rows:
         # No live subscription → free tier.
@@ -187,6 +195,7 @@ def _iso(dt) -> Optional[str]:
 
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
+
 
 async def _cache_get(redis, tid: str) -> Optional[Entitlements]:
     if redis is None:

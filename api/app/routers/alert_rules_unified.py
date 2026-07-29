@@ -50,6 +50,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}/alert-rules", tags=["alert-rules
 # LIST ALERT RULES
 # ============================================================================
 
+
 @router.get("")
 async def list_alert_rules(
     tenant_id: UUID,
@@ -57,14 +58,16 @@ async def list_alert_rules(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)],
     rule_type: Optional[str] = Query(None, description="Filter by rule type: THRESHOLD, COMPOSITE"),
     device_id: Optional[UUID] = Query(None, description="Filter by device (THRESHOLD rules only)"),
-    severity: Optional[str] = Query(None, description="Filter by severity: info, warning, critical"),
+    severity: Optional[str] = Query(
+        None, description="Filter by severity: info, warning, critical"
+    ),
     enabled: Optional[bool] = Query(None, description="Filter by enabled status"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
 ):
     """
     List all alert rules for tenant with optional filters.
-    
+
     Supports both THRESHOLD and COMPOSITE rule types in a single unified list.
 
     Filters:
@@ -76,11 +79,13 @@ async def list_alert_rules(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     # Build query
     query = select(UnifiedAlertRule).where(UnifiedAlertRule.tenant_id == current_tenant)
-    count_query = select(func.count(UnifiedAlertRule.id)).where(UnifiedAlertRule.tenant_id == current_tenant)
-    
+    count_query = select(func.count(UnifiedAlertRule.id)).where(
+        UnifiedAlertRule.tenant_id == current_tenant
+    )
+
     # Apply filters
     if rule_type:
         # rule_type is stored in DB format (SIMPLE/COMPLEX) via @validates, but
@@ -98,35 +103,36 @@ async def list_alert_rules(
         db_values = SEVERITY_DB_VALUES.get(severity.lower(), (severity.upper(),))
         query = query.where(UnifiedAlertRule.severity.in_(db_values))
         count_query = count_query.where(UnifiedAlertRule.severity.in_(db_values))
-    
+
     if enabled is not None:
         query = query.where(UnifiedAlertRule.enabled == enabled)
         count_query = count_query.where(UnifiedAlertRule.enabled == enabled)
-    
+
     # Get total count
     count_result = await session.execute(count_query)
     total = count_result.scalar() or 0
-    
+
     # Pagination
     offset = (page - 1) * per_page
     query = query.offset(offset).limit(per_page).order_by(UnifiedAlertRule.created_at.desc())
-    
+
     result = await session.execute(query)
     rules = result.scalars().all()
-    
+
     return {
         "data": [rule.to_response_dict() for rule in rules],
         "meta": {
             "page": page,
             "per_page": per_page,
             "total": total,
-        }
+        },
     }
 
 
 # ============================================================================
 # CREATE ALERT RULE
 # ============================================================================
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_alert_rule(
@@ -137,18 +143,18 @@ async def create_alert_rule(
 ):
     """
     Create a new alert rule.
-    
+
     For THRESHOLD rules, provide:
     - metric, operator, threshold (required)
     - device_id (optional - null = global rule)
-    
+
     For COMPOSITE rules, provide:
     - conditions (array), logic (AND/OR)
     """
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     # Validate based on rule type
     if rule_data.rule_type == RuleType.THRESHOLD:
         # Validate required THRESHOLD fields (device_id is optional for global rules)
@@ -167,7 +173,7 @@ async def create_alert_rule(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="threshold is required for THRESHOLD rules",
             )
-        
+
         # If device_id provided, verify device exists and belongs to tenant
         if rule_data.device_id:
             device_result = await session.execute(
@@ -182,7 +188,7 @@ async def create_alert_rule(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Device not found",
                 )
-        
+
         # Create THRESHOLD rule
         rule = UnifiedAlertRule(
             tenant_id=current_tenant,
@@ -197,7 +203,7 @@ async def create_alert_rule(
             threshold=rule_data.threshold,
             cooldown_minutes=rule_data.cooldown_minutes,
         )
-    
+
     elif rule_data.rule_type == RuleType.COMPOSITE:
         # Validate required COMPOSITE fields
         if not rule_data.conditions or len(rule_data.conditions) == 0:
@@ -205,7 +211,7 @@ async def create_alert_rule(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="conditions are required for COMPOSITE rules (at least 1)",
             )
-        
+
         # Convert conditions to JSON-serializable format
         conditions_json = [
             {
@@ -216,7 +222,7 @@ async def create_alert_rule(
             }
             for c in rule_data.conditions
         ]
-        
+
         # Create COMPOSITE rule
         rule = UnifiedAlertRule(
             tenant_id=current_tenant,
@@ -229,25 +235,26 @@ async def create_alert_rule(
             logic=rule_data.logic.value if rule_data.logic else "AND",
             cooldown_minutes=rule_data.cooldown_minutes,
         )
-    
+
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown rule_type: {rule_data.rule_type}",
         )
-    
+
     session.add(rule)
     await session.commit()
     await session.refresh(rule)
-    
+
     logger.info(f"Created {rule.rule_type} alert rule: {rule.name} ({rule.id})")
-    
+
     return {"data": rule.to_response_dict()}
 
 
 # ============================================================================
 # GET ALERT RULE
 # ============================================================================
+
 
 @router.get("/{rule_id}")
 async def get_alert_rule(
@@ -260,7 +267,7 @@ async def get_alert_rule(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(UnifiedAlertRule).where(
             and_(
@@ -270,19 +277,20 @@ async def get_alert_rule(
         )
     )
     rule = result.scalar_one_or_none()
-    
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Alert rule not found",
         )
-    
+
     return {"data": rule.to_response_dict()}
 
 
 # ============================================================================
 # UPDATE ALERT RULE
 # ============================================================================
+
 
 @router.put("/{rule_id}")
 async def update_alert_rule(
@@ -296,7 +304,7 @@ async def update_alert_rule(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(UnifiedAlertRule).where(
             and_(
@@ -306,13 +314,13 @@ async def update_alert_rule(
         )
     )
     rule = result.scalar_one_or_none()
-    
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Alert rule not found",
         )
-    
+
     # Update common fields
     if rule_data.name is not None:
         rule.name = rule_data.name
@@ -324,7 +332,7 @@ async def update_alert_rule(
         rule.enabled = rule_data.enabled
     if rule_data.cooldown_minutes is not None:
         rule.cooldown_minutes = rule_data.cooldown_minutes
-    
+
     # rule.rule_type is whatever's actually in the DB column (SIMPLE/COMPLEX,
     # or legacy THRESHOLD/COMPOSITE) — @validates doesn't run on load, so
     # compare the normalized value, not the raw attribute.
@@ -422,18 +430,19 @@ async def update_alert_rule(
             ]
         if rule_data.logic is not None:
             rule.logic = rule_data.logic.value
-    
+
     await session.commit()
     await session.refresh(rule)
-    
+
     logger.info(f"Updated alert rule: {rule.name} ({rule.id})")
-    
+
     return {"data": rule.to_response_dict()}
 
 
 # ============================================================================
 # DELETE ALERT RULE
 # ============================================================================
+
 
 @router.delete("/{rule_id}")
 async def delete_alert_rule(
@@ -446,7 +455,7 @@ async def delete_alert_rule(
     if str(tenant_id) != str(current_tenant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
     await session.set_tenant_context(current_tenant)
-    
+
     result = await session.execute(
         select(UnifiedAlertRule).where(
             and_(
@@ -456,24 +465,25 @@ async def delete_alert_rule(
         )
     )
     rule = result.scalar_one_or_none()
-    
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Alert rule not found",
         )
-    
+
     await session.delete(rule)
     await session.commit()
-    
+
     logger.info(f"Deleted alert rule: {rule.name} ({rule.id})")
-    
+
     return {"success": True, "message": "Alert rule deleted"}
 
 
 # ============================================================================
 # PREVIEW RULE EVALUATION
 # ============================================================================
+
 
 @router.post("/{rule_id}/preview")
 async def preview_alert_rule(
@@ -516,9 +526,14 @@ async def preview_alert_rule(
         metrics = [rule.metric] if rule.metric else []
     if not metrics:
         return {
-            "rule_id": str(rule.id), "rule_name": rule.name, "rule_type": rule.rule_type,
-            "matching_alerts": 0, "sample_alerts": [], "preview_hours": hours,
-            "evaluation_time_ms": 0, "message": "Rule has no metrics to evaluate",
+            "rule_id": str(rule.id),
+            "rule_name": rule.name,
+            "rule_type": rule.rule_type,
+            "matching_alerts": 0,
+            "sample_alerts": [],
+            "preview_hours": hours,
+            "evaluation_time_ms": 0,
+            "message": "Rule has no metrics to evaluate",
         }
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -530,24 +545,32 @@ async def preview_alert_rule(
     if rule.device_id is not None:
         params["device_id"] = str(rule.device_id)
 
-    rows = (await session.execute(
-        text(f"""
+    rows = (
+        await session.execute(
+            text(
+                f"""
             SELECT device_id, ts, metric_key, metric_value
             FROM telemetry
             WHERE tenant_id = :tenant_id AND ts >= :cutoff
               AND metric_key = ANY(:metrics)
               AND metric_value IS NOT NULL {device_filter}
             ORDER BY device_id, ts
-        """),
-        params,
-    )).fetchall()
+        """
+            ),
+            params,
+        )
+    ).fetchall()
 
     # Reconstruct payloads: group same-device rows within a 1s window into one
     # "reading" (telemetry is stored one row per metric at a shared timestamp).
     core_rule = AlarmRule(
-        id=str(rule.id), rule_type=rule_type,
-        metric=rule.metric, operator=rule.operator, threshold=rule.threshold,
-        conditions=rule.conditions, logic=rule.logic,
+        id=str(rule.id),
+        rule_type=rule_type,
+        metric=rule.metric,
+        operator=rule.operator,
+        threshold=rule.threshold,
+        conditions=rule.conditions,
+        logic=rule.logic,
         severity=rule.severity or "MAJOR",
         cooldown_minutes=rule.cooldown_minutes or 0,
         last_fired_at=None,
@@ -555,7 +578,7 @@ async def preview_alert_rule(
 
     matching = 0
     samples: list[dict] = []
-    last_fired: dict[str, datetime] = {}   # per-device cooldown tracking
+    last_fired: dict[str, datetime] = {}  # per-device cooldown tracking
     buckets: dict[tuple, dict] = {}
     order: list[tuple] = []
     for r in rows:
@@ -575,12 +598,14 @@ async def preview_alert_rule(
             last_fired[device_id] = ts
             if len(samples) < 20:
                 f = firings[0]
-                samples.append({
-                    "device_id": device_id,
-                    "timestamp": ts.isoformat(),
-                    "message": f.message,
-                    "value": f.value,
-                })
+                samples.append(
+                    {
+                        "device_id": device_id,
+                        "timestamp": ts.isoformat(),
+                        "message": f.message,
+                        "value": f.value,
+                    }
+                )
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
     return {

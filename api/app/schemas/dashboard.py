@@ -8,17 +8,25 @@ from uuid import UUID
 
 class DashboardCreate(BaseModel):
     """Create dashboard request."""
+
     name: str = Field(min_length=1, max_length=200, description="Dashboard name")
     description: Optional[str] = Field(None, description="Dashboard description")
     is_default: bool = Field(False, description="Set as default dashboard")
-    layout_config: Dict[str, Any] = Field(default_factory=dict, description="Grid layout configuration")
-    theme: Dict[str, Any] = Field(default_factory=dict, description="Dashboard theme (colors, branding)")
-    solution_type: Optional[str] = Field(None, max_length=100, description="Solution template identifier if created from template")
+    layout_config: Dict[str, Any] = Field(
+        default_factory=dict, description="Grid layout configuration"
+    )
+    theme: Dict[str, Any] = Field(
+        default_factory=dict, description="Dashboard theme (colors, branding)"
+    )
+    solution_type: Optional[str] = Field(
+        None, max_length=100, description="Solution template identifier if created from template"
+    )
     extra_data: Dict[str, Any] = Field(default_factory=dict, description="Additional extra_data")
 
 
 class DashboardUpdate(BaseModel):
     """Update dashboard request."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     is_default: Optional[bool] = None
@@ -29,6 +37,7 @@ class DashboardUpdate(BaseModel):
 
 class DashboardResponse(BaseModel):
     """Dashboard response model."""
+
     id: UUID
     tenant_id: UUID
     user_id: UUID
@@ -47,6 +56,7 @@ class DashboardResponse(BaseModel):
 
 class DashboardListResponse(BaseModel):
     """Dashboard list item response."""
+
     id: UUID
     name: str
     description: Optional[str]
@@ -61,6 +71,7 @@ class DashboardListResponse(BaseModel):
 
 class DashboardWithWidgets(BaseModel):
     """Dashboard with its widgets."""
+
     id: UUID
     tenant_id: UUID
     user_id: UUID
@@ -80,19 +91,27 @@ class DashboardWithWidgets(BaseModel):
 
 class WidgetCreate(BaseModel):
     """Create widget request."""
-    widget_type: str = Field(min_length=1, max_length=50, description="Widget type (kpi_card, chart, gauge, etc.)")
+
+    widget_type: str = Field(
+        min_length=1, max_length=50, description="Widget type (kpi_card, chart, gauge, etc.)"
+    )
     title: Optional[str] = Field(None, max_length=200, description="Widget title")
     position_x: int = Field(ge=0, description="Grid X position")
     position_y: int = Field(ge=0, description="Grid Y position")
     width: int = Field(2, gt=0, le=12, description="Widget width (grid columns)")
     height: int = Field(2, gt=0, description="Widget height (grid rows)")
-    configuration: Dict[str, Any] = Field(default_factory=dict, description="Widget-specific configuration")
-    data_sources: List[Dict[str, Any]] = Field(default_factory=list, description="Bound devices and metrics")
+    configuration: Dict[str, Any] = Field(
+        default_factory=dict, description="Widget-specific configuration"
+    )
+    data_sources: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Bound devices and metrics"
+    )
     refresh_interval: int = Field(30, gt=0, description="Refresh interval in seconds")
 
 
 class WidgetUpdate(BaseModel):
     """Update widget request."""
+
     title: Optional[str] = Field(None, max_length=200)
     position_x: Optional[int] = Field(None, ge=0)
     position_y: Optional[int] = Field(None, ge=0)
@@ -105,6 +124,7 @@ class WidgetUpdate(BaseModel):
 
 class WidgetResponse(BaseModel):
     """Widget response model."""
+
     id: UUID
     dashboard_id: UUID
     widget_type: str
@@ -124,6 +144,7 @@ class WidgetResponse(BaseModel):
 
 class DeviceBindingRequest(BaseModel):
     """Request to bind device to widget."""
+
     device_id: UUID = Field(description="Device ID to bind")
     metric: Optional[str] = Field(None, description="Specific metric to bind (optional)")
     alias: Optional[str] = Field(None, description="Display alias for the device/metric")
@@ -131,6 +152,7 @@ class DeviceBindingRequest(BaseModel):
 
 class LayoutUpdateRequest(BaseModel):
     """Update dashboard layout (batch widget position update)."""
+
     widgets: List[Dict[str, Any]] = Field(description="Array of widget updates with id, x, y, w, h")
 
 

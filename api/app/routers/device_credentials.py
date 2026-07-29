@@ -51,12 +51,14 @@ async def list_tokens(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     result = await session.execute(
-        select(DeviceCredential).where(
+        select(DeviceCredential)
+        .where(
             DeviceCredential.tenant_id == tenant_id,
             DeviceCredential.device_id == device_id,
             DeviceCredential.credential_type == "device_token",
             DeviceCredential.status != "revoked",
-        ).order_by(DeviceCredential.created_at.desc())
+        )
+        .order_by(DeviceCredential.created_at.desc())
     )
     creds = result.scalars().all()
 
@@ -111,7 +113,7 @@ async def generate_token(
         device_id=device_id,
         credential_type="device_token",
         credential_hash=token_hash,
-        username=body.name,   # repurpose username column as display name
+        username=body.name,  # repurpose username column as display name
         status="active",
         expires_at=expires_at,
     )
@@ -121,14 +123,16 @@ async def generate_token(
 
     logger.info("Generated device token for device %s (tenant %s)", device_id, tenant_id)
 
-    return SuccessResponse(data=DeviceTokenCreated(
-        id=cred.id,
-        name=cred.username or "Default",
-        status=cred.status,
-        created_at=cred.created_at,
-        expires_at=cred.expires_at,
-        token=plain_token,
-    ))
+    return SuccessResponse(
+        data=DeviceTokenCreated(
+            id=cred.id,
+            name=cred.username or "Default",
+            status=cred.status,
+            created_at=cred.created_at,
+            expires_at=cred.expires_at,
+            token=plain_token,
+        )
+    )
 
 
 @router.delete("/{cred_id}", response_model=SuccessResponse)

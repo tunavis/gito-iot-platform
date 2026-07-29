@@ -12,6 +12,7 @@ online. This module is the one place that decides it.
 """
 
 import os
+
 # timezone.utc, not datetime.UTC: the latter is 3.11+, which silently made this
 # module (and every test that imports it) unimportable on Python 3.10 hosts.
 from datetime import datetime, timezone
@@ -27,9 +28,7 @@ DEFAULT_OFFLINE_THRESHOLD_SECONDS = 900  # 15 minutes
 
 # How long the ENTIRE fleet may be silent before that means the ingest path
 # itself is broken rather than the devices being quiet.
-INGESTION_STALL_THRESHOLD_SECONDS = int(
-    os.getenv("INGESTION_STALL_THRESHOLD_SECONDS", "900")
-)
+INGESTION_STALL_THRESHOLD_SECONDS = int(os.getenv("INGESTION_STALL_THRESHOLD_SECONDS", "900"))
 
 
 def is_effectively_offline(status: str, last_seen: datetime | None, threshold_seconds: int) -> bool:
@@ -87,8 +86,7 @@ async def check_ingestion_stall(session: RLSSession) -> dict:
         "status": "stalled",
         "last_uplink_age_seconds": age,
         "detail": (
-            f"no device has reported in {age}s "
-            f"(threshold {INGESTION_STALL_THRESHOLD_SECONDS}s)"
+            f"no device has reported in {age}s " f"(threshold {INGESTION_STALL_THRESHOLD_SECONDS}s)"
         ),
     }
 

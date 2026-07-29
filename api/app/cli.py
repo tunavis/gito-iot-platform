@@ -24,9 +24,9 @@ def main():
         print("\nAvailable commands:")
         print("  seed      - Populate database with seed data")
         sys.exit(1)
-    
+
     command = sys.argv[1]
-    
+
     if command == "seed":
         sys.exit(seed_command())
     else:

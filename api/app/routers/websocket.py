@@ -50,9 +50,7 @@ class ConnectionManager:
         if self.redis:
             await self.redis.close()
 
-    async def subscribe_to_telemetry(
-        self, tenant_id: UUID, device_id: UUID
-    ) -> PubSub:
+    async def subscribe_to_telemetry(self, tenant_id: UUID, device_id: UUID) -> PubSub:
         """Subscribe to device telemetry channel."""
         channel = f"telemetry:{tenant_id}:{device_id}"
         pubsub = self.redis.pubsub()
@@ -60,9 +58,7 @@ class ConnectionManager:
         logger.info(f"Subscribed to {channel}")
         return pubsub
 
-    async def subscribe_to_alerts(
-        self, tenant_id: UUID, device_id: UUID
-    ) -> PubSub:
+    async def subscribe_to_alerts(self, tenant_id: UUID, device_id: UUID) -> PubSub:
         """Subscribe to device alert channel."""
         channel = f"alerts:{tenant_id}:{device_id}"
         pubsub = self.redis.pubsub()
@@ -93,7 +89,7 @@ async def websocket_device_telemetry(
     WebSocket endpoint for real-time device telemetry and alerts.
 
     Clients should connect with: ws://localhost:8000/api/v1/ws/devices/{device_id}?token={jwt_token}
-    
+
     The WebSocket will stream:
     - Telemetry updates in real-time
     - Alert events when thresholds are breached
@@ -416,13 +412,11 @@ async def _tenant_redis_to_ws(
             if len(parts) < 3:
                 continue
 
-            msg_type = parts[0]          # "telemetry" or "alerts"
-            device_id = parts[2]         # UUID string
+            msg_type = parts[0]  # "telemetry" or "alerts"
+            device_id = parts[2]  # UUID string
 
             data = json.loads(message["data"])
-            await websocket.send_json(
-                {"type": msg_type, "device_id": device_id, "data": data}
-            )
+            await websocket.send_json({"type": msg_type, "device_id": device_id, "data": data})
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Failed to parse tenant telemetry message: {e}")
         except Exception:

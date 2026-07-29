@@ -42,19 +42,18 @@ class RLSSession(AsyncSession):
 
         # Set both app.tenant_id (legacy) and app.current_tenant_id (new) for compatibility
         await self.execute(
-            text("SELECT set_config('app.tenant_id', :tenant_id, TRUE)"),
-            {"tenant_id": tenant_id}
+            text("SELECT set_config('app.tenant_id', :tenant_id, TRUE)"), {"tenant_id": tenant_id}
         )
         await self.execute(
             text("SELECT set_config('app.current_tenant_id', :tenant_id, TRUE)"),
-            {"tenant_id": tenant_id}
+            {"tenant_id": tenant_id},
         )
 
         # Set user context if provided (for user-scoped resources like dashboards)
         if user_id is not None:
             await self.execute(
                 text("SELECT set_config('app.current_user_id', :user_id, TRUE)"),
-                {"user_id": user_id}
+                {"user_id": user_id},
             )
 
         # Remembered so commit() can re-apply it to the next transaction (see commit() below).
@@ -82,7 +81,7 @@ class RLSSession(AsyncSession):
 def get_database_engine():
     """Create async SQLAlchemy engine."""
     settings = get_settings()
-    
+
     engine = create_async_engine(
         settings.DATABASE_URL,
         # Keyed on LOG_LEVEL, not APP_ENV: echoing every query in all of
@@ -97,7 +96,7 @@ def get_database_engine():
         # NullPool for serverless/lambda environments
         # poolclass=NullPool if settings.APP_ENV == "serverless" else QueuePool
     )
-    
+
     return engine
 
 
@@ -113,7 +112,7 @@ _SessionLocal = async_sessionmaker(
 
 async def get_session() -> AsyncGenerator[RLSSession, None]:
     """Get database session for dependency injection.
-    
+
     Example:
         @router.get("/devices")
         async def list_devices(session: Annotated[RLSSession, Depends(get_session)]):
@@ -126,7 +125,7 @@ async def get_session() -> AsyncGenerator[RLSSession, None]:
 
 async def init_db() -> None:
     """Initialize database (create tables if needed).
-    
+
     This is only needed if not using migrations.
     In production, use Alembic migrations instead.
     """

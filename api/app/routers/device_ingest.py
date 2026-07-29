@@ -107,7 +107,9 @@ async def ingest_with_token(
 
     metrics = {k: v for k, v in payload.items() if k not in SYSTEM_KEYS}
     if not metrics:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload"
+        )
 
     # Publish into the ingest stream — the processor inserts AND evaluates alarms
     # there (single funnel; REST-ingested devices get identical alarm behavior).
@@ -139,28 +141,37 @@ async def ingest_with_token(
     # Publish to Redis for WebSocket real-time delivery + update digital twin cache (non-critical)
     try:
         channel = f"telemetry:{tenant_id}:{device_id}"
-        message = _json.dumps({
-            "device_id": str(device_id),
-            "payload": metrics,
-            "timestamp": ts.isoformat(),
-        })
+        message = _json.dumps(
+            {
+                "device_id": str(device_id),
+                "payload": metrics,
+                "timestamp": ts.isoformat(),
+            }
+        )
         await redis_client_app.publish(channel, message)
     except Exception as e:
         logger.warning("Failed to publish telemetry to Redis: %s", e)
     try:
         from app.services.digital_twin import DigitalTwinService
+
         twin = DigitalTwinService(redis_client_app)
         await twin.update_device_state(device_id, metrics, timestamp=ts.isoformat())
     except Exception as e:
         logger.warning("Failed to update digital twin cache: %s", e)
 
-    logger.info("Token ingest: %d metrics accepted for device %s (tenant %s)", len(metrics), device_id, tenant_id)
+    logger.info(
+        "Token ingest: %d metrics accepted for device %s (tenant %s)",
+        len(metrics),
+        device_id,
+        tenant_id,
+    )
     return SuccessResponse(data={"ingested": len(metrics), "timestamp": ts.isoformat()})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Gateway fan-out ingestion
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post("/gateway", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 async def ingest_gateway(
@@ -221,7 +232,9 @@ async def ingest_gateway(
     )
     gateway = gw_result.scalar_one_or_none()
     if not gateway:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway device not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Gateway device not found"
+        )
 
     redis_client_app = getattr(request.app.state, "redis", None)
     if not redis_client_app:
@@ -301,6 +314,7 @@ async def ingest_gateway(
     # Publish to Redis for WebSocket real-time delivery + update digital twin cache (non-critical)
     try:
         from app.services.digital_twin import DigitalTwinService
+
         twin = DigitalTwinService(redis_client_app)
     except Exception as e:
         logger.warning("Failed to import DigitalTwinService: %s", e)
@@ -309,14 +323,18 @@ async def ingest_gateway(
         did = entry.get("device_id")
         if not did or did not in sub_device_ids:
             continue
-        clean_metrics = {k: v for k, v in entry.items() if k not in SYSTEM_KEYS and k != "device_id"}
+        clean_metrics = {
+            k: v for k, v in entry.items() if k not in SYSTEM_KEYS and k != "device_id"
+        }
         try:
             channel = f"telemetry:{tenant_id}:{did}"
-            message = _json.dumps({
-                "device_id": did,
-                "payload": clean_metrics,
-                "timestamp": ts.isoformat(),
-            })
+            message = _json.dumps(
+                {
+                    "device_id": did,
+                    "payload": clean_metrics,
+                    "timestamp": ts.isoformat(),
+                }
+            )
             await redis_client_app.publish(channel, message)
         except Exception as e:
             logger.warning("Failed to publish gateway telemetry to Redis for device %s: %s", did, e)
@@ -328,7 +346,10 @@ async def ingest_gateway(
 
     logger.info(
         "Gateway ingest: %d metrics for %d sub-devices via gateway %s (tenant %s)",
-        total_metrics, device_count, gateway_id, tenant_id,
+        total_metrics,
+        device_count,
+        gateway_id,
+        tenant_id,
     )
 
     response_data = {

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, computed_field, model_validator
 
 class DeviceCategory(str, Enum):
     """Device categories."""
+
     SENSOR = "sensor"
     GATEWAY = "gateway"
     ACTUATOR = "actuator"
@@ -22,6 +23,7 @@ class DeviceCategory(str, Enum):
 
 class DeviceCapability(str, Enum):
     """Device capabilities."""
+
     TELEMETRY = "telemetry"
     COMMANDS = "commands"
     FIRMWARE_OTA = "firmware_ota"
@@ -34,6 +36,7 @@ class DeviceCapability(str, Enum):
 
 class FieldType(str, Enum):
     """Supported telemetry field types (matches frontend FIELD_TYPES)."""
+
     FLOAT = "float"
     INTEGER = "integer"
     BOOLEAN = "boolean"
@@ -45,6 +48,7 @@ class FieldType(str, Enum):
 
 class ProtocolType(str, Enum):
     """Supported connectivity protocols (matches frontend ProtocolSelector)."""
+
     MQTT = "mqtt"
     LORAWAN = "lorawan"
     HTTP = "http"
@@ -57,10 +61,11 @@ class ProtocolType(str, Enum):
 
 class SimulationMode(str, Enum):
     """How the device simulator should vary this field over time."""
-    DRIFT = "drift"          # random walk within min/max (default for numeric fields)
+
+    DRIFT = "drift"  # random walk within min/max (default for numeric fields)
     INCREMENT = "increment"  # monotonically increasing counter (e.g. total_volume)
-    DRAIN = "drain"          # slowly decreases (e.g. battery)
-    RARE_BIT = "rare_bit"    # boolean, almost always false (e.g. an alarm flag)
+    DRAIN = "drain"  # slowly decreases (e.g. battery)
+    RARE_BIT = "rare_bit"  # boolean, almost always false (e.g. an alarm flag)
 
 
 class SimulationHint(BaseModel):
@@ -68,9 +73,14 @@ class SimulationHint(BaseModel):
     field means the simulator falls back to a generic default for that field's
     `type` — this is an enhancement a vendor preset can opt into, never a
     prerequisite for a device type to be simulatable."""
+
     mode: SimulationMode = Field(default=SimulationMode.DRIFT)
-    min: Optional[float] = Field(None, description="Overrides the field's own min_value for simulation")
-    max: Optional[float] = Field(None, description="Overrides the field's own max_value for simulation")
+    min: Optional[float] = Field(
+        None, description="Overrides the field's own min_value for simulation"
+    )
+    max: Optional[float] = Field(
+        None, description="Overrides the field's own max_value for simulation"
+    )
 
     class Config:
         use_enum_values = True
@@ -78,6 +88,7 @@ class SimulationHint(BaseModel):
 
 class DataModelField(BaseModel):
     """A field in the device type's data model."""
+
     name: str = Field(..., description="Field name (e.g., 'temperature')")
     type: FieldType = Field(default=FieldType.FLOAT, description="Data type")
     unit: Optional[str] = Field(None, description="Unit of measurement (e.g., '°C', '%')")
@@ -94,6 +105,7 @@ class DataModelField(BaseModel):
 
 class ConnectivityConfig(BaseModel):
     """Connectivity/protocol configuration."""
+
     protocol: ProtocolType = Field(default=ProtocolType.MQTT, description="Communication protocol")
     mqtt_topic_template: Optional[str] = Field(None, description="MQTT topic template")
     lorawan_class: Optional[str] = Field(None, description="LoRaWAN class: A, B, C")
@@ -105,14 +117,22 @@ class ConnectivityConfig(BaseModel):
 
 class DefaultSettings(BaseModel):
     """Default settings for devices of this type."""
+
     heartbeat_interval: int = Field(default=60, description="Heartbeat interval in seconds")
-    telemetry_interval: int = Field(default=300, description="Telemetry reporting interval in seconds")
-    offline_threshold: int = Field(default=900, description="Seconds before device considered offline")
-    battery_low_threshold: Optional[int] = Field(default=20, description="Low battery alert threshold (%)")
+    telemetry_interval: int = Field(
+        default=300, description="Telemetry reporting interval in seconds"
+    )
+    offline_threshold: int = Field(
+        default=900, description="Seconds before device considered offline"
+    )
+    battery_low_threshold: Optional[int] = Field(
+        default=20, description="Low battery alert threshold (%)"
+    )
 
 
 class DeviceTypeCreate(BaseModel):
     """Schema for creating a device type."""
+
     name: str = Field(..., min_length=1, max_length=255, description="Device type name")
     description: Optional[str] = Field(None, description="Description")
     manufacturer: Optional[str] = Field(None, max_length=255, description="Manufacturer name")
@@ -122,14 +142,30 @@ class DeviceTypeCreate(BaseModel):
     icon: Optional[str] = Field(default="cpu", description="Lucide icon name")
     color: Optional[str] = Field(default="#6366f1", description="Hex color code")
 
-    data_model: Optional[List[DataModelField]] = Field(default=[], description="Telemetry data model")
-    capabilities: Optional[List[DeviceCapability]] = Field(default=[DeviceCapability.TELEMETRY], description="Device capabilities")
-    default_settings: Optional[DefaultSettings] = Field(default=None, description="Default device settings")
-    connectivity: Optional[ConnectivityConfig] = Field(default=None, description="Connectivity configuration")
-    command_schema: Optional[dict] = Field(default={}, description="Available commands with parameter schemas")
+    data_model: Optional[List[DataModelField]] = Field(
+        default=[], description="Telemetry data model"
+    )
+    capabilities: Optional[List[DeviceCapability]] = Field(
+        default=[DeviceCapability.TELEMETRY], description="Device capabilities"
+    )
+    default_settings: Optional[DefaultSettings] = Field(
+        default=None, description="Default device settings"
+    )
+    connectivity: Optional[ConnectivityConfig] = Field(
+        default=None, description="Connectivity configuration"
+    )
+    command_schema: Optional[dict] = Field(
+        default={}, description="Available commands with parameter schemas"
+    )
     metadata: Optional[dict] = Field(default={}, description="Custom metadata")
-    key_mapping: Optional[Dict[str, str]] = Field(default={}, description="Maps raw device telemetry keys to canonical data_model keys. E.g. {'WATER_FLOW_BOILER': 'flow_rate'}")
-    decoder: Optional[dict] = Field(default=None, description="Declarative byte-layout payload decoder, used only when the network server hasn't decoded the uplink. E.g. {'type': 'declarative', 'fields': [{'name': 'flow_rate', 'offset': 0, 'length': 2, 'type': 'uint16', 'scale': 0.1}]}")
+    key_mapping: Optional[Dict[str, str]] = Field(
+        default={},
+        description="Maps raw device telemetry keys to canonical data_model keys. E.g. {'WATER_FLOW_BOILER': 'flow_rate'}",
+    )
+    decoder: Optional[dict] = Field(
+        default=None,
+        description="Declarative byte-layout payload decoder, used only when the network server hasn't decoded the uplink. E.g. {'type': 'declarative', 'fields': [{'name': 'flow_rate', 'offset': 0, 'length': 2, 'type': 'uint16', 'scale': 0.1}]}",
+    )
 
     @model_validator(mode="after")
     def validate_unique_field_names(self) -> "DeviceTypeCreate":
@@ -146,6 +182,7 @@ class DeviceTypeCreate(BaseModel):
 
 class DeviceTypeUpdate(BaseModel):
     """Schema for updating a device type."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     manufacturer: Optional[str] = None
@@ -180,6 +217,7 @@ class DeviceTypeUpdate(BaseModel):
 
 class DeviceTypeResponse(BaseModel):
     """Schema for device type response."""
+
     id: UUID
     tenant_id: UUID
     name: str
@@ -233,6 +271,7 @@ class DeviceTypeResponse(BaseModel):
 
 class DeviceTypeListResponse(BaseModel):
     """Paginated list of device types."""
+
     success: bool = True
     data: List[DeviceTypeResponse]
     meta: dict

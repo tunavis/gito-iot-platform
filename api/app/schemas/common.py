@@ -9,6 +9,7 @@ T = TypeVar("T")
 
 class PaginationMeta(BaseModel):
     """Pagination metadata for list responses."""
+
     page: int = Field(ge=1, description="Page number (1-indexed)")
     per_page: int = Field(ge=1, le=1000, description="Items per page (max 1000 for telemetry)")
     total: int = Field(ge=0, description="Total number of items")
@@ -16,6 +17,7 @@ class PaginationMeta(BaseModel):
 
 class SuccessResponse(BaseModel, Generic[T]):
     """Standard successful API response wrapper."""
+
     success: bool = True
     data: Optional[T] = None
     meta: Optional[PaginationMeta] = None
@@ -29,6 +31,7 @@ class SuccessResponse(BaseModel, Generic[T]):
 
 class ErrorDetail(BaseModel):
     """Error response detail structure."""
+
     code: str = Field(description="Machine-readable error code")
     message: str = Field(description="Human-readable error message")
     details: Optional[dict] = Field(None, description="Additional error context")
@@ -36,5 +39,6 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Standard error API response."""
+
     success: bool = False
     error: ErrorDetail

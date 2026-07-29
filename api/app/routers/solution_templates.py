@@ -69,7 +69,9 @@ async def get_solution_template(
     return template
 
 
-@router.post("/{template_id}/apply", response_model=DashboardResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{template_id}/apply", response_model=DashboardResponse, status_code=status.HTTP_201_CREATED
+)
 async def apply_solution_template(
     tenant_id: UUID,
     template_id: UUID,

@@ -27,13 +27,15 @@ class TemplateService:
     async def get_template(self, template_id: UUID) -> Optional[dict]:
         """Return a single template by ID, or None if not found."""
         result = await self.session.execute(
-            text("""
+            text(
+                """
                 SELECT id, name, slug, description, industry, icon,
                        device_types, dashboard_config, alert_rules,
                        is_active, created_at, updated_at
                 FROM solution_templates
                 WHERE id = :id
-            """),
+            """
+            ),
             {"id": str(template_id)},
         )
         row = result.mappings().one_or_none()
@@ -42,13 +44,15 @@ class TemplateService:
     async def get_template_by_slug(self, slug: str) -> Optional[dict]:
         """Return a single template by slug, or None if not found."""
         result = await self.session.execute(
-            text("""
+            text(
+                """
                 SELECT id, name, slug, description, industry, icon,
                        device_types, dashboard_config, alert_rules,
                        is_active, created_at, updated_at
                 FROM solution_templates
                 WHERE slug = :slug
-            """),
+            """
+            ),
             {"slug": slug},
         )
         row = result.mappings().one_or_none()
@@ -58,24 +62,28 @@ class TemplateService:
         """Return all active templates, optionally filtered by industry."""
         if industry:
             result = await self.session.execute(
-                text("""
+                text(
+                    """
                     SELECT id, name, slug, description, industry, icon,
                            is_active, created_at, updated_at
                     FROM solution_templates
                     WHERE is_active = true AND industry = :industry
                     ORDER BY name
-                """),
+                """
+                ),
                 {"industry": industry},
             )
         else:
             result = await self.session.execute(
-                text("""
+                text(
+                    """
                     SELECT id, name, slug, description, industry, icon,
                            is_active, created_at, updated_at
                     FROM solution_templates
                     WHERE is_active = true
                     ORDER BY name
-                """),
+                """
+                ),
             )
         rows = result.mappings().all()
         return [dict(r) for r in rows]
@@ -119,9 +127,7 @@ class TemplateService:
 
             if existing_dt:
                 device_type_ids[dt_name] = existing_dt.id
-                logger.debug(
-                    "Skipping existing device type '%s' for tenant %s", dt_name, tenant_id
-                )
+                logger.debug("Skipping existing device type '%s' for tenant %s", dt_name, tenant_id)
                 continue
 
             # Convert telemetry_schema to data_model format expected by DeviceType

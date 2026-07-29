@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
     # Startup
     settings = get_settings()
     print(f"Starting {settings.APP_NAME} in {settings.APP_ENV} mode")
-    
+
     try:
         await init_db()
         print("✅ Database initialized")
@@ -94,20 +94,22 @@ async def lifespan(app: FastAPI):
     # Initialize background task scheduler for notification retry and queue processing
     try:
         from app.services.background_tasks import notification_background_tasks
+
         await notification_background_tasks.start()
     except Exception as e:
         print(f"⚠️ Background tasks initialization warning: {e}")
-    
+
     yield
-    
+
     # Shutdown
     await close_db()
     # Close shared Redis client
-    if hasattr(app, 'state') and hasattr(app.state, 'redis') and app.state.redis:
+    if hasattr(app, "state") and hasattr(app.state, "redis") and app.state.redis:
         await app.state.redis.aclose()
     # Stop background task scheduler
     try:
         from app.services.background_tasks import notification_background_tasks
+
         await notification_background_tasks.stop()
     except Exception as e:
         print(f"⚠️ Background tasks shutdown warning: {e}")
@@ -117,7 +119,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Application factory - creates and configures FastAPI app."""
     settings = get_settings()
-    
+
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.API_VERSION,
@@ -127,7 +129,7 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json" if settings.APP_ENV != "production" else None,
         lifespan=lifespan,
     )
-    
+
     # CORS Middleware
     app.add_middleware(
         CORSMiddleware,
@@ -140,6 +142,7 @@ def create_app() -> FastAPI:
 
     # Audit logging — writes audit_logs rows for tenant-scoped mutations
     from app.middleware import audit_log_middleware
+
     app.middleware("http")(audit_log_middleware)
 
     # Rate limiting (slowapi)
@@ -170,16 +173,17 @@ def create_app() -> FastAPI:
         if keydb_check["status"] != "ok" or ingest_check["status"] == "stalled":
             return {"status": "degraded", "checks": checks, "service": settings.APP_NAME}
         return {"status": "healthy", "checks": checks, "service": settings.APP_NAME}
-    
+
     # Root endpoint
     @app.get("/")
     async def root():
         return {"message": f"Welcome to {settings.APP_NAME} {settings.API_VERSION}"}
-    
+
     # Global error handler (placeholder - customize as needed)
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
         import traceback
+
         print(f"❌ UNHANDLED EXCEPTION: {type(exc).__name__}: {str(exc)}")
         print(f"   URL: {request.url}")
         print(f"   Traceback:\n{traceback.format_exc()}")
@@ -189,13 +193,31 @@ def create_app() -> FastAPI:
                 "success": False,
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(exc) if settings.APP_ENV != "production" else "Internal server error",
-                }
-            }
+                    "message": str(exc)
+                    if settings.APP_ENV != "production"
+                    else "Internal server error",
+                },
+            },
         )
-    
+
     # Import and include routers
-    from app.routers import auth, devices, websocket, telemetry, telemetry_aggregate, organizations, sites, device_groups, alarms, notifications, device_types, users, audit_logs, notification_rules, analytics
+    from app.routers import (
+        auth,
+        devices,
+        websocket,
+        telemetry,
+        telemetry_aggregate,
+        organizations,
+        sites,
+        device_groups,
+        alarms,
+        notifications,
+        device_types,
+        users,
+        audit_logs,
+        notification_rules,
+        analytics,
+    )
     from app.routers import alert_rules_unified  # Unified alert rules (THRESHOLD + COMPOSITE)
     from app.routers import dashboards, dashboard_widgets  # Dashboard builder system
     from app.routers import device_credentials, device_ingest  # Device token provisioning
@@ -204,18 +226,28 @@ def create_app() -> FastAPI:
     from app.routers import settings as settings_router  # Tenant settings & profile
     from app.routers import events as events_router  # IoT event stream
     from app.routers import firmware as firmware_router  # OTA firmware management
-    from app.routers import admin_tenants as admin_tenants_router  # Tenant management (management tenants only)
-    from app.routers import solution_templates as solution_templates_router  # Industry vertical templates
+    from app.routers import (
+        admin_tenants as admin_tenants_router,
+    )  # Tenant management (management tenants only)
+    from app.routers import (
+        solution_templates as solution_templates_router,
+    )  # Industry vertical templates
     from app.routers import integrations as integrations_router  # LoRaWAN integration management
-    from app.routers import lorawan_ingest as lorawan_ingest_router  # Universal LoRaWAN webhook ingest
+    from app.routers import (
+        lorawan_ingest as lorawan_ingest_router,
+    )  # Universal LoRaWAN webhook ingest
     from app.routers import billing as billing_router  # Subscription billing & entitlements
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")  # User Management & RBAC
     app.include_router(audit_logs.router, prefix="/api/v1")  # Audit Logs for compliance
     app.include_router(devices.router, prefix="/api/v1")
-    app.include_router(device_types.router, prefix="/api/v1")  # Device Type templates (AWS IoT pattern)
-    app.include_router(alert_rules_unified.router, prefix="/api/v1")  # Unified alert rules (THRESHOLD + COMPOSITE)
+    app.include_router(
+        device_types.router, prefix="/api/v1"
+    )  # Device Type templates (AWS IoT pattern)
+    app.include_router(
+        alert_rules_unified.router, prefix="/api/v1"
+    )  # Unified alert rules (THRESHOLD + COMPOSITE)
     app.include_router(alarms.router, prefix="/api/v1")  # Unified enterprise alarm system
     app.include_router(organizations.router, prefix="/api/v1")  # Hierarchy: Organizations
     app.include_router(sites.router, prefix="/api/v1")  # Hierarchy: Sites
@@ -225,25 +257,33 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router, prefix="/api/v1")  # Analytics & dashboard metrics
     app.include_router(hierarchy.router, prefix="/api/v1")  # Asset hierarchy tree
     app.include_router(settings_router.router, prefix="/api/v1")  # Tenant settings & profile
-    app.include_router(events_router.router, prefix="/api/v1")    # IoT event stream
+    app.include_router(events_router.router, prefix="/api/v1")  # IoT event stream
     app.include_router(firmware_router.router, prefix="/api/v1")  # OTA firmware management
-    app.include_router(admin_tenants_router.router, prefix="/api/v1")  # Tenant management (management tenants only)
+    app.include_router(
+        admin_tenants_router.router, prefix="/api/v1"
+    )  # Tenant management (management tenants only)
     app.include_router(dashboards.router, prefix="/api/v1")  # Dashboard builder
     app.include_router(dashboard_widgets.router, prefix="/api/v1")  # Dashboard widgets
     app.include_router(telemetry.router, prefix="/api/v1")
     app.include_router(telemetry_aggregate.router, prefix="/api/v1")
     app.include_router(device_credentials.router, prefix="/api/v1")  # Token CRUD
-    app.include_router(device_ingest.router, prefix="/api/v1")        # Token-based ingest
-    app.include_router(commands.router, prefix="/api/v1")              # Device RPC commands
+    app.include_router(device_ingest.router, prefix="/api/v1")  # Token-based ingest
+    app.include_router(commands.router, prefix="/api/v1")  # Device RPC commands
     app.include_router(solution_templates_router.router, prefix="/api/v1")  # Solution templates
-    app.include_router(integrations_router.router, prefix="/api/v1")       # LoRaWAN integration management
-    app.include_router(lorawan_ingest_router.router, prefix="/api/v1")     # Universal LoRaWAN webhook ingest
+    app.include_router(
+        integrations_router.router, prefix="/api/v1"
+    )  # LoRaWAN integration management
+    app.include_router(
+        lorawan_ingest_router.router, prefix="/api/v1"
+    )  # Universal LoRaWAN webhook ingest
     app.include_router(websocket.router, prefix="/api/v1")
     app.include_router(billing_router.public_router, prefix="/api/v1")  # Public pricing
     app.include_router(billing_router.router, prefix="/api/v1")  # Subscription/entitlements/usage
-    app.include_router(billing_router.admin_router, prefix="/api/v1")  # Admin/manual plan assignment
+    app.include_router(
+        billing_router.admin_router, prefix="/api/v1"
+    )  # Admin/manual plan assignment
     app.include_router(billing_router.webhook_router, prefix="/api/v1")  # Payment provider webhooks
-    
+
     # Disabled routers (superseded by unified systems):
     # - alert_rules: Replaced by alert_rules_unified
     # - alert_rules_composite: Replaced by alert_rules_unified
@@ -251,7 +291,7 @@ def create_app() -> FastAPI:
     # - grafana: External integration (future)
     # - bulk_operations: Batch operations (future)
     # - lorawan: LoRaWAN-specific operations (future)
-    
+
     return app
 
 
@@ -261,7 +301,7 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     settings = get_settings()
     uvicorn.run(
         "app.main:app",

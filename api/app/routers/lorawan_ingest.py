@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest/lorawan", tags=["lorawan-ingest"])
 
 SYSTEM_KEYS = {"timestamp", "ts", "device_id", "tenant_id", "id"}
-RATE_LIMIT_MAX = 600   # messages per minute per integration
-DEDUP_TTL = 30         # seconds
+RATE_LIMIT_MAX = 600  # messages per minute per integration
+DEDUP_TTL = 30  # seconds
 
 
 def _hash_key(raw_key: str) -> str:
@@ -48,7 +48,6 @@ def _radio_to_lora_metrics(radio: dict) -> dict:
         "data_rate": "__lora_data_rate",
     }
     return {mapping[k]: v for k, v in radio.items() if k in mapping}
-
 
 
 @router.post("/{provider}", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
@@ -84,16 +83,22 @@ async def ingest_lorawan(
 
     # --- Resolve integration (bypasses RLS via SECURITY DEFINER) ---
     result = await session.execute(
-        text("SELECT integration_id, tenant_id, provider, config, is_active FROM resolve_integration_key(:hash)"),
+        text(
+            "SELECT integration_id, tenant_id, provider, config, is_active FROM resolve_integration_key(:hash)"
+        ),
         {"hash": key_hash},
     )
     row = result.fetchone()
     if not row:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid integration key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid integration key"
+        )
     integration = dict(row._mapping)
 
     if not integration["is_active"]:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Integration is disabled")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Integration is disabled"
+        )
     if integration["provider"] != provider:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -114,7 +119,9 @@ async def ingest_lorawan(
             config = integration.get("config") or {}
             limit = int(config.get("rate_limit", RATE_LIMIT_MAX))
             if count > limit:
-                raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded"
+                )
         except HTTPException:
             raise
         except Exception as e:
@@ -196,9 +203,13 @@ async def ingest_lorawan(
                     "VALUES (:tenant_id, :device_id, :f_port, :raw_b64, :decoded, :codec_used, :ts)"
                 ),
                 {
-                    "tenant_id": str(tenant_id), "device_id": str(device_id),
-                    "f_port": uplink.f_port, "raw_b64": uplink.raw_payload,
-                    "decoded": codec_used is not None, "codec_used": codec_used, "ts": ts,
+                    "tenant_id": str(tenant_id),
+                    "device_id": str(device_id),
+                    "f_port": uplink.f_port,
+                    "raw_b64": uplink.raw_payload,
+                    "decoded": codec_used is not None,
+                    "codec_used": codec_used,
+                    "ts": ts,
                 },
             )
             await session.commit()
@@ -219,7 +230,9 @@ async def ingest_lorawan(
         logger.info(
             "lorawan_ingest: no decoded metrics for device %s via %s (tenant %s) — "
             "configure a ChirpStack codec or set a decoder on the device type",
-            device_id, provider, tenant_id,
+            device_id,
+            provider,
+            tenant_id,
         )
         return SuccessResponse(data={"ingested": 0, "decoded": False, "timestamp": ts.isoformat()})
 
@@ -273,11 +286,13 @@ async def ingest_lorawan(
         try:
             clean_payload = {k: v for k, v in metrics.items() if k not in SYSTEM_KEYS}
             channel = f"telemetry:{tenant_id}:{device_id}"
-            message = _json.dumps({
-                "device_id": str(device_id),
-                "payload": clean_payload,
-                "timestamp": ts.isoformat(),
-            })
+            message = _json.dumps(
+                {
+                    "device_id": str(device_id),
+                    "payload": clean_payload,
+                    "timestamp": ts.isoformat(),
+                }
+            )
             await redis_client.publish(channel, message)
         except Exception as e:
             logger.warning("Failed to publish to Redis: %s", e)
@@ -285,7 +300,11 @@ async def ingest_lorawan(
     user_metric_count = len([k for k in all_metrics if not k.startswith("__lora_")])
     logger.info(
         "lorawan_ingest: %d metrics for device %s via %s (tenant %s, codec=%s)",
-        user_metric_count, device_id, provider, tenant_id, codec_used,
+        user_metric_count,
+        device_id,
+        provider,
+        tenant_id,
+        codec_used,
     )
 
     return SuccessResponse(data={"ingested": user_metric_count, "timestamp": ts.isoformat()})

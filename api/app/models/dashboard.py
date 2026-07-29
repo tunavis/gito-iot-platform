@@ -1,8 +1,15 @@
 """Dashboard system models for drag-and-drop dashboard builder."""
 
 from sqlalchemy import (
-    Column, String, DateTime, ForeignKey, CheckConstraint,
-    Text, Integer, Boolean, Index
+    Column,
+    String,
+    DateTime,
+    ForeignKey,
+    CheckConstraint,
+    Text,
+    Integer,
+    Boolean,
+    Index,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
@@ -12,11 +19,16 @@ from .base import BaseModel
 
 class Dashboard(BaseModel):
     """User-created dashboards with customizable layouts and widgets."""
+
     __tablename__ = "dashboards"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name = Column(String(200), nullable=False)
     description = Column(Text)
     is_default = Column(Boolean, default=False, nullable=False)
@@ -36,10 +48,16 @@ class Dashboard(BaseModel):
 
 class DashboardWidget(BaseModel):
     """Individual widgets placed on dashboards with configuration and data bindings."""
+
     __tablename__ = "dashboard_widgets"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dashboard_id = Column(UUID(as_uuid=True), ForeignKey("dashboards.id", ondelete="CASCADE"), nullable=False, index=True)
+    dashboard_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("dashboards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     widget_type = Column(String(50), nullable=False)
     title = Column(String(200))
     position_x = Column(Integer, nullable=False)

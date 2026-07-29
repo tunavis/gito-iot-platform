@@ -38,30 +38,36 @@ async def get_hierarchy(
 
     # ── 1. All organisations ────────────────────────────────────────────────
     orgs = (
-        await session.execute(
-            select(Organization)
-            .where(Organization.tenant_id == tenant_id)
-            .order_by(Organization.name)
+        (
+            await session.execute(
+                select(Organization)
+                .where(Organization.tenant_id == tenant_id)
+                .order_by(Organization.name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # ── 2. All sites ────────────────────────────────────────────────────────
     sites = (
-        await session.execute(
-            select(Site)
-            .where(Site.tenant_id == tenant_id)
-            .order_by(Site.name)
-        )
-    ).scalars().all()
+        (await session.execute(select(Site).where(Site.tenant_id == tenant_id).order_by(Site.name)))
+        .scalars()
+        .all()
+    )
 
     # ── 3. All device groups ────────────────────────────────────────────────
     groups = (
-        await session.execute(
-            select(DeviceGroup)
-            .where(DeviceGroup.tenant_id == tenant_id)
-            .order_by(DeviceGroup.name)
+        (
+            await session.execute(
+                select(DeviceGroup)
+                .where(DeviceGroup.tenant_id == tenant_id)
+                .order_by(DeviceGroup.name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # ── 4. Device counts (total + online) per org / site / group ───────────
     dev_rows = (
@@ -95,61 +101,62 @@ async def get_hierarchy(
     ).all()
 
     # ── Aggregate into lookup dicts ─────────────────────────────────────────
-    org_dev   = defaultdict(lambda: {"total": 0, "online": 0})
-    site_dev  = defaultdict(lambda: {"total": 0, "online": 0})
-    grp_dev   = defaultdict(lambda: {"total": 0, "online": 0})
-    org_alm   = defaultdict(int)
-    site_alm  = defaultdict(int)
-    grp_alm   = defaultdict(int)
+    org_dev = defaultdict(lambda: {"total": 0, "online": 0})
+    site_dev = defaultdict(lambda: {"total": 0, "online": 0})
+    grp_dev = defaultdict(lambda: {"total": 0, "online": 0})
+    org_alm = defaultdict(int)
+    site_alm = defaultdict(int)
+    grp_alm = defaultdict(int)
 
     for r in dev_rows:
         t, o = int(r.total or 0), int(r.online or 0)
         if r.organization_id:
-            org_dev[r.organization_id]["total"]  += t
+            org_dev[r.organization_id]["total"] += t
             org_dev[r.organization_id]["online"] += o
         if r.site_id:
-            site_dev[r.site_id]["total"]  += t
+            site_dev[r.site_id]["total"] += t
             site_dev[r.site_id]["online"] += o
         if r.device_group_id:
-            grp_dev[r.device_group_id]["total"]  += t
+            grp_dev[r.device_group_id]["total"] += t
             grp_dev[r.device_group_id]["online"] += o
 
     for r in alarm_rows:
         a = int(r.alarms or 0)
         if r.organization_id:
-            org_alm[r.organization_id]  += a
+            org_alm[r.organization_id] += a
         if r.site_id:
-            site_alm[r.site_id]         += a
+            site_alm[r.site_id] += a
         if r.device_group_id:
-            grp_alm[r.device_group_id]  += a
+            grp_alm[r.device_group_id] += a
 
     # ── Assembly helpers ────────────────────────────────────────────────────
     def build_groups(site_id):
         return [
             {
-                "id":            str(g.id),
-                "name":          g.name,
-                "group_type":    g.group_type,
-                "device_count":  grp_dev[g.id]["total"],
-                "online_count":  grp_dev[g.id]["online"],
+                "id": str(g.id),
+                "name": g.name,
+                "group_type": g.group_type,
+                "device_count": grp_dev[g.id]["total"],
+                "online_count": grp_dev[g.id]["online"],
                 "active_alarms": grp_alm[g.id],
             }
-            for g in groups if g.site_id == site_id
+            for g in groups
+            if g.site_id == site_id
         ]
 
     def build_sites(org_id, parent_id=None):
         return [
             {
-                "id":            str(s.id),
-                "name":          s.name,
-                "site_type":     s.site_type,
-                "address":       s.address,
-                "coordinates":   s.coordinates,
-                "device_count":  site_dev[s.id]["total"],
-                "online_count":  site_dev[s.id]["online"],
+                "id": str(s.id),
+                "name": s.name,
+                "site_type": s.site_type,
+                "address": s.address,
+                "coordinates": s.coordinates,
+                "device_count": site_dev[s.id]["total"],
+                "online_count": site_dev[s.id]["online"],
                 "active_alarms": site_alm[s.id],
                 "device_groups": build_groups(s.id),
-                "children":      build_sites(org_id, parent_id=s.id),
+                "children": build_sites(org_id, parent_id=s.id),
             }
             for s in sites
             if s.organization_id == org_id and s.parent_site_id == parent_id
@@ -159,14 +166,14 @@ async def get_hierarchy(
     return {
         "organizations": [
             {
-                "id":              str(org.id),
-                "name":            org.name,
-                "status":          org.status,
+                "id": str(org.id),
+                "name": org.name,
+                "status": org.status,
                 "billing_contact": org.billing_contact,
-                "device_count":    org_dev[org.id]["total"],
-                "online_count":    org_dev[org.id]["online"],
-                "active_alarms":   org_alm[org.id],
-                "sites":           build_sites(org.id),
+                "device_count": org_dev[org.id]["total"],
+                "online_count": org_dev[org.id]["online"],
+                "active_alarms": org_alm[org.id],
+                "sites": build_sites(org.id),
             }
             for org in orgs
         ]

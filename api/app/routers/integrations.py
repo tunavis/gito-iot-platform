@@ -125,6 +125,7 @@ async def _get_bridge_status(request: Request, integration_id: str) -> str:
 # Create
 # ---------------------------------------------------------------------------
 
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_integration(
     tenant_id: UUID,
@@ -202,6 +203,7 @@ async def create_integration(
 # List
 # ---------------------------------------------------------------------------
 
+
 @router.get("", response_model=SuccessResponse)
 async def list_integrations(
     tenant_id: UUID,
@@ -230,7 +232,9 @@ async def list_integrations(
             keys = [f"bridge:status:{iid}" for iid in mqtt_ids]
             vals = await redis.mget(*keys)
             for iid, val in zip(mqtt_ids, vals):
-                bridge_statuses[iid] = (val.decode() if isinstance(val, bytes) else val) if val else "pending"
+                bridge_statuses[iid] = (
+                    (val.decode() if isinstance(val, bytes) else val) if val else "pending"
+                )
         except Exception as e:
             logger.warning("Failed to fetch bridge statuses: %s", e)
 
@@ -280,6 +284,7 @@ async def list_integrations(
 # Get (with setup instructions)
 # ---------------------------------------------------------------------------
 
+
 @router.get("/{integration_id}", response_model=SuccessResponse)
 async def get_integration(
     tenant_id: UUID,
@@ -303,7 +308,9 @@ async def get_integration(
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
 
-    response_data = IntegrationResponse.model_validate(integration, from_attributes=True).model_dump()
+    response_data = IntegrationResponse.model_validate(
+        integration, from_attributes=True
+    ).model_dump()
     response_data["config"] = _mask_config(dict(response_data["config"]), integration.provider)
 
     if integration.provider == "chirpstack_mqtt":
@@ -322,6 +329,7 @@ async def get_integration(
 # ---------------------------------------------------------------------------
 # Unknown devices
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{integration_id}/unknown-devices")
 async def list_unknown_devices(
@@ -385,15 +393,18 @@ async def list_unknown_devices(
         except Exception as e:
             logger.warning("Failed to fetch unknown devices: %s", e)
 
-    return SuccessResponse(data=UnknownDevicesResponse(
-        integration_id=integration_id,
-        unknown_devices=entries,
-    ))
+    return SuccessResponse(
+        data=UnknownDevicesResponse(
+            integration_id=integration_id,
+            unknown_devices=entries,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
 # Update
 # ---------------------------------------------------------------------------
+
 
 @router.put("/{integration_id}", response_model=SuccessResponse)
 async def update_integration(
@@ -446,6 +457,7 @@ async def update_integration(
 # Delete
 # ---------------------------------------------------------------------------
 
+
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_integration(
     tenant_id: UUID,
@@ -480,6 +492,7 @@ async def delete_integration(
 # ---------------------------------------------------------------------------
 # Rotate key
 # ---------------------------------------------------------------------------
+
 
 @router.post("/{integration_id}/rotate-key", response_model=IntegrationCreatedResponse)
 async def rotate_key(

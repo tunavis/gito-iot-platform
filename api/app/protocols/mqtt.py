@@ -18,19 +18,19 @@ class MQTTAdapter(BaseProtocolAdapter):
 
     async def validate_config(self, config: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """Validate MQTT configuration."""
-        mqtt_config = config.get('mqtt', {})
+        mqtt_config = config.get("mqtt", {})
 
         # Validate topic pattern
-        topic_pattern = mqtt_config.get('topic_pattern')
+        topic_pattern = mqtt_config.get("topic_pattern")
         if not topic_pattern:
             return False, "MQTT topic_pattern is required"
 
         # Check for required placeholders
-        if '{{device_id}}' not in topic_pattern:
+        if "{{device_id}}" not in topic_pattern:
             return False, "topic_pattern must include {{device_id}} placeholder"
 
         # Validate QoS
-        qos = mqtt_config.get('qos', 1)
+        qos = mqtt_config.get("qos", 1)
         if qos not in [0, 1, 2]:
             return False, "QoS must be 0, 1, or 2"
 
@@ -43,19 +43,17 @@ class MQTTAdapter(BaseProtocolAdapter):
         # In production, you might generate device-specific credentials
         # For now, use shared broker credentials
         protocol_config = {
-            'broker_host': settings.MQTT_BROKER_HOST,
-            'broker_port': settings.MQTT_BROKER_PORT,
-            'username': settings.MQTT_USERNAME,
-            'password': settings.MQTT_PASSWORD,
-            'topic': self._generate_topic(device_id, tenant_id),
-            'qos': self.config.get('mqtt', {}).get('qos', 1),
-            'retain': self.config.get('mqtt', {}).get('retain', False)
+            "broker_host": settings.MQTT_BROKER_HOST,
+            "broker_port": settings.MQTT_BROKER_PORT,
+            "username": settings.MQTT_USERNAME,
+            "password": settings.MQTT_PASSWORD,
+            "topic": self._generate_topic(device_id, tenant_id),
+            "qos": self.config.get("mqtt", {}).get("qos", 1),
+            "retain": self.config.get("mqtt", {}).get("retain", False),
         }
 
         return DeviceCredentials(
-            device_id=device_id,
-            tenant_id=tenant_id,
-            protocol_config=protocol_config
+            device_id=device_id, tenant_id=tenant_id, protocol_config=protocol_config
         )
 
     async def provision_device(self, credentials: DeviceCredentials) -> Dict[str, Any]:
@@ -65,10 +63,10 @@ class MQTTAdapter(BaseProtocolAdapter):
         If using MQTT ACLs, you would configure them here.
         """
         return {
-            'status': 'provisioned',
-            'protocol': 'mqtt',
-            'topic': credentials.protocol_config['topic'],
-            'broker': f"{credentials.protocol_config['broker_host']}:{credentials.protocol_config['broker_port']}"
+            "status": "provisioned",
+            "protocol": "mqtt",
+            "topic": credentials.protocol_config["topic"],
+            "broker": f"{credentials.protocol_config['broker_host']}:{credentials.protocol_config['broker_port']}",
         }
 
     async def deprovision_device(self, device_id: str) -> bool:
@@ -85,30 +83,27 @@ class MQTTAdapter(BaseProtocolAdapter):
         cfg = credentials.protocol_config
 
         return {
-            'protocol': 'MQTT',
-            'broker_url': f"mqtt://{cfg['broker_host']}:{cfg['broker_port']}",
-            'topic': cfg['topic'],
-            'qos': cfg['qos'],
-            'retain': cfg['retain'],
-            'authentication': {
-                'username': cfg['username'],
-                'password': cfg['password']
+            "protocol": "MQTT",
+            "broker_url": f"mqtt://{cfg['broker_host']}:{cfg['broker_port']}",
+            "topic": cfg["topic"],
+            "qos": cfg["qos"],
+            "retain": cfg["retain"],
+            "authentication": {"username": cfg["username"], "password": cfg["password"]},
+            "example_payload": {
+                "temperature": 25.5,
+                "humidity": 65.2,
+                "timestamp": "2026-02-06T10:00:00Z",
             },
-            'example_payload': {
-                'temperature': 25.5,
-                'humidity': 65.2,
-                'timestamp': '2026-02-06T10:00:00Z'
+            "client_libraries": {
+                "python": "pip install paho-mqtt",
+                "javascript": "npm install mqtt",
+                "arduino": "PubSubClient library",
+                "esp32": "Arduino MQTT or esp-mqtt",
             },
-            'client_libraries': {
-                'python': 'pip install paho-mqtt',
-                'javascript': 'npm install mqtt',
-                'arduino': 'PubSubClient library',
-                'esp32': 'Arduino MQTT or esp-mqtt'
+            "example_code": {
+                "python": self._generate_python_example(cfg),
+                "javascript": self._generate_js_example(cfg),
             },
-            'example_code': {
-                'python': self._generate_python_example(cfg),
-                'javascript': self._generate_js_example(cfg)
-            }
         }
 
     async def test_connection(self, credentials: DeviceCredentials) -> tuple[bool, Optional[str]]:
@@ -116,15 +111,17 @@ class MQTTAdapter(BaseProtocolAdapter):
         # TODO: Implement actual MQTT connection test
         # For now, just validate configuration
         cfg = credentials.protocol_config
-        if not all(k in cfg for k in ['broker_host', 'broker_port', 'topic']):
+        if not all(k in cfg for k in ["broker_host", "broker_port", "topic"]):
             return False, "Missing required MQTT configuration"
         return True, None
 
     def _generate_topic(self, device_id: str, tenant_id: str) -> str:
         """Generate MQTT topic from pattern."""
-        topic_pattern = self.config.get('mqtt', {}).get('topic_pattern', '{{tenant_id}}/devices/{{device_id}}/telemetry')
-        topic = topic_pattern.replace('{{tenant_id}}', tenant_id)
-        topic = topic.replace('{{device_id}}', device_id)
+        topic_pattern = self.config.get("mqtt", {}).get(
+            "topic_pattern", "{{tenant_id}}/devices/{{device_id}}/telemetry"
+        )
+        topic = topic_pattern.replace("{{tenant_id}}", tenant_id)
+        topic = topic.replace("{{device_id}}", device_id)
         return topic
 
     def _generate_python_example(self, cfg: Dict) -> str:
@@ -182,4 +179,4 @@ client.on('connect', () => {{
 
 
 # Register MQTT adapter
-ProtocolRegistry.register('mqtt', MQTTAdapter)
+ProtocolRegistry.register("mqtt", MQTTAdapter)

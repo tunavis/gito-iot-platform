@@ -32,21 +32,21 @@ async def list_sites(
     """List all sites for a tenant with optional filtering."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Build query
     query = select(Site).where(Site.tenant_id == tenant_id)
-    
+
     if organization_id:
         query = query.where(Site.organization_id == organization_id)
     if site_type:
         query = query.where(Site.site_type == site_type)
     if parent_site_id:
         query = query.where(Site.parent_site_id == parent_site_id)
-    
+
     query = query.order_by(Site.created_at.desc())
-    
+
     # Count total
     count_query = select(func.count()).select_from(Site).where(Site.tenant_id == tenant_id)
     if organization_id:
@@ -55,18 +55,18 @@ async def list_sites(
         count_query = count_query.where(Site.site_type == site_type)
     if parent_site_id:
         count_query = count_query.where(Site.parent_site_id == parent_site_id)
-    
+
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # Paginate
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await session.execute(query)
     sites = result.scalars().all()
-    
+
     return SuccessResponse(
         data=[SiteResponse.model_validate(site) for site in sites],
-        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
 
 
@@ -80,23 +80,19 @@ async def create_site(
     """Create a new site."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Validate parent site exists if provided
     if site_data.parent_site_id:
         parent_result = await session.execute(
-            select(Site).where(
-                Site.tenant_id == tenant_id,
-                Site.id == site_data.parent_site_id
-            )
+            select(Site).where(Site.tenant_id == tenant_id, Site.id == site_data.parent_site_id)
         )
         if not parent_result.scalar_one_or_none():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Parent site not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Parent site not found"
             )
-    
+
     # Create site
     site = Site(
         tenant_id=tenant_id,
@@ -109,11 +105,11 @@ async def create_site(
         timezone=site_data.timezone,
         attributes=site_data.attributes,
     )
-    
+
     session.add(site)
     await session.commit()
     await session.refresh(site)
-    
+
     return SuccessResponse(data=SiteResponse.model_validate(site))
 
 
@@ -127,20 +123,17 @@ async def get_site(
     """Get a specific site."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     result = await session.execute(
-        select(Site).where(
-            Site.tenant_id == tenant_id,
-            Site.id == site_id
-        )
+        select(Site).where(Site.tenant_id == tenant_id, Site.id == site_id)
     )
     site = result.scalar_one_or_none()
-    
+
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    
+
     return SuccessResponse(data=SiteResponse.model_validate(site))
 
 
@@ -155,30 +148,27 @@ async def update_site(
     """Update a site."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     result = await session.execute(
-        select(Site).where(
-            Site.tenant_id == tenant_id,
-            Site.id == site_id
-        )
+        select(Site).where(Site.tenant_id == tenant_id, Site.id == site_id)
     )
     site = result.scalar_one_or_none()
-    
+
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    
+
     # Update fields
     update_data = site_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(site, field, value)
-    
+
     site.updated_at = datetime.utcnow()
-    
+
     await session.commit()
     await session.refresh(site)
-    
+
     return SuccessResponse(data=SiteResponse.model_validate(site))
 
 
@@ -192,20 +182,17 @@ async def delete_site(
     """Delete a site."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     result = await session.execute(
-        select(Site).where(
-            Site.tenant_id == tenant_id,
-            Site.id == site_id
-        )
+        select(Site).where(Site.tenant_id == tenant_id, Site.id == site_id)
     )
     site = result.scalar_one_or_none()
-    
+
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    
+
     await session.delete(site)
     await session.commit()
 
@@ -222,49 +209,51 @@ async def list_site_devices(
     """List all devices at a site."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Verify site exists
     site_result = await session.execute(
-        select(Site).where(
-            Site.tenant_id == tenant_id,
-            Site.id == site_id
-        )
+        select(Site).where(Site.tenant_id == tenant_id, Site.id == site_id)
     )
     if not site_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    
+
     # Query devices
-    query = select(Device).where(
-        Device.tenant_id == tenant_id,
-        Device.site_id == site_id
-    ).order_by(Device.created_at.desc())
-    
+    query = (
+        select(Device)
+        .where(Device.tenant_id == tenant_id, Device.site_id == site_id)
+        .order_by(Device.created_at.desc())
+    )
+
     # Count
-    count_query = select(func.count()).select_from(Device).where(
-        Device.tenant_id == tenant_id,
-        Device.site_id == site_id
+    count_query = (
+        select(func.count())
+        .select_from(Device)
+        .where(Device.tenant_id == tenant_id, Device.site_id == site_id)
     )
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # Paginate
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await session.execute(query)
     devices = result.scalars().all()
-    
+
     return SuccessResponse(
-        data=[{
-            "id": str(d.id),
-            "name": d.name,
-            "device_type": d.device_type,
-            "status": d.status,
-            "last_seen": d.last_seen.isoformat() if d.last_seen else None,
-            "battery_level": d.battery_level,
-            "signal_strength": d.signal_strength,
-        } for d in devices],
-        meta=PaginationMeta(page=page, per_page=per_page, total=total)
+        data=[
+            {
+                "id": str(d.id),
+                "name": d.name,
+                "device_type": d.device_type,
+                "status": d.status,
+                "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+                "battery_level": d.battery_level,
+                "signal_strength": d.signal_strength,
+            }
+            for d in devices
+        ],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
     )
 
 
@@ -278,26 +267,22 @@ async def list_child_sites(
     """List all child sites (nested hierarchy)."""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
-    
+
     await session.set_tenant_context(tenant_id)
-    
+
     # Verify parent site exists
     parent_result = await session.execute(
-        select(Site).where(
-            Site.tenant_id == tenant_id,
-            Site.id == site_id
-        )
+        select(Site).where(Site.tenant_id == tenant_id, Site.id == site_id)
     )
     if not parent_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    
+
     # Get child sites
     result = await session.execute(
-        select(Site).where(
-            Site.tenant_id == tenant_id,
-            Site.parent_site_id == site_id
-        ).order_by(Site.name)
+        select(Site)
+        .where(Site.tenant_id == tenant_id, Site.parent_site_id == site_id)
+        .order_by(Site.name)
     )
     children = result.scalars().all()
-    
+
     return SuccessResponse(data=[SiteResponse.model_validate(site) for site in children])

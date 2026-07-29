@@ -103,19 +103,24 @@ async def get_notification_rule(
     await session.set_tenant_context(tenant_id)
 
     query = select(NotificationRule).where(
-        NotificationRule.id == rule_id,
-        NotificationRule.tenant_id == tenant_id
+        NotificationRule.id == rule_id, NotificationRule.tenant_id == tenant_id
     )
     result = await session.execute(query)
     rule = result.scalar_one_or_none()
 
     if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification rule not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Notification rule not found"
+        )
 
     return SuccessResponse(data=NotificationRuleResponse.model_validate(rule))
 
 
-@router.post("", response_model=SuccessResponse[NotificationRuleResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SuccessResponse[NotificationRuleResponse],
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_notification_rule(
     tenant_id: UUID,
     request: NotificationRuleCreate,
@@ -143,13 +148,13 @@ async def create_notification_rule(
     existing_query = select(NotificationRule).where(
         NotificationRule.tenant_id == tenant_id,
         NotificationRule.alert_rule_id == request.alert_rule_id,
-        NotificationRule.channel_id == request.channel_id
+        NotificationRule.channel_id == request.channel_id,
     )
     result = await session.execute(existing_query)
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Notification rule already exists for this alert rule and channel combination"
+            detail="Notification rule already exists for this alert rule and channel combination",
         )
 
     # Create rule
@@ -194,14 +199,15 @@ async def update_notification_rule(
 
     # Get existing rule
     query = select(NotificationRule).where(
-        NotificationRule.id == rule_id,
-        NotificationRule.tenant_id == tenant_id
+        NotificationRule.id == rule_id, NotificationRule.tenant_id == tenant_id
     )
     result = await session.execute(query)
     rule = result.scalar_one_or_none()
 
     if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification rule not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Notification rule not found"
+        )
 
     # Update fields
     update_data = request.model_dump(exclude_unset=True)
@@ -239,14 +245,15 @@ async def delete_notification_rule(
 
     # Get rule
     query = select(NotificationRule).where(
-        NotificationRule.id == rule_id,
-        NotificationRule.tenant_id == tenant_id
+        NotificationRule.id == rule_id, NotificationRule.tenant_id == tenant_id
     )
     result = await session.execute(query)
     rule = result.scalar_one_or_none()
 
     if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification rule not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Notification rule not found"
+        )
 
     await session.delete(rule)
     await session.commit()

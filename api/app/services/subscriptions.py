@@ -61,14 +61,20 @@ async def _plan(session, *, code: str, active_only: bool):
 
 
 async def _live_subscription(session, tenant_id: str):
-    return (await session.execute(
-        text(
-            "SELECT id, plan_id, status, cancel_at_period_end "
-            "FROM subscriptions WHERE tenant_id = :tid AND status = ANY(:live) "
-            "ORDER BY created_at DESC LIMIT 1"
-        ),
-        {"tid": tenant_id, "live": list(LIVE_STATUSES)},
-    )).mappings().first()
+    return (
+        (
+            await session.execute(
+                text(
+                    "SELECT id, plan_id, status, cancel_at_period_end "
+                    "FROM subscriptions WHERE tenant_id = :tid AND status = ANY(:live) "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"tid": tenant_id, "live": list(LIVE_STATUSES)},
+            )
+        )
+        .mappings()
+        .first()
+    )
 
 
 async def _record_event(session, tenant_id, subscription_id, from_status, to_status, reason, actor):
@@ -78,8 +84,14 @@ async def _record_event(session, tenant_id, subscription_id, from_status, to_sta
             "(tenant_id, subscription_id, from_status, to_status, reason, actor) "
             "VALUES (:tid, :sid, :frm, :to, :reason, :actor)"
         ),
-        {"tid": str(tenant_id), "sid": str(subscription_id), "frm": from_status,
-         "to": to_status, "reason": reason, "actor": actor},
+        {
+            "tid": str(tenant_id),
+            "sid": str(subscription_id),
+            "frm": from_status,
+            "to": to_status,
+            "reason": reason,
+            "actor": actor,
+        },
     )
 
 
@@ -90,33 +102,52 @@ async def _finish(session, redis, tenant_id: str):
 
 async def _current(session, tenant_id: str) -> dict:
     """The tenant's current live subscription as a dict (for endpoint responses)."""
-    row = (await session.execute(
-        text(
-            "SELECT s.status, s.provider, s.billing_interval, s.currency, s.trial_ends_at, "
-            "       s.current_period_end, s.grace_until, s.cancel_at_period_end, p.code AS plan_code "
-            "FROM subscriptions s JOIN plans p ON p.id = s.plan_id "
-            "WHERE s.tenant_id = :tid AND s.status = ANY(:live) "
-            "ORDER BY s.created_at DESC LIMIT 1"
-        ),
-        {"tid": tenant_id, "live": list(LIVE_STATUSES)},
-    )).mappings().first()
+    row = (
+        (
+            await session.execute(
+                text(
+                    "SELECT s.status, s.provider, s.billing_interval, s.currency, s.trial_ends_at, "
+                    "       s.current_period_end, s.grace_until, s.cancel_at_period_end, p.code AS plan_code "
+                    "FROM subscriptions s JOIN plans p ON p.id = s.plan_id "
+                    "WHERE s.tenant_id = :tid AND s.status = ANY(:live) "
+                    "ORDER BY s.created_at DESC LIMIT 1"
+                ),
+                {"tid": tenant_id, "live": list(LIVE_STATUSES)},
+            )
+        )
+        .mappings()
+        .first()
+    )
     return dict(row) if row else {"plan_code": "free", "status": "none"}
 
 
 # ── Lifecycle operations ──────────────────────────────────────────────────────
 
-async def start_trial(session, redis, tenant_id, *, plan_code: str, actor: str,
-                      email: str | None = None, signup_ip: str | None = None) -> dict:
+
+async def start_trial(
+    session,
+    redis,
+    tenant_id,
+    *,
+    plan_code: str,
+    actor: str,
+    email: str | None = None,
+    signup_ip: str | None = None,
+) -> dict:
     """Begin a trial on `plan_code`. One trial per tenant; blocked if already subscribed."""
     tid = str(tenant_id)
     if await _live_subscription(session, tid):
         raise SubscriptionError("Tenant already has an active subscription")
 
     # Abuse prevention: a tenant that has ever trialed cannot trial again.
-    prior = (await session.execute(
-        text("SELECT 1 FROM subscription_events WHERE tenant_id = :tid AND to_status = 'trialing' LIMIT 1"),
-        {"tid": tid},
-    )).first()
+    prior = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM subscription_events WHERE tenant_id = :tid AND to_status = 'trialing' LIMIT 1"
+            ),
+            {"tid": tid},
+        )
+    ).first()
     if prior:
         raise SubscriptionError("A trial has already been used for this tenant")
 
@@ -124,15 +155,17 @@ async def start_trial(session, redis, tenant_id, *, plan_code: str, actor: str,
     now = datetime.utcnow()
     trial_ends = now + timedelta(days=int(plan["trial_days"] or 0))
 
-    sid = (await session.execute(
-        text(
-            "INSERT INTO subscriptions "
-            "(tenant_id, payer_tenant_id, plan_id, status, provider, trial_ends_at, "
-            " current_period_start, current_period_end) "
-            "VALUES (:tid, :tid, :pid, 'trialing', 'manual', :te, :now, :te) RETURNING id"
-        ),
-        {"tid": tid, "pid": str(plan["id"]), "te": trial_ends, "now": now},
-    )).scalar_one()
+    sid = (
+        await session.execute(
+            text(
+                "INSERT INTO subscriptions "
+                "(tenant_id, payer_tenant_id, plan_id, status, provider, trial_ends_at, "
+                " current_period_start, current_period_end) "
+                "VALUES (:tid, :tid, :pid, 'trialing', 'manual', :te, :now, :te) RETURNING id"
+            ),
+            {"tid": tid, "pid": str(plan["id"]), "te": trial_ends, "now": now},
+        )
+    ).scalar_one()
 
     await _record_event(session, tid, sid, None, "trialing", f"trial:{plan_code}", actor)
 
@@ -166,8 +199,9 @@ async def change_plan(session, redis, tenant_id, *, plan_code: str, actor: str) 
         text("UPDATE subscriptions SET plan_id = :pid, updated_at = now() WHERE id = :sid"),
         {"pid": str(plan["id"]), "sid": str(live["id"])},
     )
-    await _record_event(session, tid, live["id"], live["status"], live["status"],
-                        f"change_plan:{plan_code}", actor)
+    await _record_event(
+        session, tid, live["id"], live["status"], live["status"], f"change_plan:{plan_code}", actor
+    )
     await _finish(session, redis, tid)
     return await _current(session, tid)
 
@@ -182,11 +216,15 @@ async def cancel(session, redis, tenant_id, *, actor: str) -> dict:
         raise SubscriptionError("Subscription is already set to cancel at period end")
 
     await session.execute(
-        text("UPDATE subscriptions SET cancel_at_period_end = true, canceled_at = now(), "
-             "updated_at = now() WHERE id = :sid"),
+        text(
+            "UPDATE subscriptions SET cancel_at_period_end = true, canceled_at = now(), "
+            "updated_at = now() WHERE id = :sid"
+        ),
         {"sid": str(live["id"])},
     )
-    await _record_event(session, tid, live["id"], live["status"], live["status"], "cancel_scheduled", actor)
+    await _record_event(
+        session, tid, live["id"], live["status"], live["status"], "cancel_scheduled", actor
+    )
     await _finish(session, redis, tid)
     return await _current(session, tid)
 
@@ -201,8 +239,10 @@ async def resume(session, redis, tenant_id, *, actor: str) -> dict:
         raise SubscriptionError("Subscription is not scheduled to cancel")
 
     await session.execute(
-        text("UPDATE subscriptions SET cancel_at_period_end = false, canceled_at = NULL, "
-             "updated_at = now() WHERE id = :sid"),
+        text(
+            "UPDATE subscriptions SET cancel_at_period_end = false, canceled_at = NULL, "
+            "updated_at = now() WHERE id = :sid"
+        ),
         {"sid": str(live["id"])},
     )
     await _record_event(session, tid, live["id"], live["status"], live["status"], "resumed", actor)
@@ -210,9 +250,17 @@ async def resume(session, redis, tenant_id, *, actor: str) -> dict:
     return await _current(session, tid)
 
 
-async def assign_plan(session, redis, tenant_id, *, plan_code: str, actor: str,
-                      billing_interval: str = "month", provider: str = "manual",
-                      provider_ref: str | None = None) -> dict:
+async def assign_plan(
+    session,
+    redis,
+    tenant_id,
+    *,
+    plan_code: str,
+    actor: str,
+    billing_interval: str = "month",
+    provider: str = "manual",
+    provider_ref: str | None = None,
+) -> dict:
     """Activate a tenant on a plan. Used by admin/manual assignment AND by the card
     webhook on a successful payment.
 
@@ -236,22 +284,38 @@ async def assign_plan(session, redis, tenant_id, *, plan_code: str, actor: str,
                 "canceled_at = NULL, current_period_start = :now, current_period_end = :pe, "
                 "updated_at = now() WHERE id = :sid"
             ),
-            {"pid": str(plan["id"]), "prov": provider, "ref": provider_ref,
-             "interval": billing_interval, "now": now, "pe": period_end, "sid": str(live["id"])},
+            {
+                "pid": str(plan["id"]),
+                "prov": provider,
+                "ref": provider_ref,
+                "interval": billing_interval,
+                "now": now,
+                "pe": period_end,
+                "sid": str(live["id"]),
+            },
         )
         sid = live["id"]
         from_status = live["status"]
     else:
-        sid = (await session.execute(
-            text(
-                "INSERT INTO subscriptions "
-                "(tenant_id, payer_tenant_id, plan_id, status, provider, provider_subscription_id, "
-                " billing_interval, current_period_start, current_period_end) "
-                "VALUES (:tid, :tid, :pid, 'active', :prov, :ref, :interval, :now, :pe) RETURNING id"
-            ),
-            {"tid": tid, "pid": str(plan["id"]), "prov": provider, "ref": provider_ref,
-             "interval": billing_interval, "now": now, "pe": period_end},
-        )).scalar_one()
+        sid = (
+            await session.execute(
+                text(
+                    "INSERT INTO subscriptions "
+                    "(tenant_id, payer_tenant_id, plan_id, status, provider, provider_subscription_id, "
+                    " billing_interval, current_period_start, current_period_end) "
+                    "VALUES (:tid, :tid, :pid, 'active', :prov, :ref, :interval, :now, :pe) RETURNING id"
+                ),
+                {
+                    "tid": tid,
+                    "pid": str(plan["id"]),
+                    "prov": provider,
+                    "ref": provider_ref,
+                    "interval": billing_interval,
+                    "now": now,
+                    "pe": period_end,
+                },
+            )
+        ).scalar_one()
         from_status = None
 
     await _record_event(session, tid, sid, from_status, "active", reason, actor)
@@ -260,6 +324,7 @@ async def assign_plan(session, redis, tenant_id, *, plan_code: str, actor: str,
 
 
 # ── Scheduled lifecycle transitions (run by the background scheduler) ─────────
+
 
 async def run_lifecycle_transitions(session) -> dict:
     """Advance every subscription whose clock has run out. Idempotent batch sweep.
@@ -296,7 +361,10 @@ async def run_lifecycle_transitions(session) -> dict:
         {"now": now, "grace": now + timedelta(days=GRACE_DAYS)},
         "UPDATE subscriptions SET status='past_due', grace_until = :grace, "
         "updated_at = now() WHERE id = :id",
-        "trialing", "past_due", "trial_expired", "trial_expired",
+        "trialing",
+        "past_due",
+        "trial_expired",
+        "trial_expired",
     )
 
     # 2. past_due past its grace window → restricted (read-only).
@@ -305,7 +373,10 @@ async def run_lifecycle_transitions(session) -> dict:
         "WHERE status = 'past_due' AND grace_until IS NOT NULL AND grace_until < :now",
         {"now": now},
         "UPDATE subscriptions SET status='restricted', updated_at = now() WHERE id = :id",
-        "past_due", "restricted", "grace_expired", "restricted",
+        "past_due",
+        "restricted",
+        "grace_expired",
+        "restricted",
     )
 
     # 3. Scheduled cancellations whose period has ended → canceled (drops out of 'live').
@@ -315,7 +386,10 @@ async def run_lifecycle_transitions(session) -> dict:
         "AND current_period_end IS NOT NULL AND current_period_end < :now",
         {"now": now},
         "UPDATE subscriptions SET status='canceled', updated_at = now() WHERE id = :id",
-        None, "canceled", "cancel_at_period_end", "canceled",
+        None,
+        "canceled",
+        "cancel_at_period_end",
+        "canceled",
     )
 
     await session.commit()

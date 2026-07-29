@@ -151,10 +151,12 @@ async def _validate_device_fks(
     ):
         if value is None:
             continue
-        exists = (await session.execute(
-            text(f"SELECT 1 FROM {table} WHERE id = :id AND tenant_id = :tid"),
-            {"id": str(value), "tid": str(tenant_id)},
-        )).scalar_one_or_none()
+        exists = (
+            await session.execute(
+                text(f"SELECT 1 FROM {table} WHERE id = :id AND tenant_id = :tid"),
+                {"id": str(value), "tid": str(tenant_id)},
+            )
+        ).scalar_one_or_none()
         if exists is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -188,7 +190,8 @@ async def create_device(
     await session.set_tenant_context(tenant_id)
 
     await _validate_device_fks(
-        session, tenant_id,
+        session,
+        tenant_id,
         device_type_id=device_data.device_type_id,
         organization_id=device_data.organization_id,
         site_id=device_data.site_id,
@@ -329,7 +332,8 @@ async def update_device(
         )
 
     await _validate_device_fks(
-        session, tenant_id,
+        session,
+        tenant_id,
         device_type_id=device_data.device_type_id,
         organization_id=device_data.organization_id,
         site_id=device_data.site_id,
@@ -449,19 +453,23 @@ async def delete_device(
 from pydantic import BaseModel
 from typing import List
 
+
 class BulkDeleteRequest(BaseModel):
     device_ids: List[UUID]
+
 
 class BulkAssignGroupRequest(BaseModel):
     device_ids: List[UUID]
     device_group_id: Optional[UUID] = None
 
+
 class BulkRegisterRequest(BaseModel):
     """Register many bridge-discovered dev_EUIs at once, all as one device type."""
+
     dev_euis: List[str]
     device_type_id: UUID
-    name_prefix: Optional[str] = None          # e.g. "Water Meter" → "Water Meter 85A1"
-    integration_id: Optional[UUID] = None      # clears registered euis from its unknown list
+    name_prefix: Optional[str] = None  # e.g. "Water Meter" → "Water Meter 85A1"
+    integration_id: Optional[UUID] = None  # clears registered euis from its unknown list
     site_id: Optional[UUID] = None
     device_group_id: Optional[UUID] = None
 
@@ -479,10 +487,7 @@ async def bulk_delete_devices(
 
     await session.set_tenant_context(tenant_id)
 
-    query = select(Device).where(
-        Device.tenant_id == tenant_id,
-        Device.id.in_(request.device_ids)
-    )
+    query = select(Device).where(Device.tenant_id == tenant_id, Device.id.in_(request.device_ids))
     result = await session.execute(query)
     devices = result.scalars().all()
 
@@ -494,10 +499,12 @@ async def bulk_delete_devices(
 
     await session.commit()
 
-    return SuccessResponse(data={
-        "deleted_count": len(devices),
-        "message": f"Successfully deleted {len(devices)} device(s)"
-    })
+    return SuccessResponse(
+        data={
+            "deleted_count": len(devices),
+            "message": f"Successfully deleted {len(devices)} device(s)",
+        }
+    )
 
 
 @router.post("/bulk/assign-group", response_model=SuccessResponse)
@@ -515,18 +522,17 @@ async def bulk_assign_device_group(
 
     if request.device_group_id:
         from app.models.device_group import DeviceGroup
+
         group_query = select(DeviceGroup).where(
-            DeviceGroup.tenant_id == tenant_id,
-            DeviceGroup.id == request.device_group_id
+            DeviceGroup.tenant_id == tenant_id, DeviceGroup.id == request.device_group_id
         )
         group_result = await session.execute(group_query)
         if not group_result.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Device group not found"
+            )
 
-    query = select(Device).where(
-        Device.tenant_id == tenant_id,
-        Device.id.in_(request.device_ids)
-    )
+    query = select(Device).where(Device.tenant_id == tenant_id, Device.id.in_(request.device_ids))
     result = await session.execute(query)
     devices = result.scalars().all()
 
@@ -540,10 +546,12 @@ async def bulk_assign_device_group(
     await session.commit()
 
     action = "assigned to group" if request.device_group_id else "unassigned from groups"
-    return SuccessResponse(data={
-        "updated_count": len(devices),
-        "message": f"Successfully {action} for {len(devices)} device(s)"
-    })
+    return SuccessResponse(
+        data={
+            "updated_count": len(devices),
+            "message": f"Successfully {action} for {len(devices)} device(s)",
+        }
+    )
 
 
 @router.post("/bulk-register", response_model=SuccessResponse)
@@ -567,17 +575,20 @@ async def bulk_register_devices(
     from app.models.device_type import DeviceType
 
     # Validate the device type belongs to this tenant (RLS + explicit)
-    dt = (await session.execute(
-        select(DeviceType).where(
-            DeviceType.tenant_id == tenant_id,
-            DeviceType.id == body.device_type_id,
+    dt = (
+        await session.execute(
+            select(DeviceType).where(
+                DeviceType.tenant_id == tenant_id,
+                DeviceType.id == body.device_type_id,
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if not dt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device type not found")
 
     # Normalize + de-dupe requested euis; validate 16-hex format
     import re
+
     requested: list[str] = []
     invalid: list[str] = []
     for raw in body.dev_euis:
@@ -588,16 +599,21 @@ async def bulk_register_devices(
         else:
             invalid.append(raw)
     if not requested:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid dev_EUIs supplied")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No valid dev_EUIs supplied"
+        )
 
     # Which of these are already registered in THIS tenant?
     already = {
-        r[0] for r in (await session.execute(
-            select(Device.dev_eui).where(
-                Device.tenant_id == tenant_id,
-                Device.dev_eui.in_(requested),
+        r[0]
+        for r in (
+            await session.execute(
+                select(Device.dev_eui).where(
+                    Device.tenant_id == tenant_id,
+                    Device.dev_eui.in_(requested),
+                )
             )
-        )).all()
+        ).all()
     }
 
     created: list[str] = []
@@ -605,17 +621,19 @@ async def bulk_register_devices(
     for eui in requested:
         if eui in already:
             continue
-        session.add(Device(
-            tenant_id=tenant_id,
-            name=f"{prefix} {eui[-4:].upper()}",
-            device_type=dt.name,
-            device_type_id=dt.id,
-            dev_eui=eui,
-            site_id=body.site_id,
-            device_group_id=body.device_group_id,
-            attributes={},
-            status="offline",
-        ))
+        session.add(
+            Device(
+                tenant_id=tenant_id,
+                name=f"{prefix} {eui[-4:].upper()}",
+                device_type=dt.name,
+                device_type_id=dt.id,
+                dev_eui=eui,
+                site_id=body.site_id,
+                device_group_id=body.device_group_id,
+                attributes={},
+                status="offline",
+            )
+        )
         created.append(eui)
 
     if created:
@@ -629,10 +647,12 @@ async def bulk_register_devices(
         except Exception as e:
             logger.warning("Failed to clear registered euis from unknown list: %s", e)
 
-    return SuccessResponse(data={
-        "registered": len(created),
-        "skipped_already_registered": sorted(already),
-        "invalid": invalid,
-        "message": f"Registered {len(created)} device(s)"
-                   + (f", skipped {len(already)} already-registered" if already else ""),
-    })
+    return SuccessResponse(
+        data={
+            "registered": len(created),
+            "skipped_already_registered": sorted(already),
+            "invalid": invalid,
+            "message": f"Registered {len(created)} device(s)"
+            + (f", skipped {len(already)} already-registered" if already else ""),
+        }
+    )

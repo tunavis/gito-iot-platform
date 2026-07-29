@@ -51,8 +51,12 @@ async def query_telemetry(
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
     start_time: datetime = Query(..., description="Start time for query (ISO format)"),
     end_time: datetime = Query(None, description="End time for query (defaults to now)"),
-    metrics: Optional[str] = Query(None, description="Comma-separated list of metrics (e.g., 'temperature,humidity')"),
-    aggregation: Literal["raw", "avg", "min", "max", "sum"] = Query("raw", description="Aggregation type"),
+    metrics: Optional[str] = Query(
+        None, description="Comma-separated list of metrics (e.g., 'temperature,humidity')"
+    ),
+    aggregation: Literal["raw", "avg", "min", "max", "sum"] = Query(
+        "raw", description="Aggregation type"
+    ),
     page: int = Query(1, ge=1),
     per_page: int = Query(100, ge=1, le=1000),
 ):
@@ -117,7 +121,15 @@ async def query_telemetry(
         )
     else:
         return await _query_aggregated_telemetry(
-            session, tenant_id, device_id, start_time, end_time, metric_keys, aggregation, page, per_page
+            session,
+            tenant_id,
+            device_id,
+            start_time,
+            end_time,
+            metric_keys,
+            aggregation,
+            page,
+            per_page,
         )
 
 
@@ -247,7 +259,7 @@ async def _query_raw_telemetry(
     except Exception as e:
         logger.error(
             f"Telemetry query failed - Device: {device_id}, Error: {type(e).__name__}: {str(e)}",
-            exc_info=True
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -357,7 +369,7 @@ async def _query_aggregated_telemetry(
 
         # Sort by time_bucket descending and apply pagination
         data.sort(key=lambda x: x["time_bucket"] or "", reverse=True)
-        paginated_data = data[offset:offset + per_page]
+        paginated_data = data[offset : offset + per_page]
 
         return SuccessResponse(
             data=paginated_data,
@@ -367,7 +379,7 @@ async def _query_aggregated_telemetry(
     except Exception as e:
         logger.error(
             f"Aggregation query failed - Device: {device_id}, Error: {type(e).__name__}: {str(e)}",
-            exc_info=True
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -504,7 +516,7 @@ async def get_latest_telemetry(
     except Exception as e:
         logger.error(
             f"Failed to fetch latest telemetry for device {device_id}: {type(e).__name__}: {str(e)}",
-            exc_info=True
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -566,7 +578,7 @@ async def list_available_metrics(
                 "tenant_id": str(tenant_id),
                 "device_id": str(device_id),
                 "start_time": start_time,
-            }
+            },
         )
         rows = result.fetchall()
 
@@ -577,7 +589,7 @@ async def list_available_metrics(
     except Exception as e:
         logger.error(
             f"Failed to list metrics for device {device_id}: {type(e).__name__}: {str(e)}",
-            exc_info=True
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -632,6 +644,7 @@ async def ingest_telemetry(
     # Apply key mapping from device type (raw device keys → canonical keys)
     if device.device_type_id:
         from app.models.base import DeviceType
+
         dt_result = await session.execute(
             select(DeviceType.key_mapping).where(
                 DeviceType.id == device.device_type_id,
@@ -644,7 +657,9 @@ async def ingest_telemetry(
 
     metrics = {k: v for k, v in payload.items() if k not in system_keys}
     if not metrics:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No valid metrics in payload"
+        )
 
     # Publish into the ingest stream — the processor inserts AND evaluates alarms
     # there (single funnel; see app/services/telemetry_stream.py). Writing rows
@@ -667,7 +682,9 @@ async def ingest_telemetry(
 
     # Update device last_seen + flip online
     await session.execute(
-        text("UPDATE devices SET last_seen = :ts, status = 'online', updated_at = now() WHERE id = :device_id AND tenant_id = :tenant_id"),
+        text(
+            "UPDATE devices SET last_seen = :ts, status = 'online', updated_at = now() WHERE id = :device_id AND tenant_id = :tenant_id"
+        ),
         {"ts": ts, "device_id": str(device_id), "tenant_id": str(tenant_id)},
     )
     await session.commit()
@@ -677,16 +694,19 @@ async def ingest_telemetry(
     # stream entry above — this is just for instant UI feedback, not storage).
     try:
         channel = f"telemetry:{tenant_id}:{device_id}"
-        message = _json.dumps({
-            "device_id": str(device_id),
-            "payload": metrics,
-            "timestamp": ts.isoformat(),
-        })
+        message = _json.dumps(
+            {
+                "device_id": str(device_id),
+                "payload": metrics,
+                "timestamp": ts.isoformat(),
+            }
+        )
         await redis_client_app.publish(channel, message)
     except Exception as e:
         logger.warning(f"Failed to publish telemetry to Redis: {e}")
     try:
         from app.services.digital_twin import DigitalTwinService
+
         twin = DigitalTwinService(redis_client_app)
         await twin.update_device_state(device_id, metrics, timestamp=ts.isoformat())
     except Exception as e:
@@ -734,6 +754,7 @@ async def get_cached_telemetry(
         return {"device_id": str(device_id), "metrics": {}, "cached": False}
 
     from app.services.digital_twin import DigitalTwinService
+
     twin = DigitalTwinService(redis_client)
     state = await twin.get_device_state(device_id)
 

@@ -21,6 +21,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}/settings", tags=["settings"])
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
+
 class IntegrationsConfig(BaseModel):
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None
@@ -49,9 +50,14 @@ class TenantProfileUpdate(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+
 def _build_profile(tenant: Tenant) -> TenantProfileResponse:
     """Merge tenant row + metadata JSONB into profile response."""
-    meta: Dict[str, Any] = tenant.tenant_metadata if hasattr(tenant, "tenant_metadata") and tenant.tenant_metadata else {}
+    meta: Dict[str, Any] = (
+        tenant.tenant_metadata
+        if hasattr(tenant, "tenant_metadata") and tenant.tenant_metadata
+        else {}
+    )
     integ_raw = meta.get("integrations", {})
     return TenantProfileResponse(
         id=str(tenant.id),
@@ -66,6 +72,7 @@ def _build_profile(tenant: Tenant) -> TenantProfileResponse:
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
 
 @router.get("/profile", response_model=TenantProfileResponse)
 async def get_profile(
@@ -106,7 +113,11 @@ async def update_profile(
         tenant.name = body.name
 
     # Merge metadata fields
-    meta: Dict[str, Any] = dict(tenant.tenant_metadata) if hasattr(tenant, "tenant_metadata") and tenant.tenant_metadata else {}
+    meta: Dict[str, Any] = (
+        dict(tenant.tenant_metadata)
+        if hasattr(tenant, "tenant_metadata") and tenant.tenant_metadata
+        else {}
+    )
 
     if body.contact_email is not None:
         meta["contact_email"] = body.contact_email
@@ -121,6 +132,7 @@ async def update_profile(
     tenant.tenant_metadata = meta
 
     from datetime import datetime
+
     tenant.updated_at = datetime.utcnow()
 
     await session.flush()

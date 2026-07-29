@@ -8,6 +8,7 @@ from typing import Optional, Literal
 
 class AlertRuleCreate(BaseModel):
     """Schema for creating an alert rule."""
+
     device_id: UUID
     metric: Literal["temperature", "humidity", "battery", "rssi", "pressure"]
     operator: Literal["gt", "gte", "lt", "lte", "eq", "neq"]
@@ -17,6 +18,7 @@ class AlertRuleCreate(BaseModel):
 
 class AlertRuleUpdate(BaseModel):
     """Schema for updating an alert rule."""
+
     operator: Optional[Literal["gt", "gte", "lt", "lte", "eq", "neq"]] = None
     threshold: Optional[float] = None
     cooldown_minutes: Optional[int] = Field(None, ge=1, le=1440)
@@ -25,6 +27,7 @@ class AlertRuleUpdate(BaseModel):
 
 class AlertRuleResponse(BaseModel):
     """Response schema for alert rule."""
+
     id: UUID
     device_id: UUID
     metric: str
@@ -58,6 +61,7 @@ class AlertRuleResponse(BaseModel):
 
 class AlertEventResponse(BaseModel):
     """Response schema for alert event."""
+
     id: UUID
     alert_rule_id: UUID
     device_id: UUID

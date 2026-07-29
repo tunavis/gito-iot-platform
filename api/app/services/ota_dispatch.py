@@ -79,11 +79,17 @@ class OTADispatchService:
 
         try:
             if protocol == "mqtt":
-                return await self._dispatch_mqtt(device, firmware_url, firmware_hash, firmware_version)
+                return await self._dispatch_mqtt(
+                    device, firmware_url, firmware_hash, firmware_version
+                )
             elif protocol == "lorawan":
-                return await self._dispatch_lorawan(device, firmware_url, firmware_hash, firmware_version)
+                return await self._dispatch_lorawan(
+                    device, firmware_url, firmware_hash, firmware_version
+                )
             elif protocol == "http":
-                return await self._dispatch_http(device, firmware_url, firmware_hash, firmware_version)
+                return await self._dispatch_http(
+                    device, firmware_url, firmware_hash, firmware_version
+                )
             else:
                 return False, f"Unsupported protocol: {protocol}"
         except Exception as e:
@@ -105,12 +111,14 @@ class OTADispatchService:
     ) -> tuple[bool, str]:
         redis = await aioredis.from_url(self._redis_url, decode_responses=True)
         try:
-            command = json.dumps({
-                "type": "ota",
-                "firmware_url": firmware_url,
-                "firmware_hash": firmware_hash,
-                "firmware_version": firmware_version,
-            })
+            command = json.dumps(
+                {
+                    "type": "ota",
+                    "firmware_url": firmware_url,
+                    "firmware_hash": firmware_hash,
+                    "firmware_version": firmware_version,
+                }
+            )
             # Publish via Redis/KeyDB pub-sub — the MQTT processor bridges this
             # to the MQTT broker on channel: {tenant_id}/devices/{device_id}/commands
             channel = f"{device.tenant_id}/devices/{device.id}/commands"
@@ -132,22 +140,22 @@ class OTADispatchService:
         firmware_version: str,
     ) -> tuple[bool, str]:
         attrs = device.attributes or {}
-        chirpstack_url = (
-            attrs.get("chirpstack_server")
-            or settings.CHIRPSTACK_API_URL
-        )
+        chirpstack_url = attrs.get("chirpstack_server") or settings.CHIRPSTACK_API_URL
         api_key = attrs.get("chirpstack_api_key") or settings.CHIRPSTACK_API_KEY
 
         if not chirpstack_url or not api_key:
             return False, "ChirpStack not configured for this device"
 
         import base64
-        payload_bytes = json.dumps({
-            "type": "ota",
-            "url": firmware_url,
-            "hash": firmware_hash,
-            "version": firmware_version,
-        }).encode()
+
+        payload_bytes = json.dumps(
+            {
+                "type": "ota",
+                "url": firmware_url,
+                "hash": firmware_hash,
+                "version": firmware_version,
+            }
+        ).encode()
         b64_payload = base64.b64encode(payload_bytes).decode()
 
         url = f"{chirpstack_url.rstrip('/')}/api/devices/{device.dev_eui}/queue"

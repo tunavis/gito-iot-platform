@@ -66,40 +66,62 @@ def _require_tenant_admin(tenant_id: UUID, info: dict) -> str:
 @public_router.get("")
 async def list_plans(session: Annotated[RLSSession, Depends(get_session)]):
     """Public catalogue: active public plans with their ZAR prices and feature matrix."""
-    plans = (await session.execute(text(
-        "SELECT id, code, name, description, trial_days, sort_order "
-        "FROM plans WHERE is_public = true AND is_active = true ORDER BY sort_order"
-    ))).mappings().all()
+    plans = (
+        (
+            await session.execute(
+                text(
+                    "SELECT id, code, name, description, trial_days, sort_order "
+                    "FROM plans WHERE is_public = true AND is_active = true ORDER BY sort_order"
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
 
     if not plans:
         return {"plans": []}
 
     plan_ids = [str(p["id"]) for p in plans]
 
-    prices = (await session.execute(
-        text(
-            "SELECT plan_id, currency, billing_interval, amount_cents "
-            "FROM plan_prices WHERE plan_id = ANY(:ids) AND is_active = true"
-        ),
-        {"ids": plan_ids},
-    )).mappings().all()
+    prices = (
+        (
+            await session.execute(
+                text(
+                    "SELECT plan_id, currency, billing_interval, amount_cents "
+                    "FROM plan_prices WHERE plan_id = ANY(:ids) AND is_active = true"
+                ),
+                {"ids": plan_ids},
+            )
+        )
+        .mappings()
+        .all()
+    )
 
-    features = (await session.execute(
-        text(
-            "SELECT pf.plan_id, pf.feature_key, pf.value, f.name, f.kind, f.unit "
-            "FROM plan_features pf JOIN features f ON f.key = pf.feature_key "
-            "WHERE pf.plan_id = ANY(:ids)"
-        ),
-        {"ids": plan_ids},
-    )).mappings().all()
+    features = (
+        (
+            await session.execute(
+                text(
+                    "SELECT pf.plan_id, pf.feature_key, pf.value, f.name, f.kind, f.unit "
+                    "FROM plan_features pf JOIN features f ON f.key = pf.feature_key "
+                    "WHERE pf.plan_id = ANY(:ids)"
+                ),
+                {"ids": plan_ids},
+            )
+        )
+        .mappings()
+        .all()
+    )
 
     prices_by_plan: dict[str, list] = {}
     for pr in prices:
-        prices_by_plan.setdefault(str(pr["plan_id"]), []).append({
-            "currency": pr["currency"],
-            "interval": pr["billing_interval"],
-            "amount_cents": pr["amount_cents"],
-        })
+        prices_by_plan.setdefault(str(pr["plan_id"]), []).append(
+            {
+                "currency": pr["currency"],
+                "interval": pr["billing_interval"],
+                "amount_cents": pr["amount_cents"],
+            }
+        )
 
     features_by_plan: dict[str, dict] = {}
     for f in features:
@@ -110,17 +132,19 @@ async def list_plans(session: Annotated[RLSSession, Depends(get_session)]):
             "unit": f["unit"],
         }
 
-    return {"plans": [
-        {
-            "code": p["code"],
-            "name": p["name"],
-            "description": p["description"],
-            "trial_days": p["trial_days"],
-            "prices": prices_by_plan.get(str(p["id"]), []),
-            "features": features_by_plan.get(str(p["id"]), {}),
-        }
-        for p in plans
-    ]}
+    return {
+        "plans": [
+            {
+                "code": p["code"],
+                "name": p["name"],
+                "description": p["description"],
+                "trial_days": p["trial_days"],
+                "prices": prices_by_plan.get(str(p["id"]), []),
+                "features": features_by_plan.get(str(p["id"]), {}),
+            }
+            for p in plans
+        ]
+    }
 
 
 def _require_own_tenant(tenant_id: UUID, current_tenant: UUID) -> None:
@@ -138,25 +162,37 @@ async def get_subscription(
     _require_own_tenant(tenant_id, current_tenant)
     await session.set_tenant_context(tenant_id)
 
-    row = (await session.execute(
-        text(
-            "SELECT s.status, s.provider, s.billing_interval, s.currency, "
-            "       s.trial_ends_at, s.current_period_start, s.current_period_end, "
-            "       s.grace_until, s.cancel_at_period_end, p.code AS plan_code, p.name AS plan_name "
-            "FROM subscriptions s JOIN plans p ON p.id = s.plan_id "
-            "WHERE s.tenant_id = :tid "
-            "  AND s.status = ANY(:statuses) "
-            "ORDER BY s.created_at DESC LIMIT 1"
-        ),
-        {"tid": str(tenant_id), "statuses": list(ent_service.LIVE_STATUSES)},
-    )).mappings().first()
+    row = (
+        (
+            await session.execute(
+                text(
+                    "SELECT s.status, s.provider, s.billing_interval, s.currency, "
+                    "       s.trial_ends_at, s.current_period_start, s.current_period_end, "
+                    "       s.grace_until, s.cancel_at_period_end, p.code AS plan_code, p.name AS plan_name "
+                    "FROM subscriptions s JOIN plans p ON p.id = s.plan_id "
+                    "WHERE s.tenant_id = :tid "
+                    "  AND s.status = ANY(:statuses) "
+                    "ORDER BY s.created_at DESC LIMIT 1"
+                ),
+                {"tid": str(tenant_id), "statuses": list(ent_service.LIVE_STATUSES)},
+            )
+        )
+        .mappings()
+        .first()
+    )
 
     if row is None:
         return {
-            "plan_code": "free", "plan_name": "Free", "status": "none",
-            "provider": None, "billing_interval": None, "currency": None,
-            "trial_ends_at": None, "current_period_start": None,
-            "current_period_end": None, "grace_until": None,
+            "plan_code": "free",
+            "plan_name": "Free",
+            "status": "none",
+            "provider": None,
+            "billing_interval": None,
+            "currency": None,
+            "trial_ends_at": None,
+            "current_period_start": None,
+            "current_period_end": None,
+            "grace_until": None,
             "cancel_at_period_end": False,
         }
     return dict(row)
@@ -196,13 +232,15 @@ async def get_usage(
             continue
         limit = ent.limit(feature_key)  # None = unlimited
         used = await usage_service.current(session, tenant_id, feature_key)
-        items.append({
-            "metric": feature_key,
-            "used": used,
-            "limit": limit,
-            "unlimited": limit is None,
-            "remaining": None if limit is None else max(0, limit - used),
-        })
+        items.append(
+            {
+                "metric": feature_key,
+                "used": used,
+                "limit": limit,
+                "unlimited": limit is None,
+                "remaining": None if limit is None else max(0, limit - used),
+            }
+        )
 
     items.sort(key=lambda i: i["metric"])
     return {"plan_code": ent.plan_code, "status": ent.status, "usage": items}
@@ -210,6 +248,7 @@ async def get_usage(
 
 # ── Subscription lifecycle (tenant-admin) ─────────────────────────────────────
 # All mutations route through app.services.subscriptions — the sole write path.
+
 
 @router.post("/subscription/trial")
 async def start_trial(
@@ -224,7 +263,11 @@ async def start_trial(
     await session.set_tenant_context(tenant_id)
     redis = getattr(request.app.state, "redis", None)
     return await sub_service.start_trial(
-        session, redis, tenant_id, plan_code=body.plan_code, actor=actor,
+        session,
+        redis,
+        tenant_id,
+        plan_code=body.plan_code,
+        actor=actor,
     )
 
 
@@ -240,7 +283,9 @@ async def change_plan(
     actor = _require_tenant_admin(tenant_id, info)
     await session.set_tenant_context(tenant_id)
     redis = getattr(request.app.state, "redis", None)
-    return await sub_service.change_plan(session, redis, tenant_id, plan_code=body.plan_code, actor=actor)
+    return await sub_service.change_plan(
+        session, redis, tenant_id, plan_code=body.plan_code, actor=actor
+    )
 
 
 @router.post("/subscription/cancel")
@@ -284,35 +329,47 @@ async def create_checkout(
     _require_tenant_admin(tenant_id, info)
     settings = get_settings()
     if not settings.card_enabled:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail="Card payments are not configured yet")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Card payments are not configured yet",
+        )
     await session.set_tenant_context(tenant_id)
 
-    subtotal = await billing_ops._plan_price_cents(session, body.plan_code, body.billing_interval, "ZAR")
+    subtotal = await billing_ops._plan_price_cents(
+        session, body.plan_code, body.billing_interval, "ZAR"
+    )
     if not subtotal:  # free plan or no price → no checkout needed
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="This plan has no card price (free, or contact sales)")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This plan has no card price (free, or contact sales)",
+        )
     _, total_cents = billing_ops._vat_split(subtotal)  # customer pays VAT-inclusive
 
     redis = getattr(request.app.state, "redis", None)
     ref = secrets.token_hex(6)  # 12 chars — safe across gateways' reference limits
-    await billing_ops.stash_checkout(redis, ref, tenant_id=tenant_id,
-                                     plan_code=body.plan_code, interval=body.billing_interval)
+    await billing_ops.stash_checkout(
+        redis, ref, tenant_id=tenant_id, plan_code=body.plan_code, interval=body.billing_interval
+    )
 
     base = str(request.base_url).rstrip("/")
     provider = get_provider(settings.CARD_PROVIDER)
     email = await billing_ops._tenant_billing_email(session, tenant_id)
     try:
         result = await provider.create_checkout(
-            amount_cents=total_cents, currency="ZAR", reference=ref, email=email,
+            amount_cents=total_cents,
+            currency="ZAR",
+            reference=ref,
+            email=email,
             return_url=f"{base}/dashboard/billing?checkout=done",
             notify_url=f"{base}/api/v1/billing/webhooks/{settings.CARD_PROVIDER}",
         )
     except ProviderError as e:
         # Gateway reached but rejected the request (e.g. invalid billing email) —
         # surface its reason, don't let it become an opaque 500.
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
-                            detail=f"Payment gateway rejected the request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Payment gateway rejected the request: {e}",
+        )
     return {"redirect_url": result.redirect_url, "reference": ref}
 
 
@@ -333,10 +390,13 @@ async def confirm_checkout(
     await session.set_tenant_context(tenant_id)
     settings = get_settings()
     redis = getattr(request.app.state, "redis", None)
-    return await billing_ops.confirm_checkout(session, redis, settings.CARD_PROVIDER, body.reference)
+    return await billing_ops.confirm_checkout(
+        session, redis, settings.CARD_PROVIDER, body.reference
+    )
 
 
 # ── Provider webhooks (public, signature-authenticated) ───────────────────────
+
 
 @webhook_router.post("/webhooks/{provider}")
 async def provider_webhook(
@@ -350,7 +410,9 @@ async def provider_webhook(
     raw = await request.body()
     redis = getattr(request.app.state, "redis", None)
     try:
-        result = await billing_ops.process_webhook(session, redis, provider, dict(request.headers), raw)
+        result = await billing_ops.process_webhook(
+            session, redis, provider, dict(request.headers), raw
+        )
     except ProviderNotSupported as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     if not result.get("ok"):
@@ -359,6 +421,7 @@ async def provider_webhook(
 
 
 # ── Admin/manual assignment (management tenant only) ──────────────────────────
+
 
 @admin_router.post("/subscription")
 async def admin_assign_plan(
@@ -372,11 +435,16 @@ async def admin_assign_plan(
     and only for tenants at or below them in the hierarchy."""
     mgmt_tenant_id, mgmt_user_id = mgmt
     if not await validate_tenant_access(session, mgmt_tenant_id, tenant_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant not managed by you")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Tenant not managed by you"
+        )
     await session.set_tenant_context(tenant_id)
     redis = getattr(request.app.state, "redis", None)
     return await sub_service.assign_plan(
-        session, redis, tenant_id,
-        plan_code=body.plan_code, billing_interval=body.billing_interval,
+        session,
+        redis,
+        tenant_id,
+        plan_code=body.plan_code,
+        billing_interval=body.billing_interval,
         actor=f"mgmt:{mgmt_user_id}",
     )
