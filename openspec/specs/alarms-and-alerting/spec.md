@@ -182,3 +182,175 @@ code path) — `verified` is honest but currently inert (nothing gates behavior
 on it; `PUT /channels/{id}` still lets a client set it directly either way).
 Building a real verification flow (send a confirmation link/OTP, require a
 callback) is unimplemented, tracked separately from this fix.
+
+### Requirement: An alert rule's trigger-to-action path is presented as one graph
+The system SHALL present each alert rule as a single navigable node graph showing
+the complete path from telemetry condition to delivered notification: condition
+node(s) → logic node → alarm node → notification channel node(s). A user SHALL be
+able to answer "what happens when this rule fires, and who is told" without
+leaving the alert-rules page.
+
+The graph SHALL be derived from data that already exists — the rule's
+`rule_type`, `conditions`, and `logic`, the tenant's `notification_rules` rows,
+and its `notification_channels`. **No graph structure is persisted, and the
+layout SHALL always be derivable without stored positions** (see the node-position
+requirement below).
+
+Rule values SHALL be read from the rule's API-format response representation.
+Because `rule_type`, `severity`, and `operator` exist in the database in both
+API and legacy formats, and the model's conversion hooks run only on Python-side
+assignment and not on load, the graph builder SHALL NOT compare raw column values.
+
+#### Scenario: A composite rule with three conditions
+- **WHEN** a user opens the canvas view for a COMPOSITE rule whose `conditions`
+  array has three entries and whose `logic` is `AND`
+- **THEN** three condition nodes are drawn, each labelled with its field,
+  operator, and threshold, all feeding one `AND` logic node, which feeds one
+  alarm node
+
+#### Scenario: A single-condition threshold rule
+- **WHEN** a user opens the canvas view for a THRESHOLD rule
+- **THEN** exactly one condition node is drawn and it connects directly to the
+  alarm node — no logic node is rendered, because a single-input AND gate carries
+  no information
+
+#### Scenario: A rule with no channels wired
+- **WHEN** a rule has no `notification_rules` rows
+- **THEN** every notification channel in the tenant is still rendered as a node,
+  visually distinguished as unwired, so the user can see what the rule could
+  notify and where to drop a connection
+
+### Requirement: Notification channels are wired to a rule by connecting nodes
+The system SHALL let a user link a notification channel to an alert rule by
+drawing an edge from that rule's alarm node to the channel node, and unlink it by
+deleting that edge. Both actions SHALL go through the existing notification-rule
+create and delete endpoints, so the canvas and the notification-rules list page
+cannot produce divergent state.
+
+Alarm-to-channel SHALL be the only connectable handle pair on the canvas. No
+other edge SHALL be creatable by the user — the canvas must not offer affordances
+that the underlying flat rule model cannot represent.
+
+#### Scenario: Wiring a channel by dragging
+- **WHEN** a user drags from the alarm node to an unwired channel node
+- **THEN** a notification rule linking that alert rule and channel is created via
+  the existing endpoint, and the edge is still present after a page reload
+
+#### Scenario: Attempting an unsupported connection
+- **WHEN** a user attempts to drag an edge between any other pair of nodes — for
+  example condition to condition, or channel back to alarm
+- **THEN** the connection is rejected and no request is made
+
+### Requirement: Nodes are draggable, and a dragged position survives a graph rebuild
+The system SHALL let a user reposition nodes on a canvas, and SHALL keep a
+hand-placed node where it was dropped when the graph is rebuilt from data.
+
+This matters because the canvases rebuild their graph on every data change, and
+the open editor and current selection are *part of that data* — so merely clicking
+a node rebuilds the graph. Only nodes the user actually moved SHALL be pinned:
+untouched nodes must keep following the computed layout, or adding a condition
+would leave the new node overlapping whatever previously occupied its slot.
+
+Dragged positions are session-only and SHALL NOT be required for rendering. The
+layout SHALL always be derivable from the rule alone, because rules are created by
+paths that have no access to canvas geometry — the REST API, seeds, solution
+templates, and (planned) the MCP server. A rule created by any of those SHALL
+render correctly with no stored position data.
+
+#### Scenario: Moving a node, then clicking another
+- **WHEN** a user drags the alarm node to a new position and then clicks a
+  condition node, rebuilding the graph
+- **THEN** the alarm node is still at the position it was dropped, and the
+  condition node's editor opens
+
+#### Scenario: A rule created outside the UI
+- **WHEN** a rule is created through the API with no canvas layout data
+- **THEN** its graph renders from the computed layout with every node positioned
+
+### Requirement: The alert-rule canvas is additive to the existing forms
+The system SHALL keep the existing list and form-based editing of alert rules
+reachable, with the list as the default view.
+
+Rule attributes that do not belong to a node — name, description, severity,
+cooldown — SHALL remain in the existing rule form and SHALL NOT be duplicated on
+the canvas; clicking the alarm node opens that form. Values that a node *does*
+draw are editable in place (see the next requirement).
+
+#### Scenario: Editing rule-level attributes from the canvas
+- **WHEN** a user clicks the alarm node
+- **THEN** the existing rule edit form opens for name, severity, description and
+  cooldown, rather than those fields being reimplemented on the canvas
+
+### Requirement: A rule's conditions and logic are editable on the canvas
+The system SHALL let a user edit an alert rule's stored trigger values from the
+canvas, at the node that draws them: a condition node's metric, operator,
+threshold, and weight, and the logic node's `AND`/`OR`. Each edit SHALL be
+written through the existing alert-rule update endpoint, so the canvas and the
+form pages cannot produce divergent rules.
+
+Edits SHALL be saved on an explicit action, not on every keystroke, and the
+canvas SHALL NOT hold its own copy of the rule — after a successful write it
+refetches, so what is drawn is always what is stored.
+
+#### Scenario: Changing a threshold from the canvas
+- **WHEN** a user clicks a condition node, changes the threshold, and saves
+- **THEN** the rule is updated through the existing endpoint and the node redraws
+  with the new value, which survives a page reload
+
+#### Scenario: Flipping a composite rule's logic
+- **WHEN** a user clicks the `AND` logic node of a COMPOSITE rule
+- **THEN** the rule's `logic` becomes `OR`, and the node redraws showing `OR`
+
+#### Scenario: Cancelling an edit
+- **WHEN** a user opens a condition node's editor, changes a value, and cancels
+- **THEN** no request is made and the node still shows the stored value
+
+### Requirement: Conditions can be added to and removed from a composite rule
+The system SHALL let a user append a condition to a COMPOSITE rule and remove an
+existing one from the canvas, writing the whole `conditions` array through the
+existing update endpoint.
+
+Removing the last remaining condition SHALL be refused — a COMPOSITE rule with
+no conditions can never fire, and the evaluation engine treats it as unevaluable.
+
+#### Scenario: Adding a third condition
+- **WHEN** a user adds a condition to a rule that has two
+- **THEN** the rule has three conditions, all three feed the logic node, and the
+  logic node reports three inputs
+
+#### Scenario: Removing the only condition
+- **WHEN** a user attempts to remove the last condition of a COMPOSITE rule
+- **THEN** the removal is refused and the rule is left unchanged
+
+### Requirement: A threshold rule converts to composite explicitly
+The system SHALL allow a THRESHOLD rule to be converted to a COMPOSITE rule when
+the user adds a second condition to it, and SHALL require explicit confirmation
+that names the consequence before doing so. The conversion SHALL NOT happen
+silently, because a rule's type is user-visible on the rules list.
+
+On conversion the system SHALL seed the first condition from the rule's stored
+metric, operator, and threshold, resolving the operator from whichever format it
+is stored in rather than trusting a client-supplied value. The rule's `device_id`
+SHALL be preserved, so the converted rule keeps exactly the device scope it had.
+
+The conversion and the resulting field updates SHALL be applied in a single
+update request, so no half-converted rule is ever persisted.
+
+The reverse conversion, COMPOSITE to THRESHOLD, SHALL NOT be offered — collapsing
+several conditions into one metric and threshold has no correct answer.
+
+#### Scenario: Adding a second condition to a threshold rule
+- **WHEN** a user adds a condition to a THRESHOLD rule and confirms the
+  conversion
+- **THEN** the rule becomes COMPOSITE with two conditions — the first seeded from
+  its previous metric, operator, and threshold — a logic node appears, and the
+  rule is still scoped to the same device
+
+#### Scenario: Declining the conversion
+- **WHEN** a user is asked to confirm converting a THRESHOLD rule and declines
+- **THEN** no request is made and the rule remains a THRESHOLD rule
+
+#### Scenario: A converted rule still fires
+- **WHEN** telemetry arrives for the device a converted rule is scoped to
+- **THEN** the rule is evaluated by the existing composite evaluation path, not
+  the threshold path, using its conditions and logic
