@@ -238,6 +238,10 @@ jobs:
         # always skips guards nothing.
         working-directory: ./api
         run: |
+          # The shared libs too: this job otherwise installs only the API, so any
+          # test importing alarm_core/payload_codec fails here even though it
+          # passes in the Backend Tests job. Mirrors that job's install.
+          pip install ./../shared/alarm_core ./../shared/payload_codec
           pip install -e ".[dev]"
           pytest tests/test_asset_tree.py tests/test_asset_registry_endpoints.py \
             -q --no-header --no-cov

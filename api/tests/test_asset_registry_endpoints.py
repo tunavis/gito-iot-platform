@@ -307,15 +307,36 @@ class TestExistingBehaviourUnmoved:
             "asset" in n for n in names
         ), "an asset column on alarms would mean alarms were re-keyed — that is Y2"
 
-    @pytest.mark.asyncio
-    async def test_alarm_evaluation_is_identical_for_attached_and_unattached(self, session):
-        """The evaluator has no notion of assets, so attachment cannot change a firing."""
+
+class TestAlarmEvaluationIgnoresAssets:
+    """Task 7.2, the evaluator half. Deliberately needs no database.
+
+    An earlier version of this seeded an attached and an unattached device and
+    evaluated against both — which required `alarm_core`, and so failed in the
+    only CI job that has a migrated database (that job installs the API but not
+    the shared libs). The attachment was incidental anyway: the point is that
+    `evaluate` has no channel through which an asset could reach it, and that is
+    provable from its signature. Asserting the absence of the surface is stronger
+    than asserting two identical calls return identical results.
+    """
+
+    def test_evaluate_exposes_no_asset_surface(self):
+        import inspect
+
         from alarm_core import Rule, evaluate
 
-        tenant_id, site_id = await _seed_tenant_site(session)
-        pump = await _add_asset(session, tenant_id, site_id, "pump")
-        attached = await _add_device(session, tenant_id, "attached", asset_id=pump)
-        loose = await _add_device(session, tenant_id, "loose", asset_id=None)
+        sig = str(inspect.signature(evaluate)).lower()
+        assert "asset" not in sig, f"evaluate() must not take an asset: {sig}"
+
+        rule_fields = set(getattr(Rule, "__dataclass_fields__", {}))
+        assert not any("asset" in f for f in rule_fields), (
+            "a Rule must not carry an asset — asset-scoped alarm evaluation is Y2, "
+            f"got {sorted(rule_fields)}"
+        )
+
+    def test_identical_input_fires_identically(self):
+        """Sanity floor: the rule used above genuinely fires, so absence proves something."""
+        from alarm_core import Rule, evaluate
 
         rule = Rule(
             id=str(uuid4()),
@@ -325,21 +346,10 @@ class TestExistingBehaviourUnmoved:
             threshold=50.0,
             severity="MAJOR",
         )
-        reading = {"temperature": 75.0}
         now = datetime.now(timezone.utc)
 
-        fired_attached = evaluate([rule], reading, now)
-        fired_loose = evaluate([rule], reading, now)
+        fired = evaluate([rule], {"temperature": 75.0}, now)
+        not_fired = evaluate([rule], {"temperature": 10.0}, now)
 
-        assert bool(fired_attached) == bool(fired_loose)
-        assert fired_attached, "the rule should fire for both, or the test proves nothing"
-        # And the devices really did differ in attachment.
-        rows = (
-            await session.execute(
-                text("SELECT id, asset_id FROM devices WHERE id IN (:a, :b)"),
-                {"a": str(attached), "b": str(loose)},
-            )
-        ).fetchall()
-        by_id = {str(r[0]): r[1] for r in rows}
-        assert by_id[str(attached)] is not None
-        assert by_id[str(loose)] is None
+        assert fired, "threshold breach must fire, or the no-asset assertion is vacuous"
+        assert not not_fired
