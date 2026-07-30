@@ -20,15 +20,15 @@
 - [x] 3.1 Pydantic schemas in `api/app/schemas/asset.py` — `site_id: UUID` with no default so omitting it fails at validation with `422`
 - [x] 3.2 New router `api/app/routers/assets.py` with list/get/create/update/delete, following the established pattern: tenant-mismatch `403`, `set_tenant_context`, explicit `WHERE tenant_id` (RLS is inert — do not rely on it)
 - [x] 3.3 Register the router in `api/app/main.py`
-- [ ] 3.4 Tests: tenant-mismatch `403` on every endpoint; cross-tenant asset absent from list; `422` when `site_id` omitted
+- [x] 3.4 Tests: tenant-mismatch `403` on every endpoint; cross-tenant asset absent from list; `422` when `site_id` omitted
 
 ## 4. Device attachment
 
 - [x] 4.1 Accept and return `asset_id` on device create/update/read in `api/app/routers/devices.py`; keep it a column, never written into `attributes`
 - [x] 4.2 Validate that a supplied `asset_id` belongs to the caller's tenant → `422` otherwise, with `asset_id` left unchanged
 - [x] 4.3 Allow clearing the attachment by setting `asset_id` to `null`
-- [ ] 4.4 Tests: attach, change, clear; cross-tenant `asset_id` rejected; a device update that changes only `asset_id` triggers no ChirpStack/TTN sync
-- [ ] 4.5 Test that a device with `asset_id IS NULL` behaves identically to before across read/update/list, and that creation omitting `asset_id` succeeds
+- [x] 4.4 Tests: attach, change, clear; cross-tenant `asset_id` rejected; a device update that changes only `asset_id` triggers no ChirpStack/TTN sync
+- [x] 4.5 Test that a device with `asset_id IS NULL` behaves identically to before across read/update/list, and that creation omitting `asset_id` succeeds
 
 ## 5. Deletion semantics
 
@@ -43,12 +43,12 @@
 - [x] 6.3 `GET /tenants/{id}/assets/tree` returning the tree with subtree-inclusive rollups
 - [x] 6.4 `GET /tenants/{id}/assets/{id}/devices` listing the devices attached to one asset
 - [x] 6.5 Test: parent with no own devices reports its child's device count
-- [ ] 6.6 Test: query count is independent of the number of assets returned (no N+1)
+- [x] 6.6 Test: query count is independent of the number of assets returned (no N+1)
 - [x] 6.7 Test: devices with `asset_id IS NULL` are in no rollup and no "Unassigned" node is synthesised
 
 ## 7. Verify nothing existing moved
 
-- [ ] 7.1 Test that `GET /tenants/{id}/hierarchy` response shape and query count are unchanged with assets present
-- [ ] 7.2 Test that an alarm fires identically for an attached and an unattached device, with the alarm record still keyed by `device_id`
+- [x] 7.1 Test that `GET /tenants/{id}/hierarchy` response shape and query count are unchanged with assets present
+- [x] 7.2 Test that an alarm fires identically for an attached and an unattached device, with the alarm record still keyed by `device_id`
 - [x] 7.3 Run the full API suite and confirm no pre-existing test changed behaviour
 - [x] 7.4 Run `black api/app` and `openspec validate add-asset-registry` before opening the PR
