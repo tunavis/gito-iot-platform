@@ -1,15 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  useEdgesState,
-  useNodesState,
-  type Connection,
-  type Edge,
-  type Node,
-  type NodeTypes,
-} from '@xyflow/react';
+import { useCallback, useMemo, useState } from 'react';
+import { type Connection, type Edge, type Node, type NodeTypes } from '@xyflow/react';
 import FlowCanvas from './FlowCanvas';
+import useGraphNodes from './useGraphNodes';
 import {
   AddConditionNode,
   AddRuleNode,
@@ -257,13 +251,10 @@ export default function RuleCanvas({
     removeCondition,
   ]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
-
-  useEffect(() => {
-    setNodes(graph.nodes);
-    setEdges(graph.edges);
-  }, [graph, setNodes, setEdges]);
+  // Keeps hand-dragged nodes put. The graph rebuilds whenever `editing`/`busy`
+  // changes — i.e. on every node click — so a plain reset here would undo a
+  // drag the moment the user touched anything.
+  const { nodes, edges, onNodesChange, onEdgesChange } = useGraphNodes(graph.nodes, graph.edges);
 
   const wiredChannelIds = useMemo(
     () =>
@@ -372,6 +363,7 @@ export default function RuleCanvas({
       onEdgesDelete={onEdgesDelete}
       isValidConnection={isValidConnection}
       nodesConnectable
+      nodesDraggable
     />
   );
 }

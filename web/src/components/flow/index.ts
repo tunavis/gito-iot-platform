@@ -21,6 +21,7 @@ export { default as HierarchyCanvas } from './HierarchyCanvas';
 export { default as RuleCanvas } from './RuleCanvas';
 export { default as HierarchyNode } from './nodes/HierarchyNode';
 
+export { default as useGraphNodes, applyPinned } from './useGraphNodes';
 export { layoutTree, COL_W, ROW_H } from './treeLayout';
 export { buildHierarchyGraph } from './hierarchyGraph';
 export {

@@ -41,6 +41,13 @@ export interface FlowCanvasProps {
   isValidConnection?: IsValidConnection;
   /** Off by default — an affordance that does nothing is worse than none. */
   nodesConnectable?: boolean;
+  /**
+   * Off by default for the same reason: React Flow is controlled here, so a
+   * caller that turns this on without also wiring `onNodesChange` gets nodes
+   * that follow the cursor and snap straight back. Use `useGraphNodes`, which
+   * wires it and keeps dragged positions across graph rebuilds.
+   */
+  nodesDraggable?: boolean;
 }
 
 export default function FlowCanvas({
@@ -55,6 +62,7 @@ export default function FlowCanvas({
   onEdgesDelete,
   isValidConnection,
   nodesConnectable = false,
+  nodesDraggable = false,
 }: FlowCanvasProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -72,10 +80,15 @@ export default function FlowCanvas({
         onConnect={onConnect}
         onEdgesDelete={onEdgesDelete}
         isValidConnection={isValidConnection}
-        nodesDraggable={false}
+        nodesDraggable={nodesDraggable}
         nodesConnectable={nodesConnectable}
         // Library default is Backspace only; Delete is what users reach for.
         deleteKeyCode={['Backspace', 'Delete']}
+        // Dragged nodes land on a grid instead of a pixel, so a hand-arranged
+        // graph still lines up. 16 divides both COL_W (260) and ROW_H (68)
+        // closely enough that snapping never visibly fights the auto-layout.
+        snapToGrid
+        snapGrid={[16, 16]}
         fitView
         fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
         minZoom={0.15}
