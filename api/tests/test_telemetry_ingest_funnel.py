@@ -50,8 +50,11 @@ class TestIngestTelemetryUsesStreamFunnel:
         session = _mock_session(device)
         request = _mock_request()
 
-        with patch("app.routers.telemetry.stream_ingest", new=AsyncMock()) as mock_stream_ingest, \
-             patch("app.services.digital_twin.DigitalTwinService") as mock_twin_cls:
+        with patch(
+            "app.routers.telemetry.stream_ingest", new=AsyncMock()
+        ) as mock_stream_ingest, patch(
+            "app.services.digital_twin.DigitalTwinService"
+        ) as mock_twin_cls:
             mock_twin_cls.return_value.update_device_state = AsyncMock()
 
             response = await ingest_telemetry(

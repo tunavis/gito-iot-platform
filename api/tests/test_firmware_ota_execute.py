@@ -49,12 +49,16 @@ class TestExecuteCampaignPersistsPerDeviceOutcome:
         session.set_tenant_context = AsyncMock()
         session.add = MagicMock()
         session.commit = AsyncMock()
-        session.execute = AsyncMock(side_effect=[
-            _result(first=campaign),                                   # campaign lookup
-            _result(all_=[ok_device_id, failing_device_id]),           # tenant-ownership guard on body.device_ids
-            _result(first=fw),                                          # firmware lookup
-            _result(all_=[ok_device, failing_device]),                 # devices list
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _result(first=campaign),  # campaign lookup
+                _result(
+                    all_=[ok_device_id, failing_device_id]
+                ),  # tenant-ownership guard on body.device_ids
+                _result(first=fw),  # firmware lookup
+                _result(all_=[ok_device, failing_device]),  # devices list
+            ]
+        )
 
         with patch(
             "app.routers.firmware.OTADispatchService.dispatch",
@@ -72,7 +76,8 @@ class TestExecuteCampaignPersistsPerDeviceOutcome:
         assert result["failed"] == 1
 
         added_campaign_devices = [
-            call.args[0] for call in session.add.call_args_list
+            call.args[0]
+            for call in session.add.call_args_list
             if call.args[0].__class__.__name__ == "OTACampaignDevice"
         ]
         by_device_id = {cd.device_id: cd for cd in added_campaign_devices}

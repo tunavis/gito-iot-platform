@@ -33,6 +33,7 @@ class DeviceCreate(BaseModel):
     organization_id: Optional[UUID] = Field(None, description="Organization ID")
     site_id: Optional[UUID] = Field(None, description="Site ID")
     device_group_id: Optional[UUID] = Field(None, description="Device group ID")
+    asset_id: Optional[UUID] = Field(None, description="Asset this device instruments")
     # LoRaWAN fields
     dev_eui: Optional[str] = Field(
         None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
@@ -60,6 +61,7 @@ class DeviceUpdate(BaseModel):
     organization_id: Optional[UUID] = Field(None, description="Organization ID")
     site_id: Optional[UUID] = Field(None, description="Site ID")
     device_group_id: Optional[UUID] = Field(None, description="Device group ID")
+    asset_id: Optional[UUID] = Field(None, description="Asset this device instruments")
     # LoRaWAN fields
     dev_eui: Optional[str] = Field(
         None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
@@ -88,6 +90,7 @@ class DeviceResponse(BaseModel):
     organization_id: Optional[UUID] = None
     site_id: Optional[UUID] = None
     device_group_id: Optional[UUID] = None
+    asset_id: Optional[UUID] = None
     # LoRaWAN fields (use actual DB column names)
     dev_eui: Optional[str] = None
     ttn_app_id: Optional[str] = None

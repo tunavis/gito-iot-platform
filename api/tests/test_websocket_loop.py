@@ -12,6 +12,7 @@ def _make_pubsub(messages):
     Each item in messages is a dict like {"data": json.dumps({...})} or None.
     """
     call_count = 0
+
     async def get_message(ignore_subscribe_messages=True):
         nonlocal call_count
         if call_count < len(messages):
@@ -19,6 +20,7 @@ def _make_pubsub(messages):
             call_count += 1
             return msg
         return None
+
     mock = MagicMock()
     mock.get_message = get_message
     return mock
@@ -118,7 +120,12 @@ async def test_redis_to_ws_yields_when_idle():
 @pytest.mark.asyncio
 async def test_redis_to_ws_forwards_alert_message():
     """redis_to_ws sends an alert message to the WebSocket when pub/sub delivers one."""
-    alert_data = {"alert_rule_id": "xyz", "device_id": "abc", "metric": "temperature", "value": 35.2}
+    alert_data = {
+        "alert_rule_id": "xyz",
+        "device_id": "abc",
+        "metric": "temperature",
+        "value": 35.2,
+    }
     telemetry_pubsub = _make_pubsub([])
     alerts_pubsub = _make_pubsub([{"data": json.dumps(alert_data)}])
 

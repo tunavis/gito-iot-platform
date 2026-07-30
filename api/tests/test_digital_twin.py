@@ -15,6 +15,7 @@ DEVICE_ID_STR = str(DEVICE_ID)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _b(s: str) -> bytes:
     return s.encode()
 
@@ -30,6 +31,7 @@ def _make_redis(hgetall_return=None):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_update_device_state():

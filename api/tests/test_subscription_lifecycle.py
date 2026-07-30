@@ -21,12 +21,16 @@ from app.services.subscriptions import SubscriptionError
 
 class _R:
     """A fake result: configure what mappings().first() / first() / scalar_one() return."""
+
     def __init__(self, mapping=None, first=None, scalar=None):
         self._mapping, self._first, self._scalar = mapping, first, scalar
+
     def mappings(self):
         return self
+
     def first(self):
         return self._mapping if self._mapping is not None else self._first
+
     def scalar_one(self):
         return self._scalar
 
@@ -35,8 +39,10 @@ class _FakeSession:
     def __init__(self, *results):
         self._q = list(results)
         self.commits = 0
+
     async def execute(self, sql, params=None):
         return self._q.pop(0) if self._q else _R()
+
     async def commit(self):
         self.commits += 1
 
@@ -76,7 +82,9 @@ class TestChangePlanGuards:
         same = uuid4()
         live = {"id": uuid4(), "plan_id": same, "status": "active", "cancel_at_period_end": False}
         # _live_subscription → live; _plan → same id
-        session = _FakeSession(_R(mapping=live), _R(mapping={"id": same, "code": "professional", "trial_days": 0}))
+        session = _FakeSession(
+            _R(mapping=live), _R(mapping={"id": same, "code": "professional", "trial_days": 0})
+        )
         with pytest.raises(SubscriptionError) as e:
             await subs.change_plan(session, None, uuid4(), plan_code="professional", actor="t")
         assert "Already on that plan" in e.value.detail
@@ -113,24 +121,29 @@ class TestCancelResumeGuards:
 class _SweepResult:
     def __init__(self, rows):
         self._rows = rows
+
     def mappings(self):
         return self
+
     def all(self):
         return self._rows
 
 
 class _SweepSession:
     """Returns a queued rowset for each SELECT; empties for UPDATE/INSERT."""
+
     def __init__(self, sweep1=(), sweep2=(), sweep3=()):
         self._sweeps = [list(sweep1), list(sweep2), list(sweep3)]
         self.sql = []
         self.commits = 0
+
     async def execute(self, sql, params=None):
         s = str(sql)
         self.sql.append(s)
         if s.strip().upper().startswith("SELECT"):
             return _SweepResult(self._sweeps.pop(0) if self._sweeps else [])
         return _SweepResult([])
+
     async def commit(self):
         self.commits += 1
 
@@ -164,6 +177,8 @@ class TestLifecycleTransitions:
     async def test_no_op_when_nothing_due(self):
         s = _SweepSession()
         result = await subs.run_lifecycle_transitions(s)
-        assert result["trial_expired"] == 0 and result["restricted"] == 0 and result["canceled"] == 0
+        assert (
+            result["trial_expired"] == 0 and result["restricted"] == 0 and result["canceled"] == 0
+        )
         assert result["affected_tenants"] == []
         assert s.commits == 1  # still commits (harmless no-op)

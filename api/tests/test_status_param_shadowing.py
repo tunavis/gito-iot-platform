@@ -31,11 +31,17 @@ class TestDeniedTenantAccessReturnsClean403:
 
     @pytest.mark.asyncio
     async def test_list_organizations(self):
-        with patch("app.routers.organizations.validate_tenant_access", new=AsyncMock(return_value=False)):
+        with patch(
+            "app.routers.organizations.validate_tenant_access", new=AsyncMock(return_value=False)
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await list_organizations(
-                    tenant_id=uuid4(), session=AsyncMock(), current_tenant=uuid4(),
-                    page=1, per_page=50, org_status="active",
+                    tenant_id=uuid4(),
+                    session=AsyncMock(),
+                    current_tenant=uuid4(),
+                    page=1,
+                    per_page=50,
+                    org_status="active",
                 )
         assert exc_info.value.status_code == 403
 
@@ -44,8 +50,12 @@ class TestDeniedTenantAccessReturnsClean403:
         with patch("app.routers.alarms.validate_tenant_access", new=AsyncMock(return_value=False)):
             with pytest.raises(HTTPException) as exc_info:
                 await get_alarm_summary(
-                    tenant_id=uuid4(), session=AsyncMock(), current_tenant=uuid4(),
-                    alarm_status="active", severity=None, device_id=None,
+                    tenant_id=uuid4(),
+                    session=AsyncMock(),
+                    current_tenant=uuid4(),
+                    alarm_status="active",
+                    severity=None,
+                    device_id=None,
                 )
         assert exc_info.value.status_code == 403
 
@@ -54,9 +64,15 @@ class TestDeniedTenantAccessReturnsClean403:
         with patch("app.routers.alarms.validate_tenant_access", new=AsyncMock(return_value=False)):
             with pytest.raises(HTTPException) as exc_info:
                 await list_alarms(
-                    tenant_id=uuid4(), session=AsyncMock(), current_tenant=uuid4(),
-                    page=1, page_size=50, alarm_status="active",
-                    severity=None, device_id=None, alarm_type=None,
+                    tenant_id=uuid4(),
+                    session=AsyncMock(),
+                    current_tenant=uuid4(),
+                    page=1,
+                    page_size=50,
+                    alarm_status="active",
+                    severity=None,
+                    device_id=None,
+                    alarm_type=None,
                 )
         assert exc_info.value.status_code == 403
 
@@ -65,7 +81,13 @@ class TestDeniedTenantAccessReturnsClean403:
         with patch("app.routers.users.validate_tenant_access", new=AsyncMock(return_value=False)):
             with pytest.raises(HTTPException) as exc_info:
                 await list_users(
-                    tenant_id=uuid4(), session=AsyncMock(), current_tenant=uuid4(),
-                    page=1, per_page=50, role=None, user_status="active", search=None,
+                    tenant_id=uuid4(),
+                    session=AsyncMock(),
+                    current_tenant=uuid4(),
+                    page=1,
+                    per_page=50,
+                    role=None,
+                    user_status="active",
+                    search=None,
                 )
         assert exc_info.value.status_code == 403

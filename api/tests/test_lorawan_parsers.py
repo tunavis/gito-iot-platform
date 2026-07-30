@@ -2,11 +2,17 @@
 
 import pytest
 from app.services.lorawan_parsers import (
-    parse_chirpstack, parse_ttn, parse_helium, parse_actility, parse_custom,
-    get_parser, PROVIDERS,
+    parse_chirpstack,
+    parse_ttn,
+    parse_helium,
+    parse_actility,
+    parse_custom,
+    get_parser,
+    PROVIDERS,
 )
 
 # --- ChirpStack ---
+
 
 def test_parse_chirpstack_happy_path():
     body = {
@@ -75,6 +81,7 @@ def test_parse_chirpstack_dev_eui_lowercased():
 
 # --- TTN ---
 
+
 def test_parse_ttn_happy_path():
     body = {
         "end_device_ids": {"dev_eui": "AABB112233445566"},
@@ -82,11 +89,13 @@ def test_parse_ttn_happy_path():
         "uplink_message": {
             "f_cnt": 10,
             "decoded_payload": {"level": 85.0},
-            "rx_metadata": [{
-                "rssi": -95,
-                "snr": 6.0,
-                "gateway_ids": {"gateway_id": "my-gateway"},
-            }],
+            "rx_metadata": [
+                {
+                    "rssi": -95,
+                    "snr": 6.0,
+                    "gateway_ids": {"gateway_id": "my-gateway"},
+                }
+            ],
             "settings": {
                 "frequency": "868100000",
                 "data_rate": {"lora": {"spreading_factor": 9}},
@@ -114,13 +123,22 @@ def test_parse_ttn_no_decoded_payload_returns_none():
 
 # --- Helium ---
 
+
 def test_parse_helium_happy_path():
     body = {
         "dev_eui": "CCDD556677889900",
         "id": "helium-dedup-001",
         "fcnt": 7,
         "decoded": {"payload": {"flow_rate": 12.3}},
-        "hotspots": [{"rssi": -100, "snr": 4.0, "name": "hot-spot-1", "frequency": 868.1, "spreading_factor": 10}],
+        "hotspots": [
+            {
+                "rssi": -100,
+                "snr": 4.0,
+                "name": "hot-spot-1",
+                "frequency": 868.1,
+                "spreading_factor": 10,
+            }
+        ],
         "payload": "base64abc",
     }
     result = parse_helium(body)
@@ -138,6 +156,7 @@ def test_parse_helium_no_decoded_returns_none():
 
 
 # --- Actility ---
+
 
 def test_parse_actility_happy_path():
     body = {
@@ -165,6 +184,7 @@ def test_parse_actility_no_decoded_returns_none():
 
 # --- Custom ---
 
+
 def test_parse_custom_happy_path():
     body = {
         "dev_eui": "1122334455667788",
@@ -189,6 +209,7 @@ def test_parse_custom_missing_metrics_returns_none():
 
 
 # --- Registry ---
+
 
 def test_get_parser_returns_correct_function():
     assert get_parser("chirpstack") is parse_chirpstack

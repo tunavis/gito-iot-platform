@@ -15,6 +15,7 @@ from app.models.base import (
 )
 from app.models.organization import Organization
 from app.models.site import Site
+from app.models.asset import Asset, MAX_ASSET_DEPTH
 from app.models.device_group import DeviceGroup, GroupDevice, BulkOperation
 from app.models.notification import (
     NotificationChannel,
@@ -51,6 +52,8 @@ __all__ = [
     "AuditLog",
     "Organization",
     "Site",
+    "Asset",
+    "MAX_ASSET_DEPTH",
     "DeviceGroup",
     "GroupDevice",
     "BulkOperation",

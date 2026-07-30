@@ -44,6 +44,7 @@ def _make_device(tenant_id, device_id, org_id):
     device.organization_id = org_id
     device.site_id = None
     device.device_group_id = None
+    device.asset_id = None
     device.dev_eui = None
     device.ttn_app_id = None
     device.device_profile_id = None
@@ -100,3 +101,46 @@ class TestUpdateDeviceHierarchyClear:
 
         assert device.organization_id == original_org
         assert device.name == "Renamed Device"
+
+    @pytest.mark.asyncio
+    async def test_explicit_null_clears_asset(self):
+        """Detaching a device from an asset goes through the same path.
+
+        An asset attachment must be clearable for the same reason org/site/group
+        are: sending `asset_id: null` is the only way to detach, and silently
+        ignoring it would leave the device attached while reporting success.
+        """
+        tenant_id = uuid4()
+        device_id = uuid4()
+        device = _make_device(tenant_id, device_id, org_id=uuid4())
+        device.asset_id = uuid4()
+        session = _make_session(device)
+
+        await update_device(
+            tenant_id=tenant_id,
+            device_id=device_id,
+            device_data=DeviceUpdate(asset_id=None),
+            session=session,
+            current_tenant=tenant_id,
+        )
+
+        assert device.asset_id is None
+
+    @pytest.mark.asyncio
+    async def test_omitted_asset_id_leaves_attachment_untouched(self):
+        tenant_id = uuid4()
+        device_id = uuid4()
+        original_asset = uuid4()
+        device = _make_device(tenant_id, device_id, org_id=uuid4())
+        device.asset_id = original_asset
+        session = _make_session(device)
+
+        await update_device(
+            tenant_id=tenant_id,
+            device_id=device_id,
+            device_data=DeviceUpdate(name="Renamed Device"),
+            session=session,
+            current_tenant=tenant_id,
+        )
+
+        assert device.asset_id == original_asset

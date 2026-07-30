@@ -24,18 +24,24 @@ DEVICE_ID = "dddddddd-0000-0000-0000-000000000002"
 class TestParseAuditTarget:
     def test_resource_with_id(self):
         assert _parse_audit_target(f"/api/v1/tenants/{TENANT_ID}/devices/{DEVICE_ID}") == (
-            TENANT_ID, "devices", DEVICE_ID,
+            TENANT_ID,
+            "devices",
+            DEVICE_ID,
         )
 
     def test_resource_without_id(self):
         assert _parse_audit_target(f"/api/v1/tenants/{TENANT_ID}/devices") == (
-            TENANT_ID, "devices", None,
+            TENANT_ID,
+            "devices",
+            None,
         )
 
     def test_multi_segment_resource_path(self):
         # Trailing segment "execute" isn't a UUID, so it stays part of
         # resource_type (verbose, but not wrong) and there's no resource_id.
-        result = _parse_audit_target(f"/api/v1/tenants/{TENANT_ID}/ota/campaigns/{DEVICE_ID}/execute")
+        result = _parse_audit_target(
+            f"/api/v1/tenants/{TENANT_ID}/ota/campaigns/{DEVICE_ID}/execute"
+        )
         assert result == (TENANT_ID, f"ota/campaigns/{DEVICE_ID}/execute", None)
 
     def test_non_tenant_path_returns_none(self):
@@ -66,8 +72,9 @@ class TestAuditLogMiddleware:
         session_ctx.__aenter__ = AsyncMock(return_value=session)
         session_ctx.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.middleware._SessionLocal", return_value=session_ctx), \
-             patch("app.middleware.decode_token", return_value={"sub": str(uuid4())}):
+        with patch("app.middleware._SessionLocal", return_value=session_ctx), patch(
+            "app.middleware.decode_token", return_value={"sub": str(uuid4())}
+        ):
             result = await audit_log_middleware(request, call_next)
 
         assert result is response

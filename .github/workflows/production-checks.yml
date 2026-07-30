@@ -230,6 +230,22 @@ jobs:
           JWT_SECRET_KEY: ci-test-secret-key-not-for-production-use-x
           MQTT_PASSWORD: ci-test-mqtt-password
 
+      - name: Tests that need a real database
+        # These assert SQL semantics a mock session cannot express — recursive
+        # subtree rollups, ON DELETE CASCADE/SET NULL, cycle rejection. They live
+        # here rather than in the Backend Tests job because this is the only job
+        # with a migrated database; there they would silently skip, and a test that
+        # always skips guards nothing.
+        working-directory: ./api
+        run: |
+          pip install -e ".[dev]"
+          pytest tests/test_asset_tree.py -q --no-header --no-cov
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://gito:gito_ci_test_password@localhost:5432/gito_ci_test
+          DATABASE_URL: postgresql+asyncpg://gito:gito_ci_test_password@localhost:5432/gito_ci_test
+          JWT_SECRET_KEY: ci-test-secret-key-not-for-production-use-x
+          MQTT_PASSWORD: ci-test-mqtt-password
+
   deployment-ready:
     name: ✅ Deployment Ready
     runs-on: ubuntu-latest

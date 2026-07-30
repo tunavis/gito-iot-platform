@@ -21,6 +21,7 @@ from app.services.entitlements import Entitlements, resolve, invalidate, CACHE_P
 
 # ── Pure decision logic ──────────────────────────────────────────────────────
 
+
 class TestEntitlementDecisions:
     def _ent(self, **features):
         return Entitlements(tenant_id="t1", plan_code="starter", status="active", features=features)
@@ -45,8 +46,8 @@ class TestEntitlementDecisions:
 
     def test_within_limit_boundary(self):
         ent = self._ent(**{"devices.max": 5})
-        assert ent.within_limit("devices.max", 4) is True    # room for one more
-        assert ent.within_limit("devices.max", 5) is False   # at cap → blocked
+        assert ent.within_limit("devices.max", 4) is True  # room for one more
+        assert ent.within_limit("devices.max", 5) is False  # at cap → blocked
         assert ent.within_limit("devices.max", 6) is False
 
     def test_within_limit_unlimited_always_true(self):
@@ -68,6 +69,7 @@ class TestEntitlementDecisions:
 
 # ── Fakes for resolve() ───────────────────────────────────────────────────────
 
+
 class _FakeResult:
     def __init__(self, rows):
         self._rows = rows
@@ -81,6 +83,7 @@ class _FakeResult:
 
 class _FakeSession:
     """Returns queued result sets in call order."""
+
     def __init__(self, *result_sets):
         self._queue = list(result_sets)
         self.calls = 0
@@ -93,26 +96,42 @@ class _FakeSession:
 class _FakeRedis:
     def __init__(self):
         self.store = {}
+
     async def get(self, k):
         return self.store.get(k)
+
     async def set(self, k, v, ex=None):
         self.store[k] = v
+
     async def delete(self, k):
         self.store.pop(k, None)
 
 
 # ── resolve() behaviour ───────────────────────────────────────────────────────
 
+
 class TestResolve:
     @pytest.mark.asyncio
     async def test_live_subscription_resolves_plan_features(self):
         rows = [
-            {"plan_code": "professional", "status": "active", "trial_ends_at": None,
-             "current_period_end": None, "grace_until": None,
-             "feature_key": "devices.max", "value": 500},
-            {"plan_code": "professional", "status": "active", "trial_ends_at": None,
-             "current_period_end": None, "grace_until": None,
-             "feature_key": "analytics.advanced", "value": True},
+            {
+                "plan_code": "professional",
+                "status": "active",
+                "trial_ends_at": None,
+                "current_period_end": None,
+                "grace_until": None,
+                "feature_key": "devices.max",
+                "value": 500,
+            },
+            {
+                "plan_code": "professional",
+                "status": "active",
+                "trial_ends_at": None,
+                "current_period_end": None,
+                "grace_until": None,
+                "feature_key": "analytics.advanced",
+                "value": True,
+            },
         ]
         session = _FakeSession(rows)
         ent = await resolve(session, "tenant-1", redis=None)
@@ -135,17 +154,26 @@ class TestResolve:
     @pytest.mark.asyncio
     async def test_double_encoded_json_value_is_coerced(self):
         # If a value ever comes back as a JSON string, it must be decoded.
-        rows = [{"plan_code": "free", "status": "active", "trial_ends_at": None,
-                 "current_period_end": None, "grace_until": None,
-                 "feature_key": "support.level", "value": '"community"'}]
+        rows = [
+            {
+                "plan_code": "free",
+                "status": "active",
+                "trial_ends_at": None,
+                "current_period_end": None,
+                "grace_until": None,
+                "feature_key": "support.level",
+                "value": '"community"',
+            }
+        ]
         ent = await resolve(_FakeSession(rows), "t", redis=None)
         assert ent.option("support.level") == "community"
 
     @pytest.mark.asyncio
     async def test_cache_hit_skips_db(self):
         redis = _FakeRedis()
-        ent = Entitlements(tenant_id="t9", plan_code="starter", status="active",
-                           features={"devices.max": 50})
+        ent = Entitlements(
+            tenant_id="t9", plan_code="starter", status="active", features={"devices.max": 50}
+        )
         redis.store[CACHE_PREFIX + "t9"] = json.dumps(ent.to_dict())
         session = _FakeSession()  # empty — must not be queried
         got = await resolve(session, "t9", redis=redis)
@@ -155,9 +183,17 @@ class TestResolve:
     @pytest.mark.asyncio
     async def test_cache_miss_populates_cache(self):
         redis = _FakeRedis()
-        rows = [{"plan_code": "starter", "status": "active", "trial_ends_at": None,
-                 "current_period_end": None, "grace_until": None,
-                 "feature_key": "devices.max", "value": 50}]
+        rows = [
+            {
+                "plan_code": "starter",
+                "status": "active",
+                "trial_ends_at": None,
+                "current_period_end": None,
+                "grace_until": None,
+                "feature_key": "devices.max",
+                "value": 50,
+            }
+        ]
         await resolve(_FakeSession(rows), "t5", redis=redis)
         assert CACHE_PREFIX + "t5" in redis.store  # written back
 
@@ -170,8 +206,16 @@ class TestResolve:
 
     @pytest.mark.asyncio
     async def test_redis_none_degrades_to_db(self):
-        rows = [{"plan_code": "free", "status": "active", "trial_ends_at": None,
-                 "current_period_end": None, "grace_until": None,
-                 "feature_key": "devices.max", "value": 5}]
+        rows = [
+            {
+                "plan_code": "free",
+                "status": "active",
+                "trial_ends_at": None,
+                "current_period_end": None,
+                "grace_until": None,
+                "feature_key": "devices.max",
+                "value": 5,
+            }
+        ]
         ent = await resolve(_FakeSession(rows), "t", redis=None)
         assert ent.limit("devices.max") == 5

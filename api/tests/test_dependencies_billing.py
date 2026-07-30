@@ -45,7 +45,9 @@ def tid():
 class TestEnforceLimit:
     @pytest.mark.asyncio
     async def test_blocks_at_limit_with_402(self, monkeypatch, tid):
-        monkeypatch.setattr(dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"devices.max": 5})))
+        monkeypatch.setattr(
+            dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"devices.max": 5}))
+        )
         monkeypatch.setattr(dep_mod.usage_service, "current", AsyncMock(return_value=5))  # at cap
         dep = enforce_limit("devices.max")
         with pytest.raises(HTTPException) as exc:
@@ -56,18 +58,30 @@ class TestEnforceLimit:
 
     @pytest.mark.asyncio
     async def test_allows_below_limit(self, monkeypatch, tid):
-        monkeypatch.setattr(dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"devices.max": 5})))
-        monkeypatch.setattr(dep_mod.usage_service, "current", AsyncMock(return_value=4))  # room for one
+        monkeypatch.setattr(
+            dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"devices.max": 5}))
+        )
+        monkeypatch.setattr(
+            dep_mod.usage_service, "current", AsyncMock(return_value=4)
+        )  # room for one
         dep = enforce_limit("devices.max")
-        assert await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid) is None
+        assert (
+            await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid)
+            is None
+        )
 
     @pytest.mark.asyncio
     async def test_unlimited_passes_without_counting(self, monkeypatch, tid):
-        monkeypatch.setattr(dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"devices.max": None})))
+        monkeypatch.setattr(
+            dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"devices.max": None}))
+        )
         counted = AsyncMock(return_value=10_000)
         monkeypatch.setattr(dep_mod.usage_service, "current", counted)
         dep = enforce_limit("devices.max")
-        assert await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid) is None
+        assert (
+            await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid)
+            is None
+        )
         counted.assert_not_awaited()  # unlimited short-circuits before counting
 
     @pytest.mark.asyncio
@@ -81,7 +95,9 @@ class TestEnforceLimit:
 class TestRequireFeature:
     @pytest.mark.asyncio
     async def test_blocks_when_feature_off_403(self, monkeypatch, tid):
-        monkeypatch.setattr(dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"ai.enabled": False})))
+        monkeypatch.setattr(
+            dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"ai.enabled": False}))
+        )
         dep = require_feature("ai.enabled")
         with pytest.raises(HTTPException) as exc:
             await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid)
@@ -90,6 +106,11 @@ class TestRequireFeature:
 
     @pytest.mark.asyncio
     async def test_allows_when_feature_on(self, monkeypatch, tid):
-        monkeypatch.setattr(dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"ai.enabled": True})))
+        monkeypatch.setattr(
+            dep_mod.ent_service, "resolve", AsyncMock(return_value=_ent(**{"ai.enabled": True}))
+        )
         dep = require_feature("ai.enabled")
-        assert await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid) is None
+        assert (
+            await dep(tenant_id=tid, request=_request(), session=_session(), current_tenant=tid)
+            is None
+        )

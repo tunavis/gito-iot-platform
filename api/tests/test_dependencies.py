@@ -35,6 +35,7 @@ MANAGEMENT_PAYLOAD = {
 # get_current_tenant
 # ---------------------------------------------------------------------------
 
+
 class TestGetCurrentTenant:
     @pytest.mark.asyncio
     async def test_valid_token_returns_tenant_uuid(self):
@@ -66,6 +67,7 @@ class TestGetCurrentTenant:
 # ---------------------------------------------------------------------------
 # get_current_user
 # ---------------------------------------------------------------------------
+
 
 class TestGetCurrentUser:
     @pytest.mark.asyncio
@@ -107,6 +109,7 @@ class TestGetCurrentUser:
 # get_current_user_id
 # ---------------------------------------------------------------------------
 
+
 class TestGetCurrentUserId:
     @pytest.mark.asyncio
     async def test_valid_token_returns_user_uuid(self):
@@ -138,6 +141,7 @@ class TestGetCurrentUserId:
 # ---------------------------------------------------------------------------
 # get_current_user_info
 # ---------------------------------------------------------------------------
+
 
 class TestGetCurrentUserInfo:
     @pytest.mark.asyncio
@@ -180,6 +184,7 @@ class TestGetCurrentUserInfo:
 # ---------------------------------------------------------------------------
 # get_management_tenant
 # ---------------------------------------------------------------------------
+
 
 class TestGetManagementTenant:
     @pytest.mark.asyncio

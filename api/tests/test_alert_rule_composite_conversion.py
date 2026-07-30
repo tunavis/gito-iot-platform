@@ -87,24 +87,35 @@ class TestThresholdToComposite:
         assert rule.logic == "AND"
         assert len(rule.conditions) == 2, "converted rule must never be persisted condition-less"
         assert rule.conditions[0] == {
-            "field": "flow_rate", "operator": "gt", "threshold": 80.0, "weight": 1,
+            "field": "flow_rate",
+            "operator": "gt",
+            "threshold": 80.0,
+            "weight": 1,
         }
         assert rule.conditions[1]["field"] == "battery"
 
     @pytest.mark.asyncio
     async def test_resolves_a_db_format_operator_rather_than_storing_it_raw(self):
         rule = _make_rule(operator=">=")
-        await _put(rule, rule_type="COMPOSITE",
-                   conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}])
+        await _put(
+            rule,
+            rule_type="COMPOSITE",
+            conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}],
+        )
 
-        assert rule.conditions[0]["operator"] == "gte", "DB-format operator must map back to API format"
+        assert (
+            rule.conditions[0]["operator"] == "gte"
+        ), "DB-format operator must map back to API format"
 
     @pytest.mark.asyncio
     async def test_preserves_device_scope(self):
         device_id = uuid4()
         rule = _make_rule(device_id=device_id)
-        await _put(rule, rule_type="COMPOSITE",
-                   conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}])
+        await _put(
+            rule,
+            rule_type="COMPOSITE",
+            conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}],
+        )
 
         assert rule.device_id == device_id, "conversion must not widen a device rule to the tenant"
 
@@ -112,8 +123,11 @@ class TestThresholdToComposite:
     async def test_converts_a_legacy_threshold_row(self):
         # Some rows store the API-format string directly rather than 'SIMPLE'.
         rule = _make_rule(rule_type="THRESHOLD")
-        await _put(rule, rule_type="COMPOSITE",
-                   conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}])
+        await _put(
+            rule,
+            rule_type="COMPOSITE",
+            conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}],
+        )
 
         assert rule.rule_type == "COMPOSITE"
         assert len(rule.conditions) == 2
@@ -121,8 +135,11 @@ class TestThresholdToComposite:
     @pytest.mark.asyncio
     async def test_defaults_logic_when_not_supplied(self):
         rule = _make_rule()
-        await _put(rule, rule_type="COMPOSITE",
-                   conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}])
+        await _put(
+            rule,
+            rule_type="COMPOSITE",
+            conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}],
+        )
 
         assert rule.logic == "AND"
 
@@ -130,8 +147,11 @@ class TestThresholdToComposite:
     async def test_rejects_conversion_when_there_is_no_metric_to_seed_from(self):
         rule = _make_rule(metric=None)
         with pytest.raises(HTTPException) as exc:
-            await _put(rule, rule_type="COMPOSITE",
-                       conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}])
+            await _put(
+                rule,
+                rule_type="COMPOSITE",
+                conditions=[{"field": "battery", "operator": "lt", "threshold": 20, "weight": 1}],
+            )
         assert exc.value.status_code == 400
 
 
@@ -171,8 +191,11 @@ class TestNoConversionRequested:
         rule = _make_rule(rule_type="COMPLEX")
         rule.conditions = [{"field": "a", "operator": "gt", "threshold": 1, "weight": 1}]
 
-        await _put(rule, rule_type="COMPOSITE",
-                   conditions=[{"field": "b", "operator": "lt", "threshold": 2, "weight": 1}])
+        await _put(
+            rule,
+            rule_type="COMPOSITE",
+            conditions=[{"field": "b", "operator": "lt", "threshold": 2, "weight": 1}],
+        )
 
         assert len(rule.conditions) == 1, "no seeding when the rule is already COMPOSITE"
         assert rule.conditions[0]["field"] == "b"
