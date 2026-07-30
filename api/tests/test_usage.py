@@ -14,6 +14,7 @@ from app.services import usage
 class _ScalarResult:
     def __init__(self, value):
         self._value = value
+
     def scalar(self):
         return self._value
 
@@ -22,6 +23,7 @@ class _FakeSession:
     def __init__(self, scalar_value=0):
         self._value = scalar_value
         self.executed = []
+
     async def execute(self, sql, params=None):
         self.executed.append((str(sql), params))
         return _ScalarResult(self._value)

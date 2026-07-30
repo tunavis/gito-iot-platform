@@ -134,10 +134,12 @@ async def _validate_device_fks(
     organization_id=None,
     site_id=None,
     device_group_id=None,
+    asset_id=None,
 ) -> None:
     """Reject any parent FK that doesn't belong to this tenant.
 
-    device_type_id/organization_id/site_id/device_group_id arrive from the client.
+    device_type_id/organization_id/site_id/device_group_id/asset_id arrive from the
+    client.
     Without this, a caller could attach their device to another tenant's device
     type or org — and since RLS is inert for the app's DB role, nothing else stops
     it. Only non-None values are checked (None = not set / being cleared).
@@ -148,6 +150,7 @@ async def _validate_device_fks(
         ("organizations", organization_id, "organization_id"),
         ("sites", site_id, "site_id"),
         ("device_groups", device_group_id, "device_group_id"),
+        ("assets", asset_id, "asset_id"),
     ):
         if value is None:
             continue
@@ -196,6 +199,7 @@ async def create_device(
         organization_id=device_data.organization_id,
         site_id=device_data.site_id,
         device_group_id=device_data.device_group_id,
+        asset_id=device_data.asset_id,
     )
 
     # dev_EUI is unique per tenant — return a clear 409 instead of a raw 500 IntegrityError
@@ -237,6 +241,7 @@ async def create_device(
         organization_id=device_data.organization_id,
         site_id=device_data.site_id,
         device_group_id=device_data.device_group_id,
+        asset_id=device_data.asset_id,
         dev_eui=device_data.dev_eui,
         ttn_app_id=device_data.ttn_app_id,
         device_profile_id=device_data.device_profile_id,
@@ -338,6 +343,7 @@ async def update_device(
         organization_id=device_data.organization_id,
         site_id=device_data.site_id,
         device_group_id=device_data.device_group_id,
+        asset_id=device_data.asset_id,
     )
 
     if device_data.name is not None:
@@ -355,13 +361,15 @@ async def update_device(
     # Hierarchy fields use model_fields_set (not "is not None") so an explicit
     # null actually clears the assignment instead of being silently ignored —
     # these are the only fields on this endpoint a client can legitimately
-    # want to unassign, since org/site/group are optional device attributes.
+    # want to unassign, since org/site/group/asset are optional device attributes.
     if "organization_id" in device_data.model_fields_set:
         device.organization_id = device_data.organization_id
     if "site_id" in device_data.model_fields_set:
         device.site_id = device_data.site_id
     if "device_group_id" in device_data.model_fields_set:
         device.device_group_id = device_data.device_group_id
+    if "asset_id" in device_data.model_fields_set:
+        device.asset_id = device_data.asset_id
     if device_data.dev_eui is not None:
         device.dev_eui = device_data.dev_eui
     if device_data.ttn_app_id is not None:

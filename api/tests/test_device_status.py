@@ -31,13 +31,18 @@ class TestIsEffectivelyOffline:
         assert is_effectively_offline("online", recent, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is False
 
     def test_stale_last_seen_is_offline(self):
-        stale = datetime.now(timezone.utc) - timedelta(seconds=DEFAULT_OFFLINE_THRESHOLD_SECONDS + 1)
+        stale = datetime.now(timezone.utc) - timedelta(
+            seconds=DEFAULT_OFFLINE_THRESHOLD_SECONDS + 1
+        )
         assert is_effectively_offline("online", stale, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is True
 
     def test_naive_datetime_treated_as_utc(self):
         # last_seen loaded from the DB may be naive; must not crash comparing to aware `now`.
         recent_naive = datetime.utcnow() - timedelta(seconds=10)
-        assert is_effectively_offline("online", recent_naive, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is False
+        assert (
+            is_effectively_offline("online", recent_naive, DEFAULT_OFFLINE_THRESHOLD_SECONDS)
+            is False
+        )
 
     def test_operator_status_never_overridden(self):
         # idle/error/provisioning are intentional operator states, not computed.
@@ -58,7 +63,9 @@ class TestIsEffectivelyOffline:
         assert is_effectively_offline("offline", recent, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is False
 
     def test_stored_offline_stays_offline_when_stale(self):
-        stale = datetime.now(timezone.utc) - timedelta(seconds=DEFAULT_OFFLINE_THRESHOLD_SECONDS + 1)
+        stale = datetime.now(timezone.utc) - timedelta(
+            seconds=DEFAULT_OFFLINE_THRESHOLD_SECONDS + 1
+        )
         assert is_effectively_offline("offline", stale, DEFAULT_OFFLINE_THRESHOLD_SECONDS) is True
 
     def test_stored_offline_stays_offline_when_never_reported(self):

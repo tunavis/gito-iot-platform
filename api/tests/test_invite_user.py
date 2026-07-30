@@ -53,14 +53,17 @@ class TestInviteUserSendsEmailAndReportsRealOutcome:
         tenant_id = uuid4()
         session = _make_session()
 
-        with patch("app.routers.users.validate_tenant_access", new=AsyncMock(return_value=True)), \
-             patch(
-                 "app.routers.users.EmailNotificationService.send",
-                 return_value=(True, None),
-             ):
+        with patch(
+            "app.routers.users.validate_tenant_access", new=AsyncMock(return_value=True)
+        ), patch(
+            "app.routers.users.EmailNotificationService.send",
+            return_value=(True, None),
+        ):
             response = await invite_user(
                 tenant_id=tenant_id,
-                request=UserInviteRequest(email="new@example.com", full_name="New User", role="VIEWER"),
+                request=UserInviteRequest(
+                    email="new@example.com", full_name="New User", role="VIEWER"
+                ),
                 session=session,
                 current_tenant=tenant_id,
                 current_user_info={"role": "TENANT_ADMIN"},
@@ -74,14 +77,17 @@ class TestInviteUserSendsEmailAndReportsRealOutcome:
         tenant_id = uuid4()
         session = _make_session()
 
-        with patch("app.routers.users.validate_tenant_access", new=AsyncMock(return_value=True)), \
-             patch(
-                 "app.routers.users.EmailNotificationService.send",
-                 return_value=(False, "SMTP authentication failed"),
-             ):
+        with patch(
+            "app.routers.users.validate_tenant_access", new=AsyncMock(return_value=True)
+        ), patch(
+            "app.routers.users.EmailNotificationService.send",
+            return_value=(False, "SMTP authentication failed"),
+        ):
             response = await invite_user(
                 tenant_id=tenant_id,
-                request=UserInviteRequest(email="new2@example.com", full_name="New User", role="VIEWER"),
+                request=UserInviteRequest(
+                    email="new2@example.com", full_name="New User", role="VIEWER"
+                ),
                 session=session,
                 current_tenant=tenant_id,
                 current_user_info={"role": "TENANT_ADMIN"},

@@ -209,6 +209,7 @@ def create_app() -> FastAPI:
         telemetry_aggregate,
         organizations,
         sites,
+        assets,
         device_groups,
         alarms,
         notifications,
@@ -251,6 +252,7 @@ def create_app() -> FastAPI:
     app.include_router(alarms.router, prefix="/api/v1")  # Unified enterprise alarm system
     app.include_router(organizations.router, prefix="/api/v1")  # Hierarchy: Organizations
     app.include_router(sites.router, prefix="/api/v1")  # Hierarchy: Sites
+    app.include_router(assets.router, prefix="/api/v1")  # Asset registry (additive, Y1)
     app.include_router(device_groups.router, prefix="/api/v1")  # Hierarchy: Device Groups
     app.include_router(notifications.router, prefix="/api/v1")  # Notification channels & history
     app.include_router(notification_rules.router, prefix="/api/v1")  # Notification routing rules

@@ -23,15 +23,18 @@ from app.routers.devices import _validate_device_fks
 class _Result:
     def __init__(self, value):
         self._value = value
+
     def scalar_one_or_none(self):
         return self._value
 
 
 class _FakeSession:
     """Returns `owned` (truthy) or None for the existence check."""
+
     def __init__(self, owned: bool):
         self._owned = owned
         self.queries = 0
+
     async def execute(self, sql, params=None):
         self.queries += 1
         return _Result(1 if self._owned else None)
@@ -60,7 +63,13 @@ class TestValidateDeviceFks:
 
     @pytest.mark.asyncio
     async def test_each_fk_field_is_checked(self):
-        for field in ("device_type_id", "organization_id", "site_id", "device_group_id"):
+        for field in (
+            "device_type_id",
+            "organization_id",
+            "site_id",
+            "device_group_id",
+            "asset_id",
+        ):
             session = _FakeSession(owned=False)
             with pytest.raises(HTTPException) as exc:
                 await _validate_device_fks(session, uuid4(), **{field: uuid4()})

@@ -36,31 +36,40 @@ class TestProcessAlertEvent:
     @pytest.mark.asyncio
     async def test_dispatches_via_async_session_without_attribute_error(self):
         alert_event = MagicMock(
-            id=uuid4(), alert_rule_id=uuid4(), device_id=uuid4(),
-            metric_value=42, message="High temp", fired_at=None,
+            id=uuid4(),
+            alert_rule_id=uuid4(),
+            device_id=uuid4(),
+            metric_value=42,
+            message="High temp",
+            fired_at=None,
         )
         alert_rule = MagicMock(id=uuid4(), metric="temperature", threshold=30)
         device = MagicMock(id=uuid4(), name="Pump 1")
         notif_rule = MagicMock(channel_id=uuid4())
         channel = MagicMock(
-            id=uuid4(), enabled=True, channel_type="webhook",
-            config={"webhook_url": "https://example.com/hook"}, user_id=uuid4(),
+            id=uuid4(),
+            enabled=True,
+            channel_type="webhook",
+            config={"webhook_url": "https://example.com/hook"},
+            user_id=uuid4(),
         )
         user = MagicMock()
 
         # spec=RLSSession: accessing a method RLSSession doesn't have (e.g.
         # the old code's `.exec()`) raises AttributeError, same as the real thing.
         session = MagicMock(spec=RLSSession)
-        session.execute = AsyncMock(side_effect=[
-            _result(first=alert_event),      # AlertEvent lookup
-            _result(first=alert_rule),       # AlertRule lookup
-            _result(first=device),           # Device lookup
-            _result(all_=[notif_rule]),      # NotificationRules for this alert_rule
-            _result(first=channel),          # NotificationChannel lookup
-            _result(first=user),             # User lookup
-            _result(first=None),             # throttle check: nothing recent
-            _result(first=None),             # NotificationTemplate: none configured
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _result(first=alert_event),  # AlertEvent lookup
+                _result(first=alert_rule),  # AlertRule lookup
+                _result(first=device),  # Device lookup
+                _result(all_=[notif_rule]),  # NotificationRules for this alert_rule
+                _result(first=channel),  # NotificationChannel lookup
+                _result(first=user),  # User lookup
+                _result(first=None),  # throttle check: nothing recent
+                _result(first=None),  # NotificationTemplate: none configured
+            ]
+        )
         session.commit = AsyncMock()
         session.flush = AsyncMock()
         # Notification.id is a Column(default=uuid.uuid4) populated by the ORM at

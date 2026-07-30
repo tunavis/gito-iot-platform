@@ -62,7 +62,9 @@ class TestCreateTemplate:
         await create_template(
             tenant_id=tenant_id,
             body=NotificationTemplateSchema(
-                channel_type="email", name="Critical Alert", body="{{device_name}} fired",
+                channel_type="email",
+                name="Critical Alert",
+                body="{{device_name}} fired",
             ),
             session=session,
             current_tenant=tenant_id,

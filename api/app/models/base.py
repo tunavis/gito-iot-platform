@@ -103,6 +103,17 @@ class Device(BaseModel):
         nullable=True,
         index=True,
     )
+    # The asset this device instruments, at most one. Deliberately a real column
+    # and not an `attributes` key: rollups and asset device lists join and index on
+    # it, unlike the GPS/vendor fields that live in the JSONB bag.
+    # SET NULL, so deleting an asset detaches its instrumentation rather than
+    # deleting devices or blocking the delete.
+    asset_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("assets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     name = Column(String(255), nullable=False)
     device_type = Column(String(100), nullable=False)
@@ -139,6 +150,7 @@ class Device(BaseModel):
         Index("idx_devices_organization", "organization_id"),
         Index("idx_devices_site", "site_id"),
         Index("idx_devices_group", "device_group_id"),
+        Index("idx_devices_asset", "asset_id"),
         CheckConstraint(
             "status IN ('online', 'offline', 'idle', 'error', 'provisioning')",
             name="valid_device_status",

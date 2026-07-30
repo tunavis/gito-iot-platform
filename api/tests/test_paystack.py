@@ -49,8 +49,14 @@ class TestVerifySignature:
 class TestParseEvent:
     def _body(self, **data):
         event = data.pop("event", "charge.success")
-        base = {"id": 998877, "reference": "abc123", "status": "success", "amount": 11500,
-                "currency": "ZAR", "authorization": {"authorization_code": "AUTH_xyz", "reusable": True}}
+        base = {
+            "id": 998877,
+            "reference": "abc123",
+            "status": "success",
+            "amount": 11500,
+            "currency": "ZAR",
+            "authorization": {"authorization_code": "AUTH_xyz", "reusable": True},
+        }
         base.update(data)
         return json.dumps({"event": event, "data": base}).encode()
 
@@ -58,10 +64,10 @@ class TestParseEvent:
         wh = parse_event(self._body())
         assert wh.kind == "payment"
         assert wh.success is True
-        assert wh.token == "AUTH_xyz"          # the stored-card token for renewals
+        assert wh.token == "AUTH_xyz"  # the stored-card token for renewals
         assert wh.reference == "abc123"
-        assert wh.amount_cents == 11500        # already in cents, passed through
-        assert wh.event_id == "998877"         # transaction id → idempotency key
+        assert wh.amount_cents == 11500  # already in cents, passed through
+        assert wh.event_id == "998877"  # transaction id → idempotency key
 
     def test_failed_status_is_not_success(self):
         wh = parse_event(self._body(status="failed"))
@@ -82,16 +88,26 @@ class TestParseEvent:
 
 class TestParseVerify:
     """The /transaction/verify response has no `event` wrapper — success is data.status."""
+
     def _resp(self, txn_status="success", api_status=True):
-        return {"status": api_status, "message": "Verification successful",
-                "data": {"id": 424242, "reference": "ref9", "status": txn_status, "amount": 114885,
-                         "currency": "ZAR", "authorization": {"authorization_code": "AUTH_keep", "reusable": True}}}
+        return {
+            "status": api_status,
+            "message": "Verification successful",
+            "data": {
+                "id": 424242,
+                "reference": "ref9",
+                "status": txn_status,
+                "amount": 114885,
+                "currency": "ZAR",
+                "authorization": {"authorization_code": "AUTH_keep", "reusable": True},
+            },
+        }
 
     def test_successful_verify(self):
         wh = parse_verify(self._resp())
         assert wh.kind == "payment"
         assert wh.success is True
-        assert wh.event_id == "424242"      # same txn id the webhook carries → shared idempotency key
+        assert wh.event_id == "424242"  # same txn id the webhook carries → shared idempotency key
         assert wh.token == "AUTH_keep"
         assert wh.amount_cents == 114885
 

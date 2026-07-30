@@ -130,3 +130,8 @@ web/tsconfig.tsbuildinfo
 
 # CodeGraph local index (rebuilt via `codegraph init`)
 .codegraph/
+
+# CI and local alembic mirror api/Dockerfile's layout by copying db/init.sql here
+# (migration 001 resolves it as a sibling of api/). It is a build artifact — a
+# committed second copy would be free to diverge from the real db/init.sql.
+api/db/init.sql
