@@ -329,11 +329,20 @@ export function buildRuleGraph(
         id: wiredEdgeId(wired.id),
         source: ALARM_NODE_ID,
         target: channelNodeId(channel.id),
-        type: 'smoothstep',
+        // Custom edge: carries the hover toolbar (disable / unwire). Still
+        // `deletable`, so the keyboard Delete path keeps working alongside it.
+        type: 'wired',
         deletable: true,
         animated: wired.enabled,
         style: wired.enabled ? undefined : { strokeDasharray: '4 4' },
-        label: wired.enabled ? undefined : 'disabled',
+        // The toolbar's pause/play icon already states this; a text label as
+        // well would collide with the buttons at the same midpoint.
+        data: {
+          enabled: wired.enabled,
+          // A channel has no name field — the same type + destination the node
+          // shows, so the confirm names the thing the user is looking at.
+          channelLabel: `${channel.channel_type} · ${channelDetail(channel)}`,
+        },
       });
     }
   });

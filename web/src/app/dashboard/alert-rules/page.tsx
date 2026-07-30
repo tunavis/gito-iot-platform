@@ -445,7 +445,7 @@ export default function AlertRulesPage() {
                       ))}
                     </select>
                     <span className="text-xs text-th-muted ml-auto">
-                      Click a condition or the AND/OR pill to edit it · drag from the alarm to a channel to notify it · select an edge and press Delete to unwire
+                      Click a condition or the AND/OR pill to edit it · drag from the alarm to a channel to notify it · hover a connection to disable or unwire it
                     </span>
                   </div>
 
