@@ -186,30 +186,30 @@ def register(
     assert_schema_has_no_tenant(name, registered_tool.parameters or {})
 
 
-def register_all(server: MCPServer) -> int:
-    """Register every tool on `server`. Returns how many were registered.
+def register_all(server: MCPServer) -> set[str]:
+    """Register every tool on `server`. Returns the names it registered.
 
-    Tools are added group by group as the change progresses; the guards above
-    apply uniformly to all of them.
+    The names are returned, not just a count, so the caller can prove the server
+    advertises *exactly* these and nothing else — see `build_mcp_server`.
     """
     from app.mcp.tools.read import READ_TOOLS
     from app.mcp.tools.write import WRITE_TOOLS
 
-    registered = 0
+    registered: set[str] = set()
 
     # Read tools (tasks 4.1-4.12). Available to every role, including VIEWER and
     # CLIENT — MCP grants no authority the same user lacks in the UI, and reading
     # is what those roles already do there.
     for name, fn, description in READ_TOOLS:
         register(server, name, fn, description=description)
-        registered += 1
+        registered.add(name)
 
     # The approval-gated write. Advertised only to roles that may issue commands
     # today, so a VIEWER is not shown an affordance it would be refused — and
     # refused again by the role check in `tool_entry` if it calls it anyway.
     for name, fn, description in WRITE_TOOLS:
         register(server, name, fn, description=description, requires_command_role=True)
-        registered += 1
+        registered.add(name)
 
-    logger.info("mcp_tools_registered", extra={"count": registered})
+    logger.info("mcp_tools_registered", extra={"count": len(registered)})
     return registered
