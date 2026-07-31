@@ -1,0 +1,115 @@
+## 1. Data model
+
+- [ ] 1.1 Migration `028_command_rejection_and_reason`: add
+      `device_commands.request_reason` (text, nullable), `.rejected_by` (uuid FK
+      users SET NULL), `.rejected_at` (timestamptz), and add `'rejected'` to the
+      `valid_command_status` CHECK. Additive, no backfill — mirror `027`'s shape.
+- [ ] 1.2 Downgrade moves any `rejected` row to `failed` preserving
+      `error_message`, then narrows the CHECK. A refusal happened; deleting it
+      would be the one thing rollback must not do.
+- [ ] 1.3 Update the `DeviceCommand` model and `CommandResponse` schema. NULL on
+      the decision columns means "no decision was required", not "undecided" —
+      say so in a comment, because the next reader will assume otherwise.
+
+## 2. Authorization — the root cause, not the symptom
+
+- [ ] 2.1 One shared FastAPI dependency for "may actuate a device"
+      (`SUPER_ADMIN`/`TENANT_ADMIN`/`SITE_ADMIN`), using the same ladder
+      `ToolContext.may_issue_commands` already encodes. One definition, not two
+      that drift.
+- [ ] 2.2 Apply it to `send_command`, `approve_command`, and the new
+      `reject_command`. **BREAKING** on `send_command`.
+- [ ] 2.3 The 403 detail names the permitted roles — a refusal a user cannot act
+      on is a support ticket.
+- [ ] 2.4 Before deploying, check whether any non-admin has actually issued a
+      command on staging (`device_commands` joined to `users`). If someone has,
+      that is a conversation, not a silent cutoff.
+
+## 3. Endpoints
+
+- [ ] 3.1 `POST /tenants/{t}/devices/{d}/commands/{c}/reject` — mirrors approve:
+      same `FOR UPDATE` lock, same "still awaiting?" check, sets
+      `rejected_by`/`rejected_at`, status `rejected`, dispatches nothing.
+- [ ] 3.2 `GET /tenants/{t}/command-approvals` — second `APIRouter` in
+      `commands.py` (tenant-scoped), returning pending requests with device and
+      site names joined, plus the pending count for the badge. Keep it in
+      `commands.py`: everything deciding whether a command reaches a device
+      lives in one file.
+- [ ] 3.3 Expired requests are excluded from the list and refused at approve —
+      already true at approve; assert the list agrees.
+- [ ] 3.4 `approve_command` returns whether the decision was a self-approval
+      (`approved_by == requested_by`) so the UI can label it rather than making
+      the client compare two ids.
+
+## 4. Notification
+
+- [ ] 4.1 Raise a notification through the existing `notification_dispatcher`
+      when a command enters `awaiting_approval`. No new channel type.
+- [ ] 4.2 Fire on entry only, never on approve/reject — the notification means
+      "someone must act", and a notification per decision turns it into a log.
+- [ ] 4.3 Failure to notify must not fail the request. Same rule as the audit
+      writer: a request that was recorded but not announced still happened.
+
+## 5. MCP
+
+- [ ] 5.1 `send_device_command` gains a required `reason` argument, positional
+      before the optional `parameters` so it cannot be quietly omitted.
+- [ ] 5.2 Persist it to `request_reason` via `request_command_approval`.
+- [ ] 5.3 Tool description states the reason is shown to the human who decides —
+      a model told who reads it writes a better one.
+- [ ] 5.4 Add `ToolAnnotations` through `register()`: `read_only_hint` on the ten
+      reads, `destructive_hint` on the write.
+- [ ] 5.5 Make the annotation **required** by the registrar, so a tool cannot be
+      added without declaring its effect — same enforcement-by-construction as
+      the tenant-parameter guard, and a test that registration fails without it.
+
+## 6. Frontend
+
+- [ ] 6.1 Role helper in `web/src/lib/` reading the role claim already parsed
+      from the JWT. None exists today; this is the first.
+- [ ] 6.2 `/dashboard/approvals` page: device and site, command and parameters,
+      the agent's reason, requester, time remaining, Approve / Reject per row.
+- [ ] 6.3 Sidebar entry with pending count, hidden entirely for roles that may
+      not decide.
+- [ ] 6.4 Hide the send control on the device Commands tab for those same roles —
+      a control that always 403s is worse than an absent one.
+- [ ] 6.5 Label a self-approval in the UI, so an auditor sees it rather than
+      inferring it from two ids.
+- [ ] 6.6 Empty state that reads as reassurance, not breakage: no pending
+      requests is the normal condition, not an error.
+- [ ] 6.7 Optimistic removal on decide, with the row restored if the call fails —
+      a 409 from a concurrent decision must not look like success.
+
+## 7. Verification
+
+- [ ] 7.1 Reject dispatches nothing and records the actor; approve still
+      dispatches exactly once (extend `test_command_approval_gate.py`).
+- [ ] 7.2 `VIEWER`/`CLIENT` get 403 on send, approve and reject.
+- [ ] 7.3 `GET /command-approvals` is tenant-scoped — extend
+      `test_mcp_tenant_isolation.py`, which already has the two-tenant fixture.
+- [ ] 7.4 MCP tool refuses without a reason; the reason reaches `request_reason`
+      and the audit row.
+- [ ] 7.5 Registration fails for a tool with no annotation.
+- [ ] 7.6 The badge count equals the number of rows the list returns.
+- [ ] 7.7 Full suite in-container: `docker exec gito-api python -m pytest tests/ -q`.
+- [ ] 7.8 End-to-end through the **real login** as the Claude test account
+      (`claude-playwright@gito.demo`), not a minted token: request a command over
+      MCP, see it on the approvals page with its reason, approve it, confirm one
+      dispatch and the audit trail.
+
+## 8. Deployment
+
+- [ ] 8.1 Migration runs on api start; rebuild and restart api.
+- [ ] 8.2 Build web **locally** and ship the image. Never build web on the
+      staging box — 4.8 GB total RAM, and a Next.js build there takes the
+      running app down with it.
+- [ ] 8.3 Verify on `:8090`, never on the public hostname, which does not
+      resolve.
+
+## 9. Documentation
+
+- [ ] 9.1 `docs/MCP_SERVER.md`: the reason argument, the annotations, and where a
+      human actually approves — the doc currently describes a gate with no
+      described way to pass it.
+- [ ] 9.2 `CLAUDE.md`: record that issuing a device command is role-restricted,
+      since it previously was not and that assumption is in people's heads.
