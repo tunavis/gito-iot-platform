@@ -21,9 +21,9 @@
       `reject_command`. **BREAKING** on `send_command`.
 - [x] 2.3 The 403 detail names the permitted roles — a refusal a user cannot act
       on is a support ticket.
-- [ ] 2.4 Before deploying, check whether any non-admin has actually issued a
-      command on staging (`device_commands` joined to `users`). If someone has,
-      that is a conversation, not a silent cutoff.
+- [x] 2.4 Checked on staging 2026-07-31: `SELECT count(*) FROM device_commands`
+      is **0** — no command has ever been issued there, by any role, so the gate
+      cuts nobody off. Re-run this against production before it goes there.
 
 ## 3. Endpoints
 
@@ -35,7 +35,7 @@
       site names joined, plus the pending count for the badge. Keep it in
       `commands.py`: everything deciding whether a command reaches a device
       lives in one file.
-- [ ] 3.3 Expired requests are excluded from the list and refused at approve —
+- [x] 3.3 Expired requests are excluded from the list and refused at approve —
       already true at approve; assert the list agrees.
 - [x] 3.4 `approve_command` returns whether the decision was a self-approval
       (`approved_by == requested_by`) so the UI can label it rather than making
@@ -80,33 +80,33 @@ the whole one.
 
 ## 6. Frontend
 
-- [ ] 6.1 Role helper in `web/src/lib/` reading the role claim already parsed
+- [x] 6.1 Role helper in `web/src/lib/` reading the role claim already parsed
       from the JWT. None exists today; this is the first.
-- [ ] 6.2 `/dashboard/approvals` page: device and site, command and parameters,
+- [x] 6.2 `/dashboard/approvals` page: device and site, command and parameters,
       the agent's reason, requester, time remaining, Approve / Reject per row.
-- [ ] 6.3 Sidebar entry with pending count, hidden entirely for roles that may
+- [x] 6.3 Sidebar entry with pending count, hidden entirely for roles that may
       not decide.
-- [ ] 6.4 Hide the send control on the device Commands tab for those same roles —
+- [x] 6.4 Hide the send control on the device Commands tab for those same roles —
       a control that always 403s is worse than an absent one.
-- [ ] 6.5 Label a self-approval in the UI, so an auditor sees it rather than
+- [x] 6.5 Label a self-approval in the UI, so an auditor sees it rather than
       inferring it from two ids.
-- [ ] 6.6 Empty state that reads as reassurance, not breakage: no pending
+- [x] 6.6 Empty state that reads as reassurance, not breakage: no pending
       requests is the normal condition, not an error.
-- [ ] 6.7 Optimistic removal on decide, with the row restored if the call fails —
+- [x] 6.7 Optimistic removal on decide, with the row restored if the call fails —
       a 409 from a concurrent decision must not look like success.
 
 ## 7. Verification
 
-- [ ] 7.1 Reject dispatches nothing and records the actor; approve still
+- [x] 7.1 Reject dispatches nothing and records the actor; approve still
       dispatches exactly once (extend `test_command_approval_gate.py`).
-- [ ] 7.2 `VIEWER`/`CLIENT` get 403 on send, approve and reject.
-- [ ] 7.3 `GET /command-approvals` is tenant-scoped — extend
+- [x] 7.2 `VIEWER`/`CLIENT` get 403 on send, approve and reject.
+- [x] 7.3 `GET /command-approvals` is tenant-scoped — extend
       `test_mcp_tenant_isolation.py`, which already has the two-tenant fixture.
-- [ ] 7.4 MCP tool refuses without a reason; the reason reaches `request_reason`
+- [x] 7.4 MCP tool refuses without a reason; the reason reaches `request_reason`
       and the audit row.
-- [ ] 7.5 Registration fails for a tool with no annotation.
-- [ ] 7.6 The badge count equals the number of rows the list returns.
-- [ ] 7.7 Full suite in-container: `docker exec gito-api python -m pytest tests/ -q`.
+- [x] 7.5 Registration fails for a tool with no annotation.
+- [x] 7.6 The badge count equals the number of rows the list returns.
+- [x] 7.7 Full suite in-container: `docker exec gito-api python -m pytest tests/ -q`.
 - [ ] 7.8 End-to-end through the **real login** as the Claude test account
       (`claude-playwright@gito.demo`), not a minted token: request a command over
       MCP, see it on the approvals page with its reason, approve it, confirm one
@@ -123,8 +123,8 @@ the whole one.
 
 ## 9. Documentation
 
-- [ ] 9.1 `docs/MCP_SERVER.md`: the reason argument, the annotations, and where a
+- [x] 9.1 `docs/MCP_SERVER.md`: the reason argument, the annotations, and where a
       human actually approves — the doc currently describes a gate with no
       described way to pass it.
-- [ ] 9.2 `CLAUDE.md`: record that issuing a device command is role-restricted,
+- [x] 9.2 `CLAUDE.md`: record that issuing a device command is role-restricted,
       since it previously was not and that assumption is in people's heads.

@@ -22,7 +22,9 @@ import {
   Link2,
   Rocket,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react';
+import { mayActuateDevice } from '@/lib/auth';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useTenant, TenantInfo } from '@/components/TenantContext';
 
@@ -43,7 +45,9 @@ interface NavGroup {
   items: NavItem[];
 }
 interface NavItem { label: string; href: string; }
-type NavEntry = NavGroup | (NavItem & { icon: React.ReactNode; single: true });
+/** `badge` is a count rendered beside the label — used by Approvals so a waiting
+ *  request is visible without opening the page. Absent or 0 renders nothing. */
+type NavEntry = NavGroup | (NavItem & { icon: React.ReactNode; single: true; badge?: number });
 
 function isSingle(e: NavEntry): e is NavItem & { icon: React.ReactNode; single: true } {
   return 'single' in e && (e as any).single === true;
@@ -183,6 +187,40 @@ export default function Sidebar() {
   const [signingOut, setSigningOut] = useState(false);
 
   const isManagement = user?.tenant_type === 'management';
+  const canDecide = mayActuateDevice(user?.role);
+
+  // Pending approval count for the badge. Polled, not pushed: there is no
+  // websocket for this, and a request that stays open for 24h does not need
+  // second-level freshness — a minute is well inside the window anyone would
+  // act in. Only polled for roles that can decide, so a VIEWER's browser does
+  // not sit calling an endpoint whose answer it would never be shown.
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+
+  useEffect(() => {
+    if (!canDecide || !user?.tenant_id) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`/api/v1/tenants/${user.tenant_id}/command-approvals`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok && !cancelled) setPendingApprovals((await res.json()).total || 0);
+      } catch {
+        // A badge that cannot load is not worth interrupting anyone over; the
+        // page itself reports failures properly.
+      }
+    };
+
+    poll();
+    const id = setInterval(poll, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [canDecide, user?.tenant_id]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -231,6 +269,18 @@ export default function Sidebar() {
       ],
     },
     { label: 'Device Types', href: '/dashboard/device-types', icon: <LayoutGrid className="w-4 h-4" />, single: true },
+    // Only for roles that can actually decide. A VIEWER shown this entry would
+    // find a queue full of buttons they are refused — the API is the real check,
+    // this just stops offering an action we know will fail.
+    ...(canDecide
+      ? [{
+          label: 'Approvals',
+          href: '/dashboard/approvals',
+          icon: <ShieldCheck className="w-4 h-4" />,
+          single: true as const,
+          badge: pendingApprovals,
+        }]
+      : []),
     { label: 'Connections', href: '/dashboard/connections', icon: <Link2 className="w-4 h-4" />, single: true },
     { label: 'Billing', href: '/dashboard/billing', icon: <CreditCard className="w-4 h-4" />, single: true },
     {
@@ -287,7 +337,16 @@ export default function Sidebar() {
             <span style={{ color: isActive ? 'var(--color-sidebar-active-icon)' : 'var(--color-sidebar-muted)' }}>
               {entry.icon}
             </span>
-            {entry.label}
+            <span className="flex-1">{entry.label}</span>
+            {entry.badge ? (
+              <span
+                className="px-1.5 py-0.5 rounded-full text-[11px] font-semibold leading-none"
+                style={{ background: '#f59e0b', color: '#fff' }}
+                title={`${entry.badge} command${entry.badge === 1 ? '' : 's'} awaiting approval`}
+              >
+                {entry.badge}
+              </span>
+            ) : null}
           </Link>
         </li>
       );

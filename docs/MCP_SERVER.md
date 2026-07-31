@@ -86,18 +86,55 @@ Two shaping rules apply to all of them:
 
 `send_device_command` **does not send a command.** It records one with
 `status='awaiting_approval'` and returns a reference. Nothing reaches the device
-until a person calls:
+until a person decides.
 
-```
-POST /tenants/{tenant_id}/devices/{device_id}/commands/{command_id}/approve
-```
+It takes a **required `reason`**. That is not paperwork: it is the only thing the
+approver has to judge by. Without it the screen says "close_valve on Pump 3" and
+the human step degrades into a rubber stamp — which is indistinguishable from
+having no gate, while looking like one.
 
 The tool description and every result it returns both say the command was
 *requested*, so a model reports "requested approval to close the valve" rather
 than claiming the valve moved.
 
-Requests lapse after 24 hours. Commands issued through the ordinary UI/REST path
-are **unchanged and ungated** — they dispatch immediately, as they always have.
+**Where a human decides:** `/dashboard/approvals` lists every pending request for
+the tenant — device and site, the command and its parameters, the agent's reason,
+who asked, and how long is left — with Approve and Reject per row. A count
+appears in the sidebar so a waiting request is visible without going looking. The
+underlying calls are:
+
+```
+GET  /tenants/{tenant_id}/command-approvals
+POST /tenants/{tenant_id}/devices/{device_id}/commands/{command_id}/approve
+POST /tenants/{tenant_id}/devices/{device_id}/commands/{command_id}/reject
+```
+
+Approving dispatches through the same path the UI uses; rejecting records who
+refused and sends nothing. Both are restricted to `SUPER_ADMIN`, `TENANT_ADMIN`
+and `SITE_ADMIN` — as is issuing a command directly, so an approver is always
+someone who could have sent it themselves. Self-approval is allowed and labelled:
+blocking it would break single-admin tenants and buy nothing, since that admin
+can use the direct path. The control is that a human looked.
+
+Requests lapse after 24 hours. Rejected and expired requests leave the queue;
+what was decided is read back from the audit log.
+
+**Not yet:** a pending request is only visible to someone already signed in.
+Notifying someone who is not is `openspec/changes/add-approval-notifications` —
+the platform's notification pipeline is keyed on alarms by a NOT NULL foreign key
+and has no generic path to reuse.
+
+### Tool annotations
+
+Every tool declares its effect through MCP `ToolAnnotations`: the ten reads carry
+`read_only_hint`, and `send_device_command` carries `destructive_hint` — even
+though it dispatches nothing, because what it records leads to a device moving,
+and "read-only because the effect is deferred" is the kind of technically-true
+that gets someone hurt.
+
+The registrar **requires** an annotation. Omitting one is an error during app
+construction, so a tool that never says what it does fails the boot rather than
+being advertised with an effect somebody guessed on its behalf.
 
 ---
 

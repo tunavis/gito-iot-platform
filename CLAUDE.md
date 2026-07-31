@@ -307,9 +307,24 @@ Three rules, all enforced by code rather than by review:
    `tools/read.py` deliberately cannot import `get_session`.
 
 Writes are approval-gated: `send_device_command` records a command with
-`status='awaiting_approval'` and dispatches nothing. A person approves via
-`POST /tenants/{id}/devices/{id}/commands/{id}/approve`. The ordinary UI/REST
-command path is unchanged and stays ungated.
+`status='awaiting_approval'`, dispatches nothing, and requires a `reason` that is
+shown to the approver. A person decides at `/dashboard/approvals` (Approve sends
+it; Reject records the refusal and sends nothing).
+
+Every tool must declare `ToolAnnotations` — `read_only_hint` on reads,
+`destructive_hint` on the write. `register()` has no default for it, so omitting
+one fails app construction rather than advertising a guessed effect.
+
+### ⚠️ Device commands are role-restricted
+
+`POST /tenants/{id}/devices/{id}/commands` and the approve/reject endpoints
+require `SUPER_ADMIN`, `TENANT_ADMIN` or `SITE_ADMIN`. **This endpoint previously
+accepted any authenticated tenant user** — that assumption is in people's heads
+and in older code. One definition lives in `app/dependencies.py`
+(`COMMAND_ROLES` / `require_command_role`); `ToolContext.may_issue_commands`
+reads it rather than keeping a second copy, because the two had already drifted
+once. The frontend mirror is `web/src/lib/auth.ts` — that one is UX only, so the
+UI does not offer a control the API will refuse; it is never the check.
 
 ---
 

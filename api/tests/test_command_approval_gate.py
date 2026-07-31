@@ -205,6 +205,73 @@ class TestApprovalDispatchesExactlyOnce:
         dispatch.assert_not_called()
 
 
+class TestTheAgentMustSayWhy:
+    """Task 7.4. The reason is the only thing the approver has to judge by, so
+    an empty one has to be refused before a row exists — otherwise the queue
+    fills with instructions a human can only rubber-stamp."""
+
+    @pytest.mark.asyncio
+    async def test_a_blank_reason_is_refused_before_anything_is_recorded(self):
+        from app.mcp.auth import ToolContext
+        from app.mcp.tools import write
+
+        recorded = AsyncMock()
+        with patch.object(write.commands, "request_command_approval", new=recorded):
+            for blank in ("", "   ", None):
+                result = await write.send_device_command(
+                    ToolContext(uuid4(), uuid4(), "TENANT_ADMIN"),
+                    device_id=uuid4(),
+                    command_name="close_valve",
+                    reason=blank,
+                )
+                assert result["error"] == "reason_required", blank
+
+        recorded.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_the_reason_reaches_the_stored_command(self):
+        tenant_id = uuid4()
+        device = _device(tenant_id)
+        session = _session(device, None)
+
+        with patch.object(commands, "validate_tenant_access", new=AsyncMock(return_value=True)):
+            command = await commands.request_command_approval(
+                session=session,
+                tenant_id=tenant_id,
+                device_id=device.id,
+                current_tenant=tenant_id,
+                command_name="close_valve",
+                parameters={},
+                requested_by=uuid4(),
+                reason="  Downstream pressure is climbing.  ",
+            )
+
+        # Trimmed, because leading whitespace from a model is not content.
+        assert command.request_reason == "Downstream pressure is climbing."
+
+    @pytest.mark.asyncio
+    async def test_a_pathological_reason_is_capped(self):
+        """Free text from a model reaches a screen and an audit row; neither
+        should have to cope with a megabyte of it."""
+        tenant_id = uuid4()
+        device = _device(tenant_id)
+        session = _session(device, None)
+
+        with patch.object(commands, "validate_tenant_access", new=AsyncMock(return_value=True)):
+            command = await commands.request_command_approval(
+                session=session,
+                tenant_id=tenant_id,
+                device_id=device.id,
+                current_tenant=tenant_id,
+                command_name="close_valve",
+                parameters={},
+                requested_by=uuid4(),
+                reason="x" * 50_000,
+            )
+
+        assert len(command.request_reason) == 1000
+
+
 class TestToolSurface:
     def test_the_write_tool_is_role_gated_and_says_it_does_not_execute(self):
         from app.mcp.server import build_mcp_server
