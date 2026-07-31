@@ -114,11 +114,11 @@ the whole one.
 
 ## 8. Deployment
 
-- [ ] 8.1 Migration runs on api start; rebuild and restart api.
-- [ ] 8.2 Build web **locally** and ship the image. Never build web on the
+- [x] 8.1 Migration runs on api start; rebuild and restart api.
+- [x] 8.2 Build web **locally** and ship the image. Never build web on the
       staging box — 4.8 GB total RAM, and a Next.js build there takes the
       running app down with it.
-- [ ] 8.3 Verify on `:8090`, never on the public hostname, which does not
+- [x] 8.3 Verify on `:8090`, never on the public hostname, which does not
       resolve.
 
 ## 9. Documentation
