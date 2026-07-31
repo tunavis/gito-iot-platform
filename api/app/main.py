@@ -161,6 +161,20 @@ def create_app() -> FastAPI:
         allowed_hosts = [h.strip() for h in settings.MCP_ALLOWED_HOSTS.split(",") if h.strip()]
         mcp_app = mcp_server.streamable_http_app(
             streamable_http_path="/",
+            # Stateless, because the API runs `uvicorn --workers 4` and the
+            # session manager keeps sessions in memory *per process*. With
+            # sessions on, `initialize` lands on one worker and the next call
+            # round-robins to a worker that has never heard of it — three
+            # requests in four fail with "Session not found". Verified against
+            # staging 2026-07-31; it is invisible to a single-worker dev run,
+            # which is exactly why it survived to deployment.
+            #
+            # Nothing here wants session state: every tool is request/response,
+            # and `auth.py` already resolves the caller per invocation rather
+            # than caching it, precisely so a session cannot outlive its token.
+            # If a future tool needs resumability or server-initiated
+            # notifications, this needs a shared event store, not a flag flip.
+            stateless_http=True,
             # Left ON. Without this the browser-facing deployment is open to DNS
             # rebinding; the fix is to list the hosts clients use, not to disable
             # the check. A wrong entry here surfaces as a 421, not a silent hole.
