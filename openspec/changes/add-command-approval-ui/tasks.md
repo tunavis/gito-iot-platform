@@ -107,7 +107,7 @@ the whole one.
 - [x] 7.5 Registration fails for a tool with no annotation.
 - [x] 7.6 The badge count equals the number of rows the list returns.
 - [x] 7.7 Full suite in-container: `docker exec gito-api python -m pytest tests/ -q`.
-- [ ] 7.8 End-to-end through the **real login** as the Claude test account
+- [x] 7.8 End-to-end through the **real login** as the Claude test account
       (`claude-playwright@gito.demo`), not a minted token: request a command over
       MCP, see it on the approvals page with its reason, approve it, confirm one
       dispatch and the audit trail.
