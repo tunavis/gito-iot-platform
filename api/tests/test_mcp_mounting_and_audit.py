@@ -12,6 +12,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-unit-tests-only-32ch")
 os.environ.setdefault("MQTT_PASSWORD", "test-mqtt-password")
 
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -62,40 +63,57 @@ class TestProtocolPin:
         assert "do not widen it" in str(exc.value)
 
 
+@contextmanager
+def _app_with_mcp(enabled: bool):
+    """Build the app with MCP forced on or off, whatever the environment says.
+
+    An earlier version of this asserted `not settings.MCP_ENABLED` and read the
+    ambient config, so it passed only on a machine that happened to have MCP
+    off — and started failing the moment MCP was switched on locally. A test
+    whose result depends on the environment it runs in cannot tell you anything
+    about the code, so it now sets the value it is testing.
+    """
+    from app.main import create_app
+
+    forced = get_settings().model_copy(update={"MCP_ENABLED": enabled})
+    with patch("app.main.get_settings", return_value=forced):
+        yield create_app()
+
+
 class TestMountingIsConditional:
     def test_disabled_means_the_route_does_not_exist(self):
         """Task 6.6. Not mounted at all, rather than mounted and refusing —
         a 404 is an honest answer about a feature that is switched off."""
         from fastapi.testclient import TestClient
 
-        from app.main import create_app
+        with _app_with_mcp(False) as app:
+            assert not any(getattr(r, "path", "") == "/mcp" for r in app.routes)
 
-        settings = get_settings()
-        assert not settings.MCP_ENABLED, "the test environment must default to MCP off"
+            # And the rest of the API is unaffected. `/` rather than
+            # `/api/health`: health probes the database, which this test does
+            # not have, so a 503 there would say something about the
+            # environment and nothing about MCP.
+            with TestClient(app) as client:
+                assert client.get("/mcp").status_code == 404
+                assert client.get("/").status_code == 200
 
-        app = create_app()
-        assert not any(getattr(r, "path", "") == "/mcp" for r in app.routes)
-
-        # And the rest of the API is unaffected. `/` rather than `/api/health`:
-        # health probes the database, which this test does not have, so a 503
-        # there would say something about the environment and nothing about MCP.
-        with TestClient(app) as client:
-            assert client.get("/mcp").status_code == 404
-            assert client.get("/").status_code == 200
+    def test_enabled_means_the_route_exists(self):
+        """The other half. Without it, a bug that never mounts /mcp at all would
+        pass the test above and look like correct behaviour."""
+        with _app_with_mcp(True) as app:
+            assert any(getattr(r, "path", "") == "/mcp" for r in app.routes)
 
     def test_health_reports_the_mcp_state_either_way(self):
         """The `mcp` check is reported whatever the overall status — MCP being
         off is a configuration choice, not a fault, and must not colour it."""
         from fastapi.testclient import TestClient
 
-        from app.main import create_app
-
-        with TestClient(create_app()) as client:
-            body = client.get("/api/health").json()
-
-        mcp = body["checks"]["mcp"]
-        assert mcp["status"] == "disabled"
-        assert mcp["protocol_version"] == get_settings().MCP_PROTOCOL_VERSION
+        for enabled, expected in ((False, "disabled"), (True, "enabled")):
+            with _app_with_mcp(enabled) as app:
+                with TestClient(app) as client:
+                    mcp = client.get("/api/health").json()["checks"]["mcp"]
+            assert mcp["status"] == expected
+            assert mcp["protocol_version"] == get_settings().MCP_PROTOCOL_VERSION
 
 
 class TestAuditCoverage:

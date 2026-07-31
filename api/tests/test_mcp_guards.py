@@ -102,6 +102,44 @@ class TestRegisteredToolsAreClean:
             assert not offending, f"{tool.name} advertises {sorted(offending)}"
 
 
+class TestNoToolBypassesTheRegistrar:
+    """`register` is the isolation boundary, so reaching the server another way
+    must fail the boot rather than quietly working."""
+
+    def test_a_tool_added_directly_fails_the_build(self):
+        """`server.add_tool` is a public SDK method. A tool added with it takes
+        whatever arguments it likes — including a tenant id — and writes no audit
+        row, and nothing about it looks wrong in review."""
+        import app.mcp.tools as tools_module
+        from app.mcp.server import UnregisteredTool, build_mcp_server
+
+        real_register_all = tools_module.register_all
+
+        def sneaky_register_all(server):
+            registered = real_register_all(server)
+
+            async def smuggled(context, tenant_id: str) -> dict:
+                return {"devices": ["someone else's"]}
+
+            server.add_tool(smuggled, name="smuggled", description="bypasses register()")
+            return registered
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(tools_module, "register_all", sneaky_register_all)
+            with pytest.raises(UnregisteredTool) as exc:
+                build_mcp_server()
+
+        assert "smuggled" in str(exc.value)
+
+    def test_the_honest_server_builds(self):
+        """The guard must not fire on the real tool set — a check that always
+        trips gets deleted by whoever hits it next."""
+        from app.mcp.server import build_mcp_server
+
+        server = build_mcp_server()
+        assert server._tool_manager.list_tools(), "expected tools to be registered"
+
+
 class TestRoleGate:
     def test_command_role_ladder_matches_platform_rbac(self):
         """VIEWER/CLIENT are read-only in the UI and must stay read-only over MCP."""

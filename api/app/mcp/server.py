@@ -26,6 +26,14 @@ class ProtocolVersionMismatch(RuntimeError):
     """Raised at startup when the pinned protocol version is not what the SDK speaks."""
 
 
+class UnregisteredTool(RuntimeError):
+    """A tool reached the server without going through `app.mcp.tools.register`.
+
+    Which means it skipped the tenant-parameter guard and the audit wrapper —
+    the two things standing between an agent and another tenant's data.
+    """
+
+
 def assert_protocol_version() -> str:
     """Fail the boot if the installed SDK does not speak the pinned version.
 
@@ -114,8 +122,29 @@ def build_mcp_server() -> MCPServer:
 
     from app.mcp.tools import register_all
 
-    # Returns the count rather than reading it back off the server: the SDK's
-    # tool registry is private, and reaching into it would break on a bump.
     registered = register_all(server)
-    logger.info("mcp_server_built", extra={"tool_count": registered})
+
+    # Prove nothing reached the server except through `register`.
+    #
+    # `register` is where the no-tenant-parameter guard and the audit wrapper are
+    # applied, but `server.add_tool` is a public SDK method — a tool added with
+    # it would be advertised to models, would take whatever arguments it liked
+    # including a tenant id, and would write no audit row. Nothing about it would
+    # look wrong in review; it would simply be a tool, sitting next to the others.
+    #
+    # RLS is inert under this app's database role, so `register` is not a
+    # formality, it is the isolation boundary. Comparing the advertised set
+    # against what we registered turns "please always use register()" from a
+    # convention someone has to remember into a startup failure.
+    advertised = {tool.name for tool in server._tool_manager.list_tools()}  # noqa: SLF001
+    unregistered = advertised - registered
+    if unregistered:
+        raise UnregisteredTool(
+            f"MCP tools {sorted(unregistered)} are advertised but did not go through "
+            f"app.mcp.tools.register(). They therefore skip the tenant-parameter guard "
+            f"and the audit wrapper. Register them properly rather than relaxing this "
+            f"check — tenancy here rests on the tool surface, not on RLS."
+        )
+
+    logger.info("mcp_server_built", extra={"tool_count": len(registered)})
     return server
