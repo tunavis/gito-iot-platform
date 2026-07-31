@@ -24,7 +24,7 @@
 - [x] 2.3 Add a registration-time guard that raises at import if any registered
       tool's input schema contains `tenant_id` — the rule must be enforced by the
       code, not by review discipline. This is the single most important task here.
-- [ ] 2.4 Every tool body calls `validate_tenant_access()` and
+- [x] 2.4 Every tool body calls `validate_tenant_access()` and
       `set_tenant_context()` as the routers do — defence in depth, given RLS is
       inert under the app's superuser connection.
 - [x] 2.5 Filter the advertised tool list by role: `VIEWER`/`CLIENT` see read
@@ -48,27 +48,27 @@
 
 Each wraps an existing service/router function and contains no SQL of its own.
 
-- [ ] 4.1 `list_devices` — filters: site, group, device type, status. Wraps the
+- [x] 4.1 `list_devices` — filters: site, group, device type, status. Wraps the
       existing device list path.
-- [ ] 4.2 `get_device` — detail plus current status; inlines the metric names and
+- [x] 4.2 `get_device` — detail plus current status; inlines the metric names and
       units from the device type's telemetry schema, so no separate
       device-type lookup tool is needed.
-- [ ] 4.3 `get_device_telemetry` — device + metric + time window, raw readings.
-- [ ] 4.4 `get_telemetry_aggregate` — min/max/avg/count over a window; wraps
+- [x] 4.3 `get_device_telemetry` — device + metric + time window, raw readings.
+- [x] 4.4 `get_telemetry_aggregate` — min/max/avg/count over a window; wraps
       `telemetry_aggregate.py`.
-- [ ] 4.5 `list_active_alarms` — by severity/site.
-- [ ] 4.6 `get_alarm_history` — occurrences over a window for a device or rule.
-- [ ] 4.7 `list_alert_rules` — reads values through the rule's API-format
+- [x] 4.5 `list_active_alarms` — by severity/site.
+- [x] 4.6 `get_alarm_history` — occurrences over a window for a device or rule.
+- [x] 4.7 `list_alert_rules` — reads values through the rule's API-format
       response representation, never raw columns (`unified_alert_rule.py:61-75`
       documents why comparing raw `rule_type`/`severity` silently matches nothing).
-- [ ] 4.8 `get_hierarchy` — wraps `hierarchy.py`.
-- [ ] 4.9 `get_fleet_health` — online/offline/alarming counts, tenant-wide.
-- [ ] 4.10 Shared result shaping: names alongside UUIDs, units from the telemetry
+- [x] 4.8 `get_hierarchy` — wraps `hierarchy.py`.
+- [x] 4.9 `get_fleet_health` — online/offline/alarming counts, tenant-wide.
+- [x] 4.10 Shared result shaping: names alongside UUIDs, units from the telemetry
       schema, ISO-8601 UTC timestamps.
-- [ ] 4.11 Shared result capping that **states the truncation** in the response
+- [x] 4.11 Shared result capping that **states the truncation** in the response
       ("showing 50 of 213"). A silent prefix is how an agent confidently reports
       a wrong fleet count.
-- [ ] 4.12 `get_asset_tree` — assets with their subtree-inclusive device and alarm
+- [x] 4.12 `get_asset_tree` — assets with their subtree-inclusive device and alarm
       rollups; wraps `services/asset_tree.py`. **Added after this change was
       written.** The asset registry did not exist then, and the strategy sequenced
       it *before* MCP precisely so agents could answer asset-shaped questions

@@ -25,14 +25,20 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
+from fastapi import HTTPException
 from mcp.server.mcpserver import Context, MCPServer
 
 from app.mcp.audit import audited
-from app.mcp.auth import MCPAuthError, ToolContext, resolve_context
+from app.mcp.auth import MCPAuthError, resolve_context
 
 logger = logging.getLogger(__name__)
+
+# Only the statuses a read path actually produces. Anything else stays "error"
+# rather than being given a reassuring name it may not deserve.
+_ERROR_KINDS = {403: "forbidden", 404: "not_found", 400: "bad_request", 422: "bad_request"}
 
 # Argument names that would let a caller choose whose data to read. `user_id` and
 # `organization_id` are here for the same reason `tenant_id` is: all three are
@@ -99,8 +105,19 @@ def register(
     # Rebuild the signature without `ctx` so the SDK advertises only the arguments
     # a caller actually supplies. Without this the model would be asked to invent
     # a ToolContext.
+    #
+    # The annotations are resolved to real types first. Tool modules use `from
+    # __future__ import annotations`, so `inspect.signature` hands back strings
+    # like "UUID | None"; the SDK evaluates a signature against the *entry
+    # function's* globals, which are this module's, where those names do not
+    # exist. get_type_hints resolves them where they were written instead.
     original = inspect.signature(fn)
-    caller_params = [p for n, p in original.parameters.items() if n != "ctx"]
+    hints = get_type_hints(fn)
+    caller_params = [
+        p.replace(annotation=hints.get(n, p.annotation))
+        for n, p in original.parameters.items()
+        if n != "ctx"
+    ]
 
     async def tool_entry(context: Context, **kwargs: Any) -> Any:
         try:
@@ -120,7 +137,15 @@ def register(
                 ),
             }
 
-        return await body(ctx, **kwargs)
+        try:
+            return await body(ctx, **kwargs)
+        except HTTPException as e:
+            # The tools wrap router functions, which signal "not found" and
+            # "denied" by raising HTTPException. There is no HTTP response to
+            # put a status on here, and a traceback tells a model nothing it can
+            # act on — so it becomes a refusal it can read. The audit row was
+            # already written as an error by `body`, before this catch.
+            return {"error": _ERROR_KINDS.get(e.status_code, "error"), "detail": str(e.detail)}
 
     tool_entry.__name__ = name
     tool_entry.__doc__ = description
@@ -158,11 +183,18 @@ def register_all(server: MCPServer) -> int:
     Tools are added group by group as the change progresses; the guards above
     apply uniformly to all of them.
     """
+    from app.mcp.tools.read import READ_TOOLS
+
     registered = 0
 
-    # Read tools (tasks 4.1-4.12) and the approval-gated write (5.2) land here.
-    # The guards are already active, so the first tool added is checked exactly
-    # like the last.
+    # Read tools (tasks 4.1-4.12). Available to every role, including VIEWER and
+    # CLIENT — MCP grants no authority the same user lacks in the UI, and reading
+    # is what those roles already do there.
+    for name, fn, description in READ_TOOLS:
+        register(server, name, fn, description=description)
+        registered += 1
+
+    # The approval-gated write (5.2) lands here with requires_command_role=True.
 
     logger.info("mcp_tools_registered", extra={"count": registered})
     return registered
