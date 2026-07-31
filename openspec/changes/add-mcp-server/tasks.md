@@ -39,7 +39,7 @@
       `mcp.tool.<name>`, resource type/id when the tool targets one, the call
       arguments, and the result *shape* (row count or error) — not the result
       payload.
-- [ ] 3.3 Confirm MCP entries render in the existing `/tenants/{id}/audit-logs`
+- [x] 3.3 Confirm MCP entries render in the existing `/tenants/{id}/audit-logs`
       endpoint and the audit-logs UI with no changes to either.
 - [x] 3.4 Test: assert that a tool registered without going through the wrapper
       fails the registration guard.
@@ -92,7 +92,7 @@ Each wraps an existing service/router function and contains no SQL of its own.
 
 ## 6. Verification
 
-- [ ] 6.1 **Tenant isolation test per exposed tool** — with tenant A's token,
+- [x] 6.1 **Tenant isolation test per exposed tool** — with tenant A's token,
       request tenant B's device/site/rule ids by UUID; assert every tool returns
       empty or 403 and never B's data. This is the suite that matters.
 - [x] 6.2 Assert no registered tool's JSON schema contains a tenant identifier
@@ -103,9 +103,9 @@ Each wraps an existing service/router function and contains no SQL of its own.
 - [x] 6.5 Startup test: mismatched protocol version fails the boot.
 - [x] 6.6 `MCP_ENABLED=false` → `/mcp` is not mounted (404), and the rest of the
       API is unaffected.
-- [ ] 6.7 Run the full suite in-container per the project convention:
+- [x] 6.7 Run the full suite in-container per the project convention:
       `docker exec gito-api python -m pytest tests/ -q`.
-- [ ] 6.8 End-to-end: connect a real MCP client with a demo-tenant token, list
+- [x] 6.8 End-to-end: connect a real MCP client with a demo-tenant token, list
       tools, run `get_fleet_health` and `list_active_alarms` against live data,
       and confirm both calls appear in the audit-logs UI.
 
