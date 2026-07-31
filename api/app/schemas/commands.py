@@ -34,6 +34,11 @@ class CommandResponse(BaseModel):
     expires_at: datetime
     sent_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    # Approval gate. NULL on everything issued through the ordinary POST, which
+    # is ungated — absent approval here means it was never required.
+    requested_by: Optional[UUID] = None
+    approved_by: Optional[UUID] = None
+    approved_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

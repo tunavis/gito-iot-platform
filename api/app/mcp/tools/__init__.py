@@ -50,6 +50,13 @@ class ForbiddenToolParameter(RuntimeError):
     """A tool tried to expose an authorization-determining parameter."""
 
 
+# Names of tools that only command-issuing roles may see or call. A name
+# allowlist rather than per-server state: the names are fixed at import, so a
+# test that builds a second server adds nothing new. `TenantScopedMCPServer`
+# reads this when answering tools/list.
+COMMAND_ROLE_TOOLS: set[str] = set()
+
+
 def assert_no_tenant_parameters(name: str, fn: Callable) -> None:
     """Reject a tool whose signature names a parameter that would select a tenant.
 
@@ -100,6 +107,8 @@ def register(
     already-resolved caller and never sees headers or tokens.
     """
     assert_no_tenant_parameters(name, fn)
+    if requires_command_role:
+        COMMAND_ROLE_TOOLS.add(name)
     body = audited(name, fn)
 
     # Rebuild the signature without `ctx` so the SDK advertises only the arguments
@@ -184,6 +193,7 @@ def register_all(server: MCPServer) -> int:
     apply uniformly to all of them.
     """
     from app.mcp.tools.read import READ_TOOLS
+    from app.mcp.tools.write import WRITE_TOOLS
 
     registered = 0
 
@@ -194,7 +204,12 @@ def register_all(server: MCPServer) -> int:
         register(server, name, fn, description=description)
         registered += 1
 
-    # The approval-gated write (5.2) lands here with requires_command_role=True.
+    # The approval-gated write. Advertised only to roles that may issue commands
+    # today, so a VIEWER is not shown an affordance it would be refused — and
+    # refused again by the role check in `tool_entry` if it calls it anyway.
+    for name, fn, description in WRITE_TOOLS:
+        register(server, name, fn, description=description, requires_command_role=True)
+        registered += 1
 
     logger.info("mcp_tools_registered", extra={"count": registered})
     return registered

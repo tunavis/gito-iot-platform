@@ -9,11 +9,13 @@ process would need its own copy of all three.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from mcp.server.mcpserver import MCPServer
-from mcp.types import LATEST_PROTOCOL_VERSION
+from mcp.types import LATEST_PROTOCOL_VERSION, ListToolsResult
 
 from app.config import get_settings
+from app.mcp.auth import MCPAuthError, resolve_context
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,45 @@ def assert_protocol_version() -> str:
     return pinned
 
 
+class TenantScopedMCPServer(MCPServer):
+    """An MCPServer that advertises only the tools the caller may actually use.
+
+    Every tool is still refused at call time by its own role check — this is not
+    the security boundary, and it must never be mistaken for one. It exists
+    because a model shown a tool it will be refused does not simply skip it: it
+    plans around it, calls it, and reports a confusing failure to a person who
+    asked a reasonable question.
+
+    Overriding a private handler is deliberate. There is no public seam for a
+    per-caller tool list; the middleware chain the SDK offers is marked
+    provisional and expected to change before v2. If a future SDK renames this
+    method the override silently stops applying, so
+    `test_list_tools_override_still_hooks_the_sdk` asserts the method still
+    exists on the base class — a filter that degrades to a no-op is worse than
+    one that fails the boot.
+    """
+
+    async def _handle_list_tools(self, ctx: Any, params: Any) -> ListToolsResult:
+        result = await super()._handle_list_tools(ctx, params)
+
+        # Same header source `Context.headers` uses for tool calls, so listing
+        # and calling can never disagree about who is asking.
+        headers = getattr(getattr(ctx, "request", None), "headers", None)
+        try:
+            caller = await resolve_context(dict(headers) if headers else None)
+        except MCPAuthError:
+            # Task 2.1: no tool listing before the credential resolves. An
+            # anonymous caller learns nothing about this tenant's capabilities.
+            return ListToolsResult(tools=[])
+
+        if caller.may_issue_commands:
+            return result
+
+        from app.mcp.tools import COMMAND_ROLE_TOOLS
+
+        return ListToolsResult(tools=[t for t in result.tools if t.name not in COMMAND_ROLE_TOOLS])
+
+
 def build_mcp_server() -> MCPServer:
     """Construct the MCP server with every tool registered.
 
@@ -55,7 +96,7 @@ def build_mcp_server() -> MCPServer:
     """
     settings = get_settings()
 
-    server = MCPServer(
+    server = TenantScopedMCPServer(
         name=SERVER_NAME,
         title="Gito IoT",
         version=settings.API_VERSION,

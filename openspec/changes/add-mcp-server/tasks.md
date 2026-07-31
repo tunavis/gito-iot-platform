@@ -78,16 +78,16 @@ Each wraps an existing service/router function and contains no SQL of its own.
 
 ## 5. Approval-gated write
 
-- [ ] 5.1 Migration: pending-approval state for device commands.
-- [ ] 5.2 `send_device_command` records a pending approval and returns its
+- [x] 5.1 Migration: pending-approval state for device commands.
+- [x] 5.2 `send_device_command` records a pending approval and returns its
       reference. It dispatches nothing.
-- [ ] 5.3 Tool description states plainly that the command is *requested*, not
+- [x] 5.3 Tool description states plainly that the command is *requested*, not
       executed, so the model reports "requested approval to…" rather than
       claiming the action happened.
-- [ ] 5.4 `api/app/routers/commands.py` honours the pending state; approval
+- [x] 5.4 `api/app/routers/commands.py` honours the pending state; approval
       through the existing path dispatches normally. Commands issued via the
       existing UI/REST path are unchanged and stay ungated.
-- [ ] 5.5 Test: an approved command dispatches exactly once; an unapproved one
+- [x] 5.5 Test: an approved command dispatches exactly once; an unapproved one
       never reaches the device path.
 
 ## 6. Verification
@@ -99,7 +99,7 @@ Each wraps an existing service/router function and contains no SQL of its own.
       (the guard from 2.3, tested).
 - [ ] 6.3 Audit coverage test: N tool calls produce N audit rows with correct
       actor and action.
-- [ ] 6.4 Approval-gate tests from 5.5.
+- [x] 6.4 Approval-gate tests from 5.5.
 - [ ] 6.5 Startup test: mismatched protocol version fails the boot.
 - [ ] 6.6 `MCP_ENABLED=false` → `/mcp` is not mounted (404), and the rest of the
       API is unaffected.
