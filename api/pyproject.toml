@@ -15,18 +15,23 @@ readme = "README.md"
 keywords = ["iot", "fastapi", "multi-tenant", "timescaledb"]
 
 dependencies = [
-    "fastapi==0.104.1",
-    "uvicorn[standard]==0.24.0",
+    # fastapi/pydantic/uvicorn/python-multipart were lifted together in one step
+    # because the MCP SDK cannot be installed under the old pins: it needs
+    # anyio>=4.5 and a modern starlette, and fastapi 0.104.1 caps anyio<4.0.0 and
+    # starlette<0.28.0. These versions are the set pip resolves when mcp==2.0.0 is
+    # part of the requirement set, so the follow-up MCP change is a one-line add.
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.0",
     "sqlalchemy[asyncio]==2.0.23",
     "asyncpg==0.29.0",
     "psycopg[binary]==3.3.2",
     "psycopg2-binary==2.9.9",
     "alembic==1.13.0",
-    "pydantic==2.5.0",
-    "pydantic-settings==2.1.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
     "pyjwt==2.11.0",
     "passlib[bcrypt]==1.7.4",
-    "python-multipart==0.0.6",
+    "python-multipart==0.0.32",
     "python-dotenv==1.0.0",
     "redis==5.0.1",
     "tenacity==8.2.3",
