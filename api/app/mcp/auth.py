@@ -17,7 +17,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from app.dependencies import get_current_user_info
+from app.dependencies import get_current_user_info, may_actuate_device
 
 
 class MCPAuthError(RuntimeError):
@@ -43,13 +43,14 @@ class ToolContext:
 
     @property
     def may_issue_commands(self) -> bool:
-        """Roles allowed to request a device command today.
+        """Roles allowed to request a device command.
 
-        Mirrors the platform's existing RBAC ladder rather than inventing an
-        MCP-specific one: VIEWER and CLIENT are read-only in the UI, so they must
-        not gain a write path by connecting over MCP instead.
+        Reads the platform's own rule rather than restating it. This used to
+        carry its own copy of the role set, which was correct only for as long as
+        nobody changed the other one — and the REST command endpoint had no role
+        check at all, so the two already disagreed.
         """
-        return (self.role or "").upper() in {"SUPER_ADMIN", "TENANT_ADMIN", "SITE_ADMIN"}
+        return may_actuate_device(self.role)
 
 
 def _bearer_from_headers(headers: dict[str, str] | None) -> str | None:

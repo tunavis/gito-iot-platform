@@ -340,6 +340,10 @@ def create_app() -> FastAPI:
     app.include_router(device_credentials.router, prefix="/api/v1")  # Token CRUD
     app.include_router(device_ingest.router, prefix="/api/v1")  # Token-based ingest
     app.include_router(commands.router, prefix="/api/v1")  # Device RPC commands
+    # Tenant-scoped approval queue — same module, different prefix, because it
+    # answers "what is waiting anywhere in my fleet" rather than "what happened
+    # to this device".
+    app.include_router(commands.approvals_router, prefix="/api/v1")
     app.include_router(solution_templates_router.router, prefix="/api/v1")  # Solution templates
     app.include_router(
         integrations_router.router, prefix="/api/v1"

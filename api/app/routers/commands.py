@@ -17,17 +17,37 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.database import get_session, RLSSession
-from app.models.base import Device, DeviceCommand
+from app.models.base import Device, DeviceCommand, User
 from app.models.device_type import DeviceType
-from app.schemas.commands import CommandCreate, CommandListResponse, CommandResponse
+from app.models.site import Site
+from app.schemas.commands import (
+    CommandCreate,
+    CommandListResponse,
+    CommandResponse,
+    PendingApproval,
+    PendingApprovalListResponse,
+)
 from app.services.command_dispatch import CommandDispatchService
 from app.services.tenant_access import validate_tenant_access
-from app.dependencies import get_current_tenant, get_current_user_id
+from app.dependencies import get_current_tenant, require_command_role
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}/devices/{device_id}/commands",
+    tags=["device-commands"],
+)
+
+# A second router, tenant-scoped rather than device-scoped. The approval queue
+# has to answer "what is waiting anywhere in my fleet", and the device-scoped
+# list above can only answer it for someone who already knows which device to
+# suspect — which is the whole reason a requested command was invisible.
+#
+# Kept in this file rather than a new module: everything that decides whether a
+# command reaches a device lives together, for the same reason
+# `request_command_approval` does.
+approvals_router = APIRouter(
+    prefix="/tenants/{tenant_id}/command-approvals",
     tags=["device-commands"],
 )
 
@@ -92,6 +112,59 @@ async def _dispatch_now(
     return command
 
 
+async def _lock_pending_for_decision(
+    session: RLSSession,
+    tenant_id: UUID,
+    device_id: UUID,
+    command_id: UUID,
+    current_tenant: UUID,
+) -> tuple[Device, DeviceCommand, datetime]:
+    """Load a command that is genuinely awaiting a decision, and hold the row.
+
+    Shared by approve and reject so the preconditions cannot drift apart — a
+    reject that accepted an already-approved command, or skipped the lock, would
+    be a quiet hole in the same gate approve is careful about.
+
+    Returns `(device, command, now)`; `now` is returned rather than re-read so
+    both the expiry check and the timestamps written afterwards agree on one
+    instant.
+    """
+    device = await _resolve_device(session, tenant_id, device_id, current_tenant)
+
+    result = await session.execute(
+        select(DeviceCommand).where(
+            DeviceCommand.id == command_id,
+            DeviceCommand.tenant_id == tenant_id,
+            DeviceCommand.device_id == device_id,
+        )
+        # Locked for the duration: two decisions arriving together would both
+        # read 'awaiting_approval' and both proceed, which for a command that
+        # moves plant is the one outcome this whole gate exists to prevent.
+        .with_for_update()
+    )
+    command = result.scalar_one_or_none()
+    if not command:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Command not found")
+
+    if command.status != "awaiting_approval":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Command is {command.status!r}, not awaiting approval.",
+        )
+
+    now = datetime.now(timezone.utc)
+    if command.expires_at <= now:
+        command.status = "timed_out"
+        command.completed_at = now
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Approval window has passed; request the command again.",
+        )
+
+    return device, command, now
+
+
 async def _resolve_device(
     session: RLSSession,
     tenant_id: UUID,
@@ -125,12 +198,18 @@ async def send_command(
     body: CommandCreate,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+    _actor: Annotated[UUID, Depends(require_command_role)] = None,
 ):
     """Send an RPC command to a device.
 
     The command is dispatched via the device's native protocol (MQTT, HTTP, or LoRaWAN).
     The device should respond through its telemetry channel with the command_id to
     confirm execution.
+
+    Restricted to roles that may actuate a device. This endpoint previously
+    accepted any authenticated tenant user, which made the approval gate on the
+    agent path walkable: anyone refused at approve could issue the identical
+    command here.
     """
     device = await _resolve_device(session, tenant_id, device_id, current_tenant)
     await _assert_supports_commands(session, device)
@@ -151,6 +230,69 @@ async def send_command(
     return await _dispatch_now(session, device, command)
 
 
+@approvals_router.get("", response_model=PendingApprovalListResponse)
+async def list_pending_approvals(
+    tenant_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+):
+    """Every command in this tenant waiting on a human decision.
+
+    Expired requests are excluded rather than shown greyed out: an approver
+    cannot act on one — approve refuses it — so listing it offers a decision
+    that does not exist. They fall out of the queue and can be re-requested.
+
+    Readable by any tenant user; only deciding is role-restricted. Someone who
+    may not approve can still usefully see that something is waiting.
+    """
+    if not await validate_tenant_access(session, current_tenant, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
+
+    await session.set_tenant_context(tenant_id)
+
+    rows = (
+        (
+            await session.execute(
+                select(
+                    DeviceCommand.id,
+                    DeviceCommand.device_id,
+                    Device.name.label("device_name"),
+                    Device.site_id,
+                    Site.name.label("site_name"),
+                    DeviceCommand.command_name,
+                    DeviceCommand.parameters,
+                    DeviceCommand.request_reason,
+                    DeviceCommand.requested_by,
+                    User.email.label("requested_by_email"),
+                    DeviceCommand.created_at,
+                    DeviceCommand.expires_at,
+                )
+                .join(Device, Device.id == DeviceCommand.device_id)
+                # Outer joins: a device need not sit at a site, and `requested_by` is
+                # nullable and SET NULL on user delete. An inner join would silently
+                # drop exactly the requests nobody is left to explain.
+                .outerjoin(Site, Site.id == Device.site_id)
+                .outerjoin(User, User.id == DeviceCommand.requested_by)
+                .where(
+                    DeviceCommand.tenant_id == tenant_id,
+                    DeviceCommand.status == "awaiting_approval",
+                    DeviceCommand.expires_at > datetime.now(timezone.utc),
+                )
+                # Oldest first: the one closest to lapsing is the one that needs a
+                # decision soonest.
+                .order_by(DeviceCommand.created_at.asc())
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+    items = [PendingApproval(**row) for row in rows]
+    # The count is the length of what was returned, not a second COUNT query —
+    # a badge that disagrees with the list it links to is worse than no badge.
+    return PendingApprovalListResponse(data=items, total=len(items))
+
+
 async def request_command_approval(
     session: RLSSession,
     tenant_id: UUID,
@@ -159,6 +301,7 @@ async def request_command_approval(
     command_name: str,
     parameters: dict,
     requested_by: UUID,
+    reason: str,
 ) -> DeviceCommand:
     """Record a command for a person to approve. Dispatches nothing.
 
@@ -181,6 +324,10 @@ async def request_command_approval(
         parameters=parameters,
         status="awaiting_approval",
         requested_by=requested_by,
+        # Capped rather than validated: this is free text from a model, and the
+        # approver reads it. It is never dispatched to a device and never
+        # interpolated into SQL; React escapes it on the way to the screen.
+        request_reason=(reason or "").strip()[:1000],
         created_at=now,
         # The clock this row is waiting on is a person, not a radio, so it gets
         # the approval window. The device-response TTL starts at approval.
@@ -199,7 +346,7 @@ async def approve_command(
     command_id: UUID,
     session: Annotated[RLSSession, Depends(get_session)],
     current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
-    current_user_id: Annotated[UUID, Depends(get_current_user_id)] = None,
+    current_user_id: Annotated[UUID, Depends(require_command_role)] = None,
 ):
     """Approve a command that was requested but not sent, and dispatch it.
 
@@ -207,42 +354,15 @@ async def approve_command(
     through the ordinary POST above is dispatched immediately and is not gated,
     so there is nothing here to approve.
 
-    Authorization matches the POST endpoint: tenant access. Requiring more of an
-    approver than of someone who can already send the same command unapproved
-    would be theatre, and the narrower rule belongs on both or neither.
+    Restricted to roles that may actuate a device — the same rule the POST above
+    now carries, so an approver is someone who could have issued the command
+    themselves. Self-approval is permitted and reported: blocking it would break
+    single-admin tenants and buy nothing, since that admin can use the POST path
+    directly. The control this gate provides is that a human looked.
     """
-    device = await _resolve_device(session, tenant_id, device_id, current_tenant)
-
-    result = await session.execute(
-        select(DeviceCommand).where(
-            DeviceCommand.id == command_id,
-            DeviceCommand.tenant_id == tenant_id,
-            DeviceCommand.device_id == device_id,
-        )
-        # Locked for the duration: two approvals arriving together would both
-        # read 'awaiting_approval' and both dispatch, which for a command that
-        # moves plant is the one outcome this whole gate exists to prevent.
-        .with_for_update()
+    device, command, now = await _lock_pending_for_decision(
+        session, tenant_id, device_id, command_id, current_tenant
     )
-    command = result.scalar_one_or_none()
-    if not command:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Command not found")
-
-    if command.status != "awaiting_approval":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Command is {command.status!r}, not awaiting approval.",
-        )
-
-    now = datetime.now(timezone.utc)
-    if command.expires_at <= now:
-        command.status = "timed_out"
-        command.completed_at = now
-        await session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Approval window has passed; request the command again.",
-        )
 
     command.approved_by = current_user_id
     command.approved_at = now
@@ -252,6 +372,38 @@ async def approve_command(
     command.expires_at = now + timedelta(seconds=DEVICE_RESPONSE_TTL_SECONDS)
 
     return await _dispatch_now(session, device, command)
+
+
+@router.post("/{command_id}/reject", response_model=CommandResponse)
+async def reject_command(
+    tenant_id: UUID,
+    device_id: UUID,
+    command_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+    current_user_id: Annotated[UUID, Depends(require_command_role)] = None,
+):
+    """Refuse a requested command. Nothing is dispatched, and the refusal is kept.
+
+    The point of recording this rather than letting the request lapse: without
+    it, "nobody approved this" and "someone looked at it and said no" are the
+    same row, which is exactly the distinction an audit of agent behaviour needs.
+
+    Terminal. A rejected command is never swept to `timed_out` — the sweep only
+    touches pending/sent/delivered — because rewriting it would erase the refusal.
+    """
+    _, command, now = await _lock_pending_for_decision(
+        session, tenant_id, device_id, command_id, current_tenant
+    )
+
+    command.rejected_by = current_user_id
+    command.rejected_at = now
+    command.status = "rejected"
+    command.completed_at = now
+
+    await session.commit()
+    await session.refresh(command)
+    return command
 
 
 @router.get("", response_model=CommandListResponse)

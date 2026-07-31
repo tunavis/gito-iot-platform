@@ -9,6 +9,7 @@ import IconTile from '@/components/ui/IconTile';
 import { btn, input } from '@/components/ui/buttonStyles';
 import { formatMetricLabel } from '@/lib/formatMetricLabel';
 import { formatNumeric } from '@/lib/formatNumeric';
+import { currentUserMayActuateDevice } from '@/lib/auth';
 import {
   Activity,
   Battery,
@@ -1039,6 +1040,9 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
   const commandSchema = deviceType?.command_schema || {};
   const capabilities = deviceType?.capabilities || [];
   const hasCommandsCapability = capabilities.includes('commands');
+  // Sending a command is role-restricted server-side; mirror it here so the
+  // controls are absent rather than present-and-failing.
+  const mayDecideCommands = currentUserMayActuateDevice();
   const schemaEntries = Object.entries(commandSchema);
 
   // Quick actions: commands with no required parameters
@@ -1345,8 +1349,27 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
         </div>
       )}
 
+      {/* Role guard. Issuing a command is restricted to roles that may actuate a
+          device; without this a read-only user sees a Send button that returns
+          403, and cannot tell "not allowed" from "broken". The API is the real
+          check — this only stops offering an action we know will be refused. */}
+      {!mayDecideCommands && (
+        <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-semibold text-th-primary">Read-only access</h3>
+              <p className="text-sm text-th-secondary mt-1">
+                Your role can view this device&apos;s command history but not send
+                commands. Ask a site or tenant administrator if one is needed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Capability guard */}
-      {deviceType && !hasCommandsCapability && (
+      {mayDecideCommands && deviceType && !hasCommandsCapability && (
         <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
@@ -1362,7 +1385,7 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
       )}
 
       {/* Quick Actions */}
-      {hasCommandsCapability && quickActions.length > 0 && (
+      {mayDecideCommands && hasCommandsCapability && quickActions.length > 0 && (
         <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-th-primary flex items-center gap-2">
@@ -1415,7 +1438,7 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
       )}
 
       {/* Command Form (schema-driven or custom) */}
-      {(hasCommandsCapability || !deviceType) && (
+      {mayDecideCommands && (hasCommandsCapability || !deviceType) && (
         <div className="bg-surface rounded-xl border border-th-default shadow-sm p-6">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-th-primary flex items-center gap-2">

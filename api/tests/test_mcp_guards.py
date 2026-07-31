@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 
 from app.mcp.auth import ToolContext
 from app.mcp.tools import (
@@ -27,6 +28,9 @@ from app.mcp.tools import (
     assert_schema_has_no_tenant,
     register,
 )
+
+
+READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False)
 
 
 def _server() -> MCPServer:
@@ -49,18 +53,20 @@ class TestTenantParameterGuard:
             ns,
         )
         with pytest.raises(ForbiddenToolParameter) as exc:
-            register(_server(), "bad_tool", ns["bad_tool"], description="bad")
+            register(
+                _server(), "bad_tool", ns["bad_tool"], description="bad", annotations=READ_ONLY
+            )
         assert bad_param in str(exc.value)
 
     def test_good_tool_registers(self):
         server = _server()
-        register(server, "list_devices", _ok_tool, description="fine")
+        register(server, "list_devices", _ok_tool, description="fine", annotations=READ_ONLY)
         assert server._tool_manager.get_tool("list_devices") is not None
 
     def test_ctx_is_not_treated_as_a_caller_parameter(self):
         """`ctx` is injected, so it must not be flagged or advertised."""
         server = _server()
-        register(server, "ok", _ok_tool, description="fine")
+        register(server, "ok", _ok_tool, description="fine", annotations=READ_ONLY)
         tool = server._tool_manager.get_tool("ok")
         props = (tool.parameters or {}).get("properties") or {}
         assert "ctx" not in props
@@ -130,6 +136,14 @@ class TestNoToolBypassesTheRegistrar:
                 build_mcp_server()
 
         assert "smuggled" in str(exc.value)
+
+    def test_a_tool_must_declare_whether_it_is_destructive(self):
+        """Task 5.5. `annotations` has no default, so omitting it is a TypeError
+        at registration — which happens during app construction, so a tool that
+        never says what it does fails the boot rather than being advertised with
+        an effect the registrar guessed on its behalf."""
+        with pytest.raises(TypeError, match="annotations"):
+            register(_server(), "undeclared", _ok_tool, description="says nothing")
 
     def test_the_honest_server_builds(self):
         """The guard must not fire on the real tool set — a check that always
