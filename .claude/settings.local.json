@@ -59,7 +59,9 @@
       "Bash(openspec validate *)",
       "Bash(openspec status *)",
       "Skill(openspec-apply-change)",
-      "mcp__plugin_context-mode_context-mode__ctx_execute"
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "mcp__plugin_context-mode_context-mode__ctx_fetch_and_index",
+      "mcp__plugin_playwright_playwright__browser_snapshot"
     ]
   },
   "enabledMcpjsonServers": [

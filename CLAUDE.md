@@ -278,6 +278,41 @@ dashboard builder is also out of scope; it is a layout grid, not a graph.
 
 ---
 
+## 🤖 MCP Server — `api/app/mcp/`
+
+Agent-facing tools live in `api/app/mcp/`, mounted at `/mcp` on the same FastAPI
+app and **off by default** (`MCP_ENABLED=false` → the route is not mounted at
+all). Full documentation: `docs/MCP_SERVER.md`.
+
+Three rules, all enforced by code rather than by review:
+
+1. **No tool may accept `tenant_id`, `user_id`, or `organization_id`.** Tenancy
+   comes from the bearer credential. The registrar checks both the function
+   signature and the advertised JSON schema and raises at import, so a violation
+   fails the boot. This is the actual isolation boundary — **RLS is inert in this
+   deployment** because the app connects as the database owner, so there is
+   nothing underneath to catch a tool that took a tenant id.
+
+2. **Tools wrap existing routers/services and add no query logic.** A tool with
+   its own SELECT is a second implementation of "which devices are offline",
+   free to drift from the one the UI uses, and nobody notices until an agent
+   contradicts a screen. `shape.py`'s `call_route()` calls a route function
+   directly and resolves its `Query(...)` defaults — note that FastAPI's
+   validators do *not* run on that path, so bounded arguments must be clamped by
+   the tool.
+
+3. **Every tool is audited and every session is guarded by construction.**
+   `register()` applies the audit wrapper, and `tool_session()` is the only way
+   a tool gets a session (it applies the tenant guard and RLS context).
+   `tools/read.py` deliberately cannot import `get_session`.
+
+Writes are approval-gated: `send_device_command` records a command with
+`status='awaiting_approval'` and dispatches nothing. A person approves via
+`POST /tenants/{id}/devices/{id}/commands/{id}/approve`. The ordinary UI/REST
+command path is unchanged and stays ungated.
+
+---
+
 ## 🐛 Common Mistakes to Avoid
 
 ### 1. API Response Handling
@@ -418,6 +453,6 @@ in-flight work.
 
 ---
 
-**Last Updated**: 2026-07-14
+**Last Updated**: 2026-07-31
 **Maintained By**: Claude (AI Assistant)
 **Project Status**: Active Development

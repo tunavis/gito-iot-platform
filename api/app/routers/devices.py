@@ -46,6 +46,13 @@ async def list_devices(
     organization_id: Optional[UUID] = Query(None),
     site_id: Optional[UUID] = Query(None),
     device_group_id: Optional[UUID] = Query(None),
+    device_type: Optional[str] = Query(None, description="Filter by device type name"),
+    # Named device_status (not status) — a parameter named `status` shadows the
+    # fastapi.status module for the whole function body, so the 403 below would
+    # raise AttributeError instead of returning 403. alias= keeps the query key.
+    device_status: Optional[str] = Query(
+        None, alias="status", description="Filter by device status, e.g. online/offline"
+    ),
     search: Optional[str] = Query(
         None,
         max_length=255,
@@ -78,6 +85,12 @@ async def list_devices(
     if device_group_id:
         query = query.where(Device.device_group_id == device_group_id)
         count_query = count_query.where(Device.device_group_id == device_group_id)
+    if device_type:
+        query = query.where(Device.device_type == device_type)
+        count_query = count_query.where(Device.device_type == device_type)
+    if device_status:
+        query = query.where(Device.status == device_status)
+        count_query = count_query.where(Device.status == device_status)
     if search and search.strip():
         pattern = device_search_pattern(search)
         search_filter = or_(

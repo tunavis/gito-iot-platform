@@ -22,7 +22,7 @@ from app.models.device_type import DeviceType
 from app.schemas.commands import CommandCreate, CommandListResponse, CommandResponse
 from app.services.command_dispatch import CommandDispatchService
 from app.services.tenant_access import validate_tenant_access
-from app.dependencies import get_current_tenant
+from app.dependencies import get_current_tenant, get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,63 @@ router = APIRouter(
 
 _dispatch = CommandDispatchService()
 
+# How long a requested-but-unapproved command stays approvable. Long enough that
+# an agent's request survives someone's lunch, short enough that approving one
+# found the next morning is a deliberate act rather than a stale click.
+APPROVAL_WINDOW = timedelta(hours=24)
+
+# The device's window to answer, measured from approval. Matches CommandCreate's
+# ttl_seconds default — the approval path takes no TTL of its own, because the
+# requester is a model and the number would be a guess.
+DEVICE_RESPONSE_TTL_SECONDS = 60
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+async def _assert_supports_commands(session: RLSSession, device: Device) -> None:
+    """Reject a command the device type says it cannot accept.
+
+    Checked before recording an approval request too, not only before
+    dispatching: putting a command a device can never run in front of a person
+    to approve wastes the one reviewer the gate exists to involve.
+    """
+    if not device.device_type_id:
+        return
+    result = await session.execute(select(DeviceType).where(DeviceType.id == device.device_type_id))
+    device_type = result.scalar_one_or_none()
+    caps = device_type.capabilities if device_type else None
+    if isinstance(caps, list) and "commands" not in caps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Device type does not support commands",
+        )
+
+
+async def _dispatch_now(
+    session: RLSSession, device: Device, command: DeviceCommand
+) -> DeviceCommand:
+    """Send a command to its device and record the outcome.
+
+    The only place a command is dispatched. Both the ungated POST and the
+    approval endpoint come through here, so "sent" means the same thing whichever
+    path created the command, and there is one place to look when it does not.
+    """
+    success, error = await _dispatch.dispatch(device, command)
+
+    if success:
+        command.status = "sent"
+        command.sent_at = datetime.now(timezone.utc)
+    else:
+        command.status = "failed"
+        command.error_message = error
+        command.completed_at = datetime.now(timezone.utc)
+
+    await session.commit()
+    await session.refresh(command)
+    return command
 
 
 async def _resolve_device(
@@ -80,20 +133,7 @@ async def send_command(
     confirm execution.
     """
     device = await _resolve_device(session, tenant_id, device_id, current_tenant)
-
-    # Check device type capabilities if available
-    if device.device_type_id:
-        dt_result = await session.execute(
-            select(DeviceType).where(DeviceType.id == device.device_type_id)
-        )
-        device_type = dt_result.scalar_one_or_none()
-        if device_type and device_type.capabilities:
-            caps = device_type.capabilities
-            if isinstance(caps, list) and "commands" not in caps:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Device type does not support commands",
-                )
+    await _assert_supports_commands(session, device)
 
     now = datetime.now(timezone.utc)
     command = DeviceCommand(
@@ -108,20 +148,110 @@ async def send_command(
     session.add(command)
     await session.flush()  # get command.id for dispatch
 
-    success, error = await _dispatch.dispatch(device, command)
+    return await _dispatch_now(session, device, command)
 
-    if success:
-        command.status = "sent"
-        command.sent_at = datetime.now(timezone.utc)
-    else:
-        command.status = "failed"
-        command.error_message = error
-        command.completed_at = datetime.now(timezone.utc)
 
+async def request_command_approval(
+    session: RLSSession,
+    tenant_id: UUID,
+    device_id: UUID,
+    current_tenant: UUID,
+    command_name: str,
+    parameters: dict,
+    requested_by: UUID,
+) -> DeviceCommand:
+    """Record a command for a person to approve. Dispatches nothing.
+
+    Not an endpoint: the only caller is the MCP tool, and the reason it lives
+    here rather than there is that everything which decides whether a command
+    reaches a device belongs in one file. A tool that built this row itself
+    could drift from the lifecycle the dispatcher expects.
+
+    The command comes back with `status='awaiting_approval'`, which no dispatch
+    path and no timeout sweep looks at, so nothing can pick it up by accident.
+    """
+    device = await _resolve_device(session, tenant_id, device_id, current_tenant)
+    await _assert_supports_commands(session, device)
+
+    now = datetime.now(timezone.utc)
+    command = DeviceCommand(
+        tenant_id=tenant_id,
+        device_id=device_id,
+        command_name=command_name,
+        parameters=parameters,
+        status="awaiting_approval",
+        requested_by=requested_by,
+        created_at=now,
+        # The clock this row is waiting on is a person, not a radio, so it gets
+        # the approval window. The device-response TTL starts at approval.
+        expires_at=now + APPROVAL_WINDOW,
+    )
+    session.add(command)
     await session.commit()
     await session.refresh(command)
-
     return command
+
+
+@router.post("/{command_id}/approve", response_model=CommandResponse)
+async def approve_command(
+    tenant_id: UUID,
+    device_id: UUID,
+    command_id: UUID,
+    session: Annotated[RLSSession, Depends(get_session)],
+    current_tenant: Annotated[UUID, Depends(get_current_tenant)] = None,
+    current_user_id: Annotated[UUID, Depends(get_current_user_id)] = None,
+):
+    """Approve a command that was requested but not sent, and dispatch it.
+
+    Only commands in `awaiting_approval` are approvable — everything issued
+    through the ordinary POST above is dispatched immediately and is not gated,
+    so there is nothing here to approve.
+
+    Authorization matches the POST endpoint: tenant access. Requiring more of an
+    approver than of someone who can already send the same command unapproved
+    would be theatre, and the narrower rule belongs on both or neither.
+    """
+    device = await _resolve_device(session, tenant_id, device_id, current_tenant)
+
+    result = await session.execute(
+        select(DeviceCommand).where(
+            DeviceCommand.id == command_id,
+            DeviceCommand.tenant_id == tenant_id,
+            DeviceCommand.device_id == device_id,
+        )
+        # Locked for the duration: two approvals arriving together would both
+        # read 'awaiting_approval' and both dispatch, which for a command that
+        # moves plant is the one outcome this whole gate exists to prevent.
+        .with_for_update()
+    )
+    command = result.scalar_one_or_none()
+    if not command:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Command not found")
+
+    if command.status != "awaiting_approval":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Command is {command.status!r}, not awaiting approval.",
+        )
+
+    now = datetime.now(timezone.utc)
+    if command.expires_at <= now:
+        command.status = "timed_out"
+        command.completed_at = now
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Approval window has passed; request the command again.",
+        )
+
+    command.approved_by = current_user_id
+    command.approved_at = now
+    command.status = "pending"
+    # Restart the clock: the TTL from here is the device's to answer within, and
+    # it must not inherit whatever is left of the human's approval window.
+    command.expires_at = now + timedelta(seconds=DEVICE_RESPONSE_TTL_SECONDS)
+
+    return await _dispatch_now(session, device, command)
 
 
 @router.get("", response_model=CommandListResponse)

@@ -10,7 +10,7 @@ from sqlalchemy import select, func, and_
 
 from app.database import get_session, RLSSession
 from app.services.tenant_access import validate_tenant_access
-from app.models import Alarm
+from app.models import Alarm, Device
 from app.schemas.alarm import (
     Alarm as AlarmSchema,
     AlarmCreate,
@@ -100,6 +100,10 @@ async def list_alarms(
     severity: Optional[str] = Query(None, description="Filter by severity"),
     device_id: Optional[UUID] = Query(None, description="Filter by device"),
     alarm_type: Optional[str] = Query(None, description="Filter by alarm type"),
+    alert_rule_id: Optional[UUID] = Query(None, description="Filter by the rule that fired"),
+    site_id: Optional[UUID] = Query(None, description="Filter by the site of the alarming device"),
+    fired_after: Optional[datetime] = Query(None, description="Only alarms fired at or after this"),
+    fired_before: Optional[datetime] = Query(None, description="Only alarms fired before this"),
 ):
     """List alarms with filtering and pagination"""
     if not await validate_tenant_access(session, current_tenant, tenant_id):
@@ -117,6 +121,21 @@ async def list_alarms(
         filters.append(Alarm.device_id == device_id)
     if alarm_type:
         filters.append(Alarm.alarm_type == alarm_type)
+    if alert_rule_id:
+        filters.append(Alarm.alert_rule_id == alert_rule_id)
+    if site_id:
+        # Subquery rather than a join: `alarms` has no site column, and joining
+        # devices here would drop the fleet-wide alarms that carry no device_id
+        # whenever the filter is absent.
+        filters.append(
+            Alarm.device_id.in_(
+                select(Device.id).where(Device.tenant_id == tenant_id, Device.site_id == site_id)
+            )
+        )
+    if fired_after:
+        filters.append(Alarm.fired_at >= fired_after)
+    if fired_before:
+        filters.append(Alarm.fired_at < fired_before)
 
     # Count total
     count_query = select(func.count(Alarm.id)).where(and_(*filters))

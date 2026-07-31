@@ -99,9 +99,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ Background tasks initialization warning: {e}")
 
+    # MCP session manager. Unlike the blocks above, this is NOT wrapped in a
+    # try/except: if MCP is switched on and cannot start, the API must fail
+    # loudly rather than serve a /mcp route that accepts connections and does
+    # nothing. The other initialisations degrade gracefully because the app is
+    # still useful without them; a broken MCP mount is not useful at all.
+    if settings.MCP_ENABLED:
+        async with app.state.mcp_session_manager.run():
+            print(f"✅ MCP server mounted at /mcp (protocol {settings.MCP_PROTOCOL_VERSION})")
+            yield
+            await _shutdown(app, settings)
+        return
+
     yield
 
-    # Shutdown
+    await _shutdown(app, settings)
+
+
+async def _shutdown(app: FastAPI, settings) -> None:
+    """Shared teardown — the MCP-enabled path exits through a context manager, so
+    both paths call this rather than keeping two copies that can drift apart."""
     await close_db()
     # Close shared Redis client
     if hasattr(app, "state") and hasattr(app.state, "redis") and app.state.redis:
@@ -129,6 +146,34 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json" if settings.APP_ENV != "production" else None,
         lifespan=lifespan,
     )
+
+    # MCP: mounted only when enabled, so when it is off the route does not exist
+    # at all (404) rather than existing and refusing. The protocol version is
+    # asserted here, at construction, so a mismatch fails the boot rather than
+    # surfacing on the first client connection.
+    if settings.MCP_ENABLED:
+        from app.mcp import assert_protocol_version, build_mcp_server
+
+        assert_protocol_version()
+        mcp_server = build_mcp_server()
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        allowed_hosts = [h.strip() for h in settings.MCP_ALLOWED_HOSTS.split(",") if h.strip()]
+        mcp_app = mcp_server.streamable_http_app(
+            streamable_http_path="/",
+            # Left ON. Without this the browser-facing deployment is open to DNS
+            # rebinding; the fix is to list the hosts clients use, not to disable
+            # the check. A wrong entry here surfaces as a 421, not a silent hole.
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=allowed_hosts,
+                allowed_origins=allowed_hosts,
+            ),
+        )
+        # The session manager must run inside the host app's lifespan; stash it
+        # so `lifespan` can enter it without rebuilding the server.
+        app.state.mcp_session_manager = mcp_server.session_manager
+        app.mount("/mcp", mcp_app)
 
     # CORS Middleware
     app.add_middleware(
@@ -160,7 +205,17 @@ def create_app() -> FastAPI:
         db_check = await _check_database()
         keydb_check = await _check_keydb()
         ingest_check = await _check_ingestion()
-        checks = {"database": db_check, "keydb": keydb_check, "ingestion": ingest_check}
+        checks = {
+            "database": db_check,
+            "keydb": keydb_check,
+            "ingestion": ingest_check,
+            # Reported, never fatal — MCP being off is a configuration choice,
+            # not a fault, so it must not colour the overall status.
+            "mcp": {
+                "status": "enabled" if settings.MCP_ENABLED else "disabled",
+                "protocol_version": settings.MCP_PROTOCOL_VERSION,
+            },
+        }
 
         if db_check["status"] != "ok":
             return JSONResponse(

@@ -163,12 +163,30 @@ customers get a reduced agent set when SLM quality allows.
 | # | Foundation | Change from v1 |
 |---|---|---|
 | F0 | **Unified alarm engine** | NEW — prerequisite (see §4a) |
-| F1 | **Gito MCP Server** — typed tools, tenant-scoped, approval-gated, audited; pin MCP spec version, track Linux-Foundation evolution | Reframed: table stakes executed better, not "a product in itself" — ThingsBoard gives its MCP away free |
+| F1 | **Gito MCP Server** — typed tools, tenant-scoped, approval-gated, audited; pin MCP spec version, track Linux-Foundation evolution | Reframed: table stakes executed better, not "a product in itself" — ThingsBoard gives its MCP away free. **In flight** — `openspec/changes/add-mcp-server` (see note below) |
 | F2 | **NLQ** (templated text→SQL plans, cited) | Confirmed by review as right approach; moves to H2 |
 | F3 | **Knowledge Base** (pgvector RAG, citations mandatory) | Confirmed; H2 |
 | F4-lite | **Statistical insights** — flatline/stuck-sensor, rate-of-change, EWMA bands | Pulled INTO H1 (cheap, runs in unified alarm engine) so the first assistant can honestly answer "abnormal behaviour" questions |
 | F4 | Seasonal decomposition, learned per-metric baselines, correlation mining | H2-Y2 |
 | F5 | **Agent runtime** (own interface; Claude SDK impl; artifact-based collaboration; full tool-call audit — audit ships WITH the first agent, not later) | Y1-H2 |
+
+> **F1 status note (2026-07-31).** F1 now has an openspec change,
+> `openspec/changes/add-mcp-server`, and is largely built: ten read tools, the
+> approval-gated `send_device_command`, credential-derived tenancy enforced at
+> registration, role-filtered tool advertisement, and audit-by-construction. See
+> `docs/MCP_SERVER.md`. Two things this section assumed are worth correcting:
+>
+> - **"tenant-scoped" is carried entirely by the tool surface, not by RLS.** The
+>   app connects as the database owner, so RLS is inert; isolation rests on no
+>   tool being able to name a tenant, which the registrar enforces. Any future
+>   agent-facing surface inherits that constraint or loses the property.
+> - **Open question: agent credentials.** Agents authenticate with a *user's*
+>   JWT today. It reuses one identity path, but an agent's reads are
+>   indistinguishable from that user's outside the `mcp.tool.*` action prefix,
+>   and the agent holds that user's full authority for the token's life. A
+>   tenant-scoped API key with its own role and revocation is the likely
+>   successor; not built, and recorded here so it stays a decision rather than a
+>   default.
 
 ### 6.2 Agents (sequencing corrected)
 

@@ -209,12 +209,24 @@ class DeviceCommand(BaseModel):
     sent_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Approval gate (migration 027). All three are NULL for commands issued
+    # through the UI/REST path, which is ungated and unchanged — a NULL
+    # approved_by means "never needed approval", not "unapproved".
+    requested_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
         Index("idx_device_commands_tenant", "tenant_id"),
         Index("idx_device_commands_device", "device_id"),
         Index("idx_device_commands_status", "status"),
         CheckConstraint(
-            "status IN ('pending', 'sent', 'delivered', 'executed', 'failed', 'timed_out')",
+            "status IN ('pending', 'sent', 'delivered', 'executed', 'failed', "
+            "'timed_out', 'awaiting_approval')",
             name="valid_command_status",
         ),
     )

@@ -67,7 +67,15 @@ plausible-looking audit trail. That single fact shapes most of this design.
 
 ## Impact
 
-- `api/requirements.txt` — add the MCP Python SDK, pinned.
+- `api/pyproject.toml` — add the MCP Python SDK, pinned exactly. (Corrected: this
+  originally named `api/requirements.txt`, which does not exist; dependencies live
+  in `pyproject.toml`.) The framework upgrade this required — fastapi
+  0.104.1→0.141.1, pydantic 2.5.0→2.13.4, uvicorn, pydantic-settings,
+  python-multipart — was **already done separately** in `chore(deps)`, because the
+  SDK cannot install under the old pins: fastapi 0.104.1 capped `anyio<4.0.0` and
+  `starlette<0.28.0`, and every MCP version needs above both. Those versions were
+  chosen by resolving with `mcp==2.0.0` in the set, so this change is a one-line
+  dependency add.
 - `api/app/mcp/` — new: `server.py` (mount + transport + version pin),
   `auth.py` (JWT → tenant/user/role context), `tools/` (one module per tool
   group), `audit.py` (tool-call audit wrapper), `approvals.py`.
