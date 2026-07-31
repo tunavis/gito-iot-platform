@@ -105,13 +105,35 @@ the API alone would leave a VIEWER looking at a Send button that 403s. The helpe
 is one small module reading the role claim already parsed out of the JWT, used by
 the approvals page, the sidebar entry, and the device Commands tab.
 
-### Notification on pending, not just a badge
+### Notification on pending — deferred, and why the original decision was wrong
 
-A count badge is only seen by someone already logged in — which is the same
-invisibility this change exists to remove, narrowed slightly. The existing
-`notification_dispatcher` is reused; no new channel type. Deliberately fire on
-entry to `awaiting_approval` only, not on approve/reject, so the notification
-means "someone needs to act" rather than becoming a log.
+The reasoning still holds: a count badge is only seen by someone already logged
+in, which is the same invisibility this change exists to remove, narrowed
+slightly. What was wrong was the cost.
+
+This section originally read "the existing `notification_dispatcher` is reused;
+no new channel type." That is false. The dispatcher has one entry point,
+`process_alert_event(alert_event_id)`, which loads an `AlertEvent`, its rule and
+its device; and `notification_queue.alert_event_id` is **NOT NULL** with an FK to
+`alert_events`. There is no generic notification path in this platform — the
+pipeline is alert-event-shaped from the queue table upward.
+
+Widening it means a nullable FK on a live table the entire alarm path reads, plus
+a second source in the dispatcher and a template-selection question nobody has
+asked yet. That is larger than the rest of this change put together, so it moves
+to `add-approval-notifications` rather than being smuggled in under a claim of
+reuse.
+
+Rejected alternative worth recording, because it is the tempting one:
+synthesising an `AlertEvent` per approval request. It needs no migration and
+works immediately, and it would put approval requests into alarm counts, alert
+trends, and every existing aggregation over `alert_events`. Changing what
+existing data means, to avoid changing a schema, is a trade that comes due later
+and somewhere else.
+
+**Accepted consequence for this change:** a pending request reaches only someone
+already signed in. The queue and the badge are still the difference between
+"findable" and "invisible", which was the actual problem.
 
 ### MCP tool annotations
 

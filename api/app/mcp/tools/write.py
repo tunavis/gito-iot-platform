@@ -26,8 +26,24 @@ async def send_device_command(
     ctx: ToolContext,
     device_id: UUID,
     command_name: str,
+    reason: str,
     parameters: dict | None = None,
 ) -> dict:
+    # `reason` is positional and before `parameters` so it cannot be quietly
+    # omitted. It is the only thing the approver has to judge by: without it the
+    # screen says "close_valve on Pump 3" and the human step degrades into a
+    # rubber stamp, which is indistinguishable from having no gate while looking
+    # like one.
+    if not (reason or "").strip():
+        return {
+            "error": "reason_required",
+            "detail": (
+                "State why this command is needed. A person has to approve it, and "
+                "they are shown your reason — an instruction with no argument behind "
+                "it will be refused."
+            ),
+        }
+
     async with tool_session(ctx) as session:
         command = await commands.request_command_approval(
             session=session,
@@ -37,6 +53,7 @@ async def send_device_command(
             command_name=command_name,
             parameters=parameters or {},
             requested_by=ctx.user_id,
+            reason=reason,
         )
         return {
             "dispatched": False,
@@ -64,7 +81,10 @@ WRITE_TOOLS: list[tuple[str, Any, str]] = [
         "recorded for a person to approve in the platform, and nothing reaches "
         "the device unless they do. Returns an approval reference. Always report "
         "the outcome as 'requested approval to ...', never as if the device "
-        "acted. Valid command names and their parameters come from the device "
-        "type's command schema; get_device tells you the device's type.",
+        "acted. `reason` is required and is shown verbatim to the person "
+        "deciding: say what you observed and why this command follows from it, "
+        "because they may have no other context. Valid command names and their "
+        "parameters come from the device type's command schema; get_device tells "
+        "you the device's type.",
     ),
 ]

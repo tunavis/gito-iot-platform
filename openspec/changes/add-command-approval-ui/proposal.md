@@ -26,9 +26,15 @@ Two adjacent gaps are folded in because they are the same conversation:
   who requested it, and time remaining — with Approve and Reject per row.
 - **New** sidebar entry with a pending count, so a waiting request is visible
   without going looking for it.
-- **New** notification raised when a request enters `awaiting_approval`, through
-  the existing notification dispatcher. A badge only reaches someone already
-  logged in, which repeats the invisibility problem this change exists to fix.
+- ~~**New** notification raised when a request enters `awaiting_approval`~~ —
+  **deferred to `add-approval-notifications`.** This was written believing the
+  existing dispatcher could be reused; it cannot. `NotificationDispatcher`'s only
+  entry point is `process_alert_event(alert_event_id)` and
+  `notification_queue.alert_event_id` is NOT NULL against `alert_events`, so the
+  pipeline is alert-event-shaped end to end. Widening it is a migration on a table
+  the whole alarm path depends on and deserves its own change.
+  **Consequence:** until that lands, a pending request is visible only to someone
+  already signed in — a partial fix, not the whole one.
 - **New** `GET /tenants/{t}/command-approvals` — tenant-wide pending list with
   device and site names joined. Today's commands list is per-device, so finding
   a request means already knowing which device to look at.

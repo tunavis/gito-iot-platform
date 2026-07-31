@@ -9,6 +9,41 @@ from fastapi import Header, HTTPException, status
 
 from app.security import decode_token
 
+# Roles permitted to actuate a device — issue a command, or approve/reject one an
+# agent requested. Defined here, once, because MCP enforces the same rule for the
+# same action: `ToolContext.may_issue_commands` reads this set rather than
+# restating it. Two copies of "who may move a valve" is two things to keep in
+# step, and the failure mode of them drifting is silent.
+#
+# VIEWER and CLIENT are read-only in the UI and stay read-only here.
+COMMAND_ROLES = frozenset({"SUPER_ADMIN", "TENANT_ADMIN", "SITE_ADMIN"})
+
+
+def may_actuate_device(role: str | None) -> bool:
+    """Whether a role may issue, approve, or reject a device command."""
+    return (role or "").upper() in COMMAND_ROLES
+
+
+async def require_command_role(authorization: str = Header(None)) -> UUID:
+    """Authorise a device-actuating call; returns the acting user's id.
+
+    Returns the user id rather than None so callers that need to record *who*
+    decided — approve and reject both do — get it from the same dependency that
+    authorised them, instead of resolving the token twice.
+    """
+    info = await get_current_user_info(authorization=authorization)
+    if not may_actuate_device(info.get("role")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            # Naming the permitted roles: a refusal the user cannot act on is a
+            # support ticket.
+            detail=(
+                f"Role {info.get('role')!r} may not issue or decide device commands. "
+                f"Permitted: {', '.join(sorted(COMMAND_ROLES))}."
+            ),
+        )
+    return info["user_id"]
+
 
 async def get_current_tenant(authorization: str = Header(None)) -> UUID:
     """Extract tenant_id from JWT Bearer token.

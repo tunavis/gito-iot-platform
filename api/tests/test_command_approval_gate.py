@@ -72,6 +72,7 @@ class TestUnapprovedNeverReachesTheDevice:
                 command_name="close_valve",
                 parameters={"position": 0},
                 requested_by=uuid4(),
+                reason="Downstream pressure is climbing past the safe band.",
             )
 
         dispatch.assert_not_called()

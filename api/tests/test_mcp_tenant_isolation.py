@@ -246,7 +246,10 @@ class TestTheWriteToolIsScopedToo:
 
         with pytest.raises(HTTPException) as exc:
             await write.send_device_command(
-                seeded.a, device_id=seeded.b_device, command_name="close_valve"
+                seeded.a,
+                device_id=seeded.b_device,
+                command_name="close_valve",
+                reason="probing another tenant's device",
             )
         assert exc.value.status_code == 404
 
@@ -256,7 +259,10 @@ class TestTheWriteToolIsScopedToo:
 
         with pytest.raises(HTTPException):
             await write.send_device_command(
-                seeded.a, device_id=seeded.b_device, command_name="close_valve"
+                seeded.a,
+                device_id=seeded.b_device,
+                command_name="close_valve",
+                reason="probing another tenant's device",
             )
 
         count = await session.execute(

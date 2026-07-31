@@ -1,25 +1,25 @@
 ## 1. Data model
 
-- [ ] 1.1 Migration `028_command_rejection_and_reason`: add
+- [x] 1.1 Migration `028_command_rejection_and_reason`: add
       `device_commands.request_reason` (text, nullable), `.rejected_by` (uuid FK
       users SET NULL), `.rejected_at` (timestamptz), and add `'rejected'` to the
       `valid_command_status` CHECK. Additive, no backfill — mirror `027`'s shape.
-- [ ] 1.2 Downgrade moves any `rejected` row to `failed` preserving
+- [x] 1.2 Downgrade moves any `rejected` row to `failed` preserving
       `error_message`, then narrows the CHECK. A refusal happened; deleting it
       would be the one thing rollback must not do.
-- [ ] 1.3 Update the `DeviceCommand` model and `CommandResponse` schema. NULL on
+- [x] 1.3 Update the `DeviceCommand` model and `CommandResponse` schema. NULL on
       the decision columns means "no decision was required", not "undecided" —
       say so in a comment, because the next reader will assume otherwise.
 
 ## 2. Authorization — the root cause, not the symptom
 
-- [ ] 2.1 One shared FastAPI dependency for "may actuate a device"
+- [x] 2.1 One shared FastAPI dependency for "may actuate a device"
       (`SUPER_ADMIN`/`TENANT_ADMIN`/`SITE_ADMIN`), using the same ladder
       `ToolContext.may_issue_commands` already encodes. One definition, not two
       that drift.
-- [ ] 2.2 Apply it to `send_command`, `approve_command`, and the new
+- [x] 2.2 Apply it to `send_command`, `approve_command`, and the new
       `reject_command`. **BREAKING** on `send_command`.
-- [ ] 2.3 The 403 detail names the permitted roles — a refusal a user cannot act
+- [x] 2.3 The 403 detail names the permitted roles — a refusal a user cannot act
       on is a support ticket.
 - [ ] 2.4 Before deploying, check whether any non-admin has actually issued a
       command on staging (`device_commands` joined to `users`). If someone has,
@@ -27,39 +27,54 @@
 
 ## 3. Endpoints
 
-- [ ] 3.1 `POST /tenants/{t}/devices/{d}/commands/{c}/reject` — mirrors approve:
+- [x] 3.1 `POST /tenants/{t}/devices/{d}/commands/{c}/reject` — mirrors approve:
       same `FOR UPDATE` lock, same "still awaiting?" check, sets
       `rejected_by`/`rejected_at`, status `rejected`, dispatches nothing.
-- [ ] 3.2 `GET /tenants/{t}/command-approvals` — second `APIRouter` in
+- [x] 3.2 `GET /tenants/{t}/command-approvals` — second `APIRouter` in
       `commands.py` (tenant-scoped), returning pending requests with device and
       site names joined, plus the pending count for the badge. Keep it in
       `commands.py`: everything deciding whether a command reaches a device
       lives in one file.
 - [ ] 3.3 Expired requests are excluded from the list and refused at approve —
       already true at approve; assert the list agrees.
-- [ ] 3.4 `approve_command` returns whether the decision was a self-approval
+- [x] 3.4 `approve_command` returns whether the decision was a self-approval
       (`approved_by == requested_by`) so the UI can label it rather than making
       the client compare two ids.
 
-## 4. Notification
+## 4. Notification — DEFERRED to `add-approval-notifications`
 
-- [ ] 4.1 Raise a notification through the existing `notification_dispatcher`
-      when a command enters `awaiting_approval`. No new channel type.
-- [ ] 4.2 Fire on entry only, never on approve/reject — the notification means
-      "someone must act", and a notification per decision turns it into a log.
-- [ ] 4.3 Failure to notify must not fail the request. Same rule as the audit
-      writer: a request that was recorded but not announced still happened.
+Removed from this change during implementation, not dropped. The premise these
+tasks rested on was wrong: `NotificationDispatcher` has exactly one entry point,
+`process_alert_event(alert_event_id)`, and `notification_queue.alert_event_id` is
+**NOT NULL** with an FK to `alert_events`. There is no generic "send a
+notification" path to reuse — the whole pipeline is alert-event-shaped.
+
+Widening it means making that FK nullable and teaching the dispatcher a second
+source: a migration on a live table the entire alarm path depends on, for one new
+caller. That is a bigger and riskier change than everything else here combined,
+and it earns its own proposal rather than arriving as a footnote to a UI change.
+
+Rejected on the way: synthesising an `AlertEvent` per approval request. It would
+have worked in an afternoon and put approval requests into alarm counts, alert
+trends, and every existing `alert_events` aggregation — corrupting the meaning of
+data other features already read, to save a migration.
+
+**Consequence, stated plainly:** until that change lands, a pending request is
+visible only to someone already signed in. That is a real and partial fix, not
+the whole one.
+
+- [x] 4.1 Deferred — see `openspec/changes/add-approval-notifications`.
 
 ## 5. MCP
 
-- [ ] 5.1 `send_device_command` gains a required `reason` argument, positional
+- [x] 5.1 `send_device_command` gains a required `reason` argument, positional
       before the optional `parameters` so it cannot be quietly omitted.
-- [ ] 5.2 Persist it to `request_reason` via `request_command_approval`.
-- [ ] 5.3 Tool description states the reason is shown to the human who decides —
+- [x] 5.2 Persist it to `request_reason` via `request_command_approval`.
+- [x] 5.3 Tool description states the reason is shown to the human who decides —
       a model told who reads it writes a better one.
-- [ ] 5.4 Add `ToolAnnotations` through `register()`: `read_only_hint` on the ten
+- [x] 5.4 Add `ToolAnnotations` through `register()`: `read_only_hint` on the ten
       reads, `destructive_hint` on the write.
-- [ ] 5.5 Make the annotation **required** by the registrar, so a tool cannot be
+- [x] 5.5 Make the annotation **required** by the registrar, so a tool cannot be
       added without declaring its effect — same enforcement-by-construction as
       the tenant-parameter guard, and a test that registration fails without it.
 

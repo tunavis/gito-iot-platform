@@ -1,29 +1,23 @@
 ## ADDED Requirements
 
-### Requirement: A pending approval reaches a human without being searched for
-The system SHALL surface commands in `awaiting_approval` to authorised users
-through a tenant-wide queue at `/dashboard/approvals`, a pending count in the
-sidebar navigation, and a notification raised through the existing dispatcher
-when a request enters the state.
+### Requirement: A pending approval is discoverable without knowing where to look
+The system SHALL surface commands in `awaiting_approval` to users through a
+tenant-wide queue at `/dashboard/approvals` and a pending count in the sidebar
+navigation.
 
 Discovery is the whole point: the per-device commands list already existed and
 was insufficient, because finding a request through it requires already
 suspecting the device it targets.
 
-#### Scenario: A request is raised while nobody is looking at the screen
-- **WHEN** an agent calls `send_device_command` and a row enters `awaiting_approval`
-- **THEN** a notification is dispatched through `notification_dispatcher`, so the
-  request reaches someone who is not currently logged in
+Reaching a user who is **not** signed in requires notification, which is deferred
+to `add-approval-notifications` — the notification pipeline is keyed on
+`alert_events` by a NOT NULL foreign key and has no generic path to reuse. Until
+then this requirement is knowingly partial: a request is findable, not announced.
 
 #### Scenario: An authorised user opens the platform
 - **WHEN** a user with `SUPER_ADMIN`, `TENANT_ADMIN` or `SITE_ADMIN` loads any
   dashboard page while requests are pending
 - **THEN** the sidebar shows the count of pending requests for their tenant
-
-#### Scenario: Notifications fire on entry only
-- **WHEN** a pending request is subsequently approved or rejected
-- **THEN** no further notification is dispatched — the notification means
-  "someone must act", not "something happened"
 
 #### Scenario: Requests from another tenant are never listed
 - **WHEN** `GET /tenants/{t}/command-approvals` is called with a credential for

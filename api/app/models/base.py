@@ -209,16 +209,25 @@ class DeviceCommand(BaseModel):
     sent_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Approval gate (migration 027). All three are NULL for commands issued
-    # through the UI/REST path, which is ungated and unchanged — a NULL
-    # approved_by means "never needed approval", not "unapproved".
+    # Approval gate (migrations 027, 028). All of these are NULL for commands
+    # issued through the UI/REST path, which is never gated — a NULL
+    # approved_by/rejected_by means "no decision was ever required", NOT
+    # "undecided". Reading it as the latter would make every command ever sent
+    # look like it is still waiting on someone.
     requested_by = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Why the agent asked. Deliberately not a key inside `parameters`, which is
+    # the payload dispatched to the device.
+    request_reason = Column(Text, nullable=True)
     approved_by = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("idx_device_commands_tenant", "tenant_id"),
@@ -226,7 +235,7 @@ class DeviceCommand(BaseModel):
         Index("idx_device_commands_status", "status"),
         CheckConstraint(
             "status IN ('pending', 'sent', 'delivered', 'executed', 'failed', "
-            "'timed_out', 'awaiting_approval')",
+            "'timed_out', 'awaiting_approval', 'rejected')",
             name="valid_command_status",
         ),
     )
