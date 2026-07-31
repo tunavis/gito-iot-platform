@@ -14,34 +14,34 @@
 
 ## 2. Identity, scoping, and authorization
 
-- [ ] 2.1 `api/app/mcp/auth.py` — resolve bearer JWT to `(tenant_id, user_id,
+- [x] 2.1 `api/app/mcp/auth.py` — resolve bearer JWT to `(tenant_id, user_id,
       role)` once per MCP session, reusing `app/dependencies.py` rather than
       re-parsing the token. Reject unauthenticated sessions before any tool
       listing is returned.
-- [ ] 2.2 Establish the tool context object carrying tenant/user/role. **No tool
+- [x] 2.2 Establish the tool context object carrying tenant/user/role. **No tool
       signature may include `tenant_id`, `user_id`, or `organization_id` as an
       authorization-determining parameter.**
-- [ ] 2.3 Add a registration-time guard that raises at import if any registered
+- [x] 2.3 Add a registration-time guard that raises at import if any registered
       tool's input schema contains `tenant_id` — the rule must be enforced by the
       code, not by review discipline. This is the single most important task here.
 - [ ] 2.4 Every tool body calls `validate_tenant_access()` and
       `set_tenant_context()` as the routers do — defence in depth, given RLS is
       inert under the app's superuser connection.
-- [ ] 2.5 Filter the advertised tool list by role: `VIEWER`/`CLIENT` see read
+- [x] 2.5 Filter the advertised tool list by role: `VIEWER`/`CLIENT` see read
       tools only; `send_device_command` is advertised only to roles allowed to
       issue commands today.
 
 ## 3. Audit
 
-- [ ] 3.1 `api/app/mcp/audit.py` — wrapper applied at **registration time** so
+- [x] 3.1 `api/app/mcp/audit.py` — wrapper applied at **registration time** so
       every tool is audited by construction and a new tool cannot skip it.
-- [ ] 3.2 Write one `AuditLog` entry per call: actor from the token, action
+- [x] 3.2 Write one `AuditLog` entry per call: actor from the token, action
       `mcp.tool.<name>`, resource type/id when the tool targets one, the call
       arguments, and the result *shape* (row count or error) — not the result
       payload.
 - [ ] 3.3 Confirm MCP entries render in the existing `/tenants/{id}/audit-logs`
       endpoint and the audit-logs UI with no changes to either.
-- [ ] 3.4 Test: assert that a tool registered without going through the wrapper
+- [x] 3.4 Test: assert that a tool registered without going through the wrapper
       fails the registration guard.
 
 ## 4. Read tools
@@ -95,7 +95,7 @@ Each wraps an existing service/router function and contains no SQL of its own.
 - [ ] 6.1 **Tenant isolation test per exposed tool** — with tenant A's token,
       request tenant B's device/site/rule ids by UUID; assert every tool returns
       empty or 403 and never B's data. This is the suite that matters.
-- [ ] 6.2 Assert no registered tool's JSON schema contains a tenant identifier
+- [x] 6.2 Assert no registered tool's JSON schema contains a tenant identifier
       (the guard from 2.3, tested).
 - [ ] 6.3 Audit coverage test: N tool calls produce N audit rows with correct
       actor and action.
