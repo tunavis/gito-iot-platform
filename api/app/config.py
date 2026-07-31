@@ -104,6 +104,25 @@ class Settings(BaseSettings):
     # Features
     ENABLE_MQTT_PROCESSOR: bool = True
 
+    # MCP server
+    # Default OFF: H1 ships an internal-facing demo, not a public assistant beta.
+    # When false the route is never mounted, so the surface does not exist rather
+    # than existing-and-refusing.
+    MCP_ENABLED: bool = False
+    # Pinned, and asserted against the installed SDK at startup. MCP is a protocol
+    # boundary with clients we do not control: silently negotiating whatever the
+    # SDK happens to support is how a dependency bump changes wire behaviour
+    # without anyone deciding to.
+    # Must equal mcp.types.LATEST_PROTOCOL_VERSION for the installed SDK (2.0.0).
+    # Bumping the SDK without deciding to bump this fails the boot, which is the
+    # point — see assert_protocol_version() in app/mcp/server.py.
+    MCP_PROTOCOL_VERSION: str = "2026-07-28"
+    # Hosts the MCP transport will accept in the Host header. The SDK does DNS
+    # rebinding protection and trusts only 127.0.0.1 by default, which 421s every
+    # request that arrives through nginx under a real hostname. Comma-separated;
+    # must list each host clients actually connect to.
+    MCP_ALLOWED_HOSTS: str = "127.0.0.1,localhost"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

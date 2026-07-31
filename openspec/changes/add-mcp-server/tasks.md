@@ -1,14 +1,15 @@
 ## 1. Server, transport, and mounting
 
-- [ ] 1.1 Add the MCP Python SDK to `api/requirements.txt`, pinned to an exact
-      version (not a range) — this is a protocol boundary.
-- [ ] 1.2 `api/app/mcp/server.py` — construct the MCP server, Streamable HTTP
+- [x] 1.1 Add the MCP Python SDK to `api/pyproject.toml`, pinned to an exact
+      version (not a range) — this is a protocol boundary. (The framework upgrade
+      it depends on landed separately; see the proposal's Impact section.)
+- [x] 1.2 `api/app/mcp/server.py` — construct the MCP server, Streamable HTTP
       transport, mounted at `/mcp` on the existing FastAPI app in `main.py`.
-- [ ] 1.3 Pin the supported MCP protocol version in settings; assert it at
+- [x] 1.3 Pin the supported MCP protocol version in settings; assert it at
       startup and fail loudly on mismatch rather than negotiating silently.
-- [ ] 1.4 `MCP_ENABLED` setting, default `false`; when false the route is not
+- [x] 1.4 `MCP_ENABLED` setting, default `false`; when false the route is not
       mounted at all. Add to `.env.example`.
-- [ ] 1.5 `/api/health` gains an `mcp` field reporting enabled/disabled and the
+- [x] 1.5 `/api/health` gains an `mcp` field reporting enabled/disabled and the
       pinned protocol version — consistent with the existing `ingestion` field.
 
 ## 2. Identity, scoping, and authorization
@@ -67,6 +68,13 @@ Each wraps an existing service/router function and contains no SQL of its own.
 - [ ] 4.11 Shared result capping that **states the truncation** in the response
       ("showing 50 of 213"). A silent prefix is how an agent confidently reports
       a wrong fleet count.
+- [ ] 4.12 `get_asset_tree` — assets with their subtree-inclusive device and alarm
+      rollups; wraps `services/asset_tree.py`. **Added after this change was
+      written.** The asset registry did not exist then, and the strategy sequenced
+      it *before* MCP precisely so agents could answer asset-shaped questions
+      ("is this pump station healthy") rather than only device-shaped ones.
+      Shipping MCP with no asset tool would leave the registry read by nothing,
+      which is the exact risk its own proposal recorded.
 
 ## 5. Approval-gated write
 

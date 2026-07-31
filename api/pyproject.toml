@@ -44,6 +44,10 @@ dependencies = [
     "apscheduler==3.10.4",
     "jinja2>=3.1.0",
     "slowapi>=0.1.9",
+    # Exact pin, not a range: this is a protocol boundary. A silent minor bump
+    # could change negotiated behaviour against clients we do not control.
+    # See MCP_PROTOCOL_VERSION in config.py, asserted at startup.
+    "mcp==2.0.0",
 ]
 
 [project.optional-dependencies]
