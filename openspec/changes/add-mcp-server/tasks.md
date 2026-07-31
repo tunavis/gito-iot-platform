@@ -97,11 +97,11 @@ Each wraps an existing service/router function and contains no SQL of its own.
       empty or 403 and never B's data. This is the suite that matters.
 - [x] 6.2 Assert no registered tool's JSON schema contains a tenant identifier
       (the guard from 2.3, tested).
-- [ ] 6.3 Audit coverage test: N tool calls produce N audit rows with correct
+- [x] 6.3 Audit coverage test: N tool calls produce N audit rows with correct
       actor and action.
 - [x] 6.4 Approval-gate tests from 5.5.
-- [ ] 6.5 Startup test: mismatched protocol version fails the boot.
-- [ ] 6.6 `MCP_ENABLED=false` → `/mcp` is not mounted (404), and the rest of the
+- [x] 6.5 Startup test: mismatched protocol version fails the boot.
+- [x] 6.6 `MCP_ENABLED=false` → `/mcp` is not mounted (404), and the rest of the
       API is unaffected.
 - [ ] 6.7 Run the full suite in-container per the project convention:
       `docker exec gito-api python -m pytest tests/ -q`.
@@ -111,12 +111,12 @@ Each wraps an existing service/router function and contains no SQL of its own.
 
 ## 7. Documentation
 
-- [ ] 7.1 `docs/` — how to connect a client, the tool catalogue, the governance
+- [x] 7.1 `docs/` — how to connect a client, the tool catalogue, the governance
       model (credential-derived tenancy, role filtering, audit, approval gate),
       and the pinned protocol version.
-- [ ] 7.2 `CLAUDE.md` — record that MCP tools live in `api/app/mcp/`, wrap
+- [x] 7.2 `CLAUDE.md` — record that MCP tools live in `api/app/mcp/`, wrap
       existing services rather than adding query logic, and must never accept a
       tenant identifier as a parameter.
-- [ ] 7.3 Note in the strategy doc that F1 now has an openspec change, and record
+- [x] 7.3 Note in the strategy doc that F1 now has an openspec change, and record
       the open question on agent credentials (JWT today, tenant-scoped API key
       later).
