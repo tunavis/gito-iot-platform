@@ -124,6 +124,13 @@ services:
       CARD_PROVIDER: ${CARD_PROVIDER:-paystack}
       PAYSTACK_ENABLED: ${PAYSTACK_ENABLED:-false}
       PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      # MCP server. Off unless MCP_ENABLED=true is set in .env — same default as
+      # everywhere else. Without these three lines .env could not reach the
+      # container at all, so `MCP_ENABLED=true` there looked like it worked and
+      # silently did nothing.
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_PROTOCOL_VERSION: ${MCP_PROTOCOL_VERSION:-2026-07-28}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-127.0.0.1,localhost,127.0.0.1:*,localhost:*,api:*,gito-api:*}
     ports:
       - "8001:8000"  # host 8001 → container 8000 (8000 free for WSL/other stacks)
     depends_on:
