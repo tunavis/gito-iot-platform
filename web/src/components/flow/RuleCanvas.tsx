@@ -1,9 +1,16 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { type Connection, type Edge, type Node, type NodeTypes } from '@xyflow/react';
+import {
+  type Connection,
+  type Edge,
+  type EdgeTypes,
+  type Node,
+  type NodeTypes,
+} from '@xyflow/react';
 import FlowCanvas from './FlowCanvas';
 import useGraphNodes from './useGraphNodes';
+import WiredEdge from './edges/WiredEdge';
 import {
   AddConditionNode,
   AddRuleNode,
@@ -27,6 +34,7 @@ import {
   conditionForApi,
   normalizeRuleType,
   notificationRuleIdFromEdge,
+  wiredEdgeId,
   operatorSymbol,
   ruleConditions,
   type AlertCondition,
@@ -43,6 +51,10 @@ const NODE_TYPES: NodeTypes = {
   alarm: AlarmNode,
   channel: ChannelNode,
 };
+
+// Module-level for the same reason as NODE_TYPES: an inline object would be new
+// on every render and React Flow would remount every edge.
+const EDGE_TYPES: EdgeTypes = { wired: WiredEdge };
 
 const CHANNEL_PREFIX = 'channel:';
 
@@ -192,6 +204,85 @@ export default function RuleCanvas({
     });
   }, [ruleType, rule, conditions.length, metrics, toast]);
 
+  const onEdgesDelete = useCallback(
+    async (deleted: Edge[]) => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const ids = deleted.map((e) => notificationRuleIdFromEdge(e.id)).filter(Boolean) as string[];
+      if (ids.length === 0) return;
+
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/v1/tenants/${tenant}/notification-rules/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ),
+      );
+      if (results.some((r) => !r.ok)) {
+        toast.error('Could not unwire channel', 'The notification rule was not deleted');
+      }
+      onWiringChanged();
+    },
+    [tenant, onWiringChanged, toast],
+  );
+
+  /** Toolbar `⏸` — the reversible action. Keeps the wiring, stops the paging. */
+  const setWiringEnabled = useCallback(
+    async (notificationRuleId: string, enabled: boolean) => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      setBusy(true);
+      try {
+        const res = await fetch(
+          `/api/v1/tenants/${tenant}/notification-rules/${notificationRuleId}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ enabled }),
+          },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast.error(
+            enabled ? 'Could not enable notifications' : 'Could not disable notifications',
+            typeof err.detail === 'string' ? err.detail : 'Unknown error',
+          );
+          return;
+        }
+        onWiringChanged();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [tenant, onWiringChanged, toast],
+  );
+
+  /** Toolbar `🗑` — destructive, so it asks first and names what stops being told.
+   *  The keyboard Delete path deliberately stays unconfirmed: React Flow has
+   *  already removed the edge by the time `onEdgesDelete` fires, so a confirm
+   *  there would have to put it back on cancel. */
+  const confirmUnwire = useCallback(
+    async (notificationRuleId: string, channelLabel: string) => {
+      const ok = await toast.confirm(
+        `${channelLabel} will no longer be notified when "${rule.name}" fires. ` +
+          `To stop notifications temporarily without losing the wiring, disable it instead.`,
+        { title: 'Unwire this channel?', variant: 'danger', confirmLabel: 'Unwire' },
+      );
+      if (!ok) return;
+
+      setBusy(true);
+      try {
+        await onEdgesDelete([{ id: wiredEdgeId(notificationRuleId) } as Edge]);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [toast, rule.name, onEdgesDelete],
+  );
+
   const graph = useMemo(() => {
     const g = buildRuleGraph(rule, notificationRules, channels, { deviceName, metricSchema: schema });
 
@@ -206,7 +297,24 @@ export default function RuleCanvas({
     });
 
     return {
-      edges: g.edges,
+      // The builder is pure, so the toolbar's handlers are attached here where
+      // the write functions live.
+      edges: g.edges.map((e) => {
+        if (e.type !== 'wired') return e;
+        const nrId = notificationRuleIdFromEdge(e.id);
+        if (!nrId) return e;
+        const enabled = Boolean(e.data?.enabled);
+        const channelLabel = String(e.data?.channelLabel ?? 'This channel');
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            busy,
+            onToggleEnabled: () => setWiringEnabled(nrId, !enabled),
+            onUnwire: () => confirmUnwire(nrId, channelLabel),
+          },
+        };
+      }),
       nodes: g.nodes.map((n) => {
         if (n.type === 'condition') {
           const index = Number(n.data.index);
@@ -249,6 +357,8 @@ export default function RuleCanvas({
     conditions.length,
     saveCondition,
     removeCondition,
+    setWiringEnabled,
+    confirmUnwire,
   ]);
 
   // Keeps hand-dragged nodes put. The graph rebuilds whenever `editing`/`busy`
@@ -298,29 +408,6 @@ export default function RuleCanvas({
     [isValidConnection, tenant, rule.id, onWiringChanged, toast],
   );
 
-  const onEdgesDelete = useCallback(
-    async (deleted: Edge[]) => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-
-      const ids = deleted.map((e) => notificationRuleIdFromEdge(e.id)).filter(Boolean) as string[];
-      if (ids.length === 0) return;
-
-      const results = await Promise.all(
-        ids.map((id) =>
-          fetch(`/api/v1/tenants/${tenant}/notification-rules/${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ),
-      );
-      if (results.some((r) => !r.ok)) {
-        toast.error('Could not unwire channel', 'The notification rule was not deleted');
-      }
-      onWiringChanged();
-    },
-    [tenant, onWiringChanged, toast],
-  );
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -356,6 +443,7 @@ export default function RuleCanvas({
       nodes={nodes}
       edges={edges}
       nodeTypes={NODE_TYPES}
+      edgeTypes={EDGE_TYPES}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}

@@ -9,6 +9,7 @@ import {
   type Node,
   type Edge,
   type NodeTypes,
+  type EdgeTypes,
   type NodeMouseHandler,
   type OnNodesChange,
   type OnEdgesChange,
@@ -32,6 +33,8 @@ export interface FlowCanvasProps {
   nodes: Node[];
   edges: Edge[];
   nodeTypes: NodeTypes;
+  /** Same module-level-constant rule as `nodeTypes` — see above. */
+  edgeTypes?: EdgeTypes;
   className?: string;
   onNodeClick?: NodeMouseHandler;
   onNodesChange?: OnNodesChange;
@@ -54,6 +57,7 @@ export default function FlowCanvas({
   nodes,
   edges,
   nodeTypes,
+  edgeTypes,
   className,
   onNodeClick,
   onNodesChange,
@@ -74,6 +78,7 @@ export default function FlowCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodeClick={onNodeClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
