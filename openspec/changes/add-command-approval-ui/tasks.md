@@ -21,7 +21,9 @@
       `reject_command`. **BREAKING** on `send_command`.
 - [x] 2.3 The 403 detail names the permitted roles — a refusal a user cannot act
       on is a support ticket.
-- [x] 2.4 Checked on staging 2026-07-31: `SELECT count(*) FROM device_commands`
+- [x] 2.4 Checked on staging 2026-07-31 (and the gate exercised end-to-end there
+      2026-08-01 with a throwaway VIEWER: 403 on send/approve/reject, and
+      send_device_command not advertised over MCP): `SELECT count(*) FROM device_commands`
       is **0** — no command has ever been issued there, by any role, so the gate
       cuts nobody off. Re-run this against production before it goes there.
 
