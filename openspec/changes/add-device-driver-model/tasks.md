@@ -65,6 +65,23 @@
       the platform should be able to say "this device only listens after it
       speaks", not pretend to schedule around it.
 
+## 3b. MCP consequence: an agent must be able to learn the outcome
+
+- [ ] 3b.1 Add a `get_command_status` read tool. `send_device_command` returns an
+      approval reference and then the agent knows nothing further, forever —
+      there is no tool that reads a command back. That was survivable at a
+      60-second TTL; with per-driver windows up to 12 hours the agent will
+      *never* learn the outcome inside a conversation, and a model with no way to
+      check either stays silent or guesses.
+- [ ] 3b.2 It must report the honest state, including "delivered, and this device
+      cannot confirm" — the terminal state added in 3.3. A tool that only ever
+      says `sent` teaches an agent to claim success.
+- [ ] 3b.3 Confirm `get_device`'s `metrics` are unaffected by phase 2. They come
+      from the device type's `data_model` via `telemetry_schema`, not from
+      `decoder`, so absorbing the decoder should not move them — assert it rather
+      than assume, because metric names drifting from what telemetry actually
+      contains breaks every agent query silently.
+
 ## 4. Verification (phase 1)
 
 - [ ] 4.1 A device type with no driver behaves byte-identically to today, on
