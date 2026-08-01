@@ -79,19 +79,12 @@ class TestUnapprovedNeverReachesTheDevice:
         assert command.status == "awaiting_approval"
         assert command.sent_at is None
 
-    def test_awaiting_approval_is_invisible_to_the_timeout_sweep(self):
-        """The sweep moves pending/sent/delivered to timed_out on the device TTL.
-
-        An approval request waits on a person, so it must not be in that set —
-        otherwise every request would expire on the radio's clock.
-        """
-        import inspect
-
-        from app.services.background_tasks import NotificationBackgroundTasks
-
-        source = inspect.getsource(NotificationBackgroundTasks.expire_timed_out_commands)
-        assert "'pending', 'sent', 'delivered'" in source
-        assert "awaiting_approval" not in source
+    # The sweep's treatment of `awaiting_approval` used to be asserted here by
+    # reading the function's source and checking a string was absent from it.
+    # That proved nobody had typed a word, not that the behaviour was right: any
+    # equivalent rewrite of the query failed it, and a wrong rewrite that avoided
+    # the literal passed it. It now runs the real sweep against a real row, in
+    # test_command_concurrency_and_sweep.py, which needs committed data.
 
 
 class TestApprovalDispatchesExactlyOnce:
