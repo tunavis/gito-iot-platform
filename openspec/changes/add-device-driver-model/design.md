@@ -26,6 +26,62 @@ Constraints that shape everything below:
 - The ChirpStack environment exists but is on another network, so end-to-end
   delivery cannot be exercised yet. Encoding and decoding can.
 
+## The three protocol families, and which this change actually covers
+
+The target protocol surface is large — MQTT/MQTT-SN/CoAP/HTTP/WebSockets/AMQP,
+OPC UA, Modbus TCP and RTU, BACnet, KNX, DNP3, the wireless bearers from BLE and
+Zigbee to LoRaWAN and NB-IoT, and the wired buses down to I²C and 1-Wire.
+
+They are not one problem. They are three, and **this change solves one of them.**
+Stating that here, because the failure mode is designing for the family in front
+of us and discovering the other two as "special cases" later — which is precisely
+what the acceptance criterion forbids.
+
+### 1. Payload-oriented messaging — what this change covers
+
+MQTT, MQTT-SN, CoAP, HTTP/HTTPS, WebSockets, AMQP; with Wi-Fi, NB-IoT, LTE-M, 5G
+and LoRaWAN as bearers beneath them. The device emits a payload we decode; we
+emit a payload it acts on. Both vendors examined so far live here.
+
+The driver model fits this family exactly, and everything below is designed for
+it.
+
+### 2. Register and address-space polling — NOT covered
+
+Modbus TCP/RTU, BACnet, DNP3, OPC UA, KNX. Also Zigbee, Z-Wave, Thread and BLE
+at the application layer, where clusters, command classes and GATT
+characteristics are attribute models rather than payloads.
+
+There is no message to decode. There is an address space, and the platform
+*asks*: read holding register 40001, scale ×0.1, that is flow rate — on a poll
+interval, over a connection held open. A driver for this family needs a **point
+map** (address, function code, type, scale, unit), a **poll cadence**, and a
+**connection model**. None of those concepts exist in the declaration below.
+
+This is why `transport` must be a genuine discriminator from day one and not an
+implicit "payload" assumption. A future `"mode": "register_map"` alongside
+`"mode": "payload"` is additive; retrofitting one is not.
+
+### 3. Edge-adjacent buses — NOT covered, and not solvable from the cloud
+
+RS232, RS485, CAN, CANopen, USB, I²C, SPI, UART, 1-Wire.
+
+A cloud platform cannot speak I²C. These require software running physically
+beside the hardware — an edge gateway or agent — which is an architecture this
+change does not address and should not pretend to. It matters sooner than it
+looks: **Modbus RTU rides on RS485**, so the moment a real Modbus device appears,
+family 2 and family 3 arrive together.
+
+### What that means for this change
+
+Scope stays family 1, deliberately. Two obligations follow:
+
+- `transport` carries an explicit interaction **mode**, so families 2 and 3 are
+  additive rather than retrofitted.
+- Nothing in phases 1-4 may assume "a device sends payloads" anywhere outside a
+  driver. The moment that assumption leaks into dispatch, the lifecycle, or
+  ingest, family 2 becomes a rewrite.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -61,6 +117,11 @@ join to the ingest hot path.
 ```jsonc
 {
   "transport": {
+    "mode": "payload",                  // payload | register_map | edge_gateway
+                                        // Explicit from day one. This change
+                                        // implements "payload" only; the other
+                                        // two are additive, and an implicit
+                                        // assumption here makes them rewrites.
     "protocol": "lorawan",              // authoritative; replaces guessing
     "lorawan": { "f_port": 1, "confirmed": false }
   },

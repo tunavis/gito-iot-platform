@@ -20,6 +20,18 @@
       failure this removes.
 - [ ] 1.5 Transport parameters come from the driver (LoRaWAN fPort and confirmed
       flag, MQTT topic, HTTP shape) rather than the hardcoded fPort 201.
+- [ ] 1.6 `transport.mode` is an **explicit** discriminator
+      (`payload` | `register_map` | `edge_gateway`), and only `payload` is
+      implemented. The target protocol surface contains three structurally
+      different families — payload messaging, register/address-space polling
+      (Modbus, BACnet, DNP3, OPC UA, KNX, and Zigbee/Z-Wave/BLE at the
+      application layer), and edge-adjacent buses needing a gateway (RS485, CAN,
+      I²C…). An unimplemented mode must be **rejected on write** with a clear
+      reason, not silently treated as `payload`.
+- [ ] 1.7 Assert that no code outside a driver assumes "a device sends payloads".
+      The moment that leaks into dispatch, the lifecycle or ingest, register
+      protocols become a rewrite rather than an addition — and Modbus RTU over
+      RS485 brings families 2 and 3 at the same time.
 
 ## 2. Declarative downlink encoding (phase 1)
 
