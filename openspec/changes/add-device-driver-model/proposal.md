@@ -35,6 +35,66 @@ it is dangerous. If a single vendor's catalogue cannot share a codec, no global
 table can — so the unit of declaration must be the **device type**, and this has
 to be settled before a second vendor arrives rather than retrofitted after.
 
+### The cross-vendor check: Milesight, and why codecs need two shapes
+
+Milesight (`docs/vendors/milesight/`, upstream `Milesight-IoT/SensorDecoders`) is
+the second vendor, and it confirms the thesis from the other direction while
+overturning one of its assumptions.
+
+It confirms it because Milesight's own catalogue is organised exactly as this
+proposal argues: one codec **per model** (`ws-series/ws523/`), never per vendor
+and never per protocol.
+
+It overturns an assumption because Milesight ships **JavaScript** —
+`ws523-decoder.js`, `ws523-encoder.js`, and a bundled TTN/ChirpStack
+`ws523-codec.json` — not byte-layout tables. That is the ecosystem norm: TTN and
+ChirpStack both execute JS codecs, and vendors publish for that target. Our
+existing `DeviceType.decoder` is explicitly declarative with **no code
+execution**.
+
+Those two facts do not coexist. Declarative-only means hand-translating every
+vendor codec into our own schema — dozens of models for Milesight alone, each a
+transcription with its own opportunity for a wrong offset, and each needing
+redoing when the vendor revises it. That is precisely the per-vendor friction
+this change exists to remove.
+
+**So a driver's codec must accept two shapes:**
+
+- **Declarative** — the existing byte-layout spec. Preferred where it suffices:
+  no execution, inspectable, diffable, and safe by construction. B METERS fits
+  here, since we transcribed it from a manual anyway.
+- **Script** — a vendor's own codec, or a customer's custom one, run as code.
+  Zero transcription: the vendor's file is the artefact. This is what makes
+  onboarding a new vendor an afternoon rather than a project.
+
+ThingsBoard reached the same conclusion and expresses it the same way — TBEL for
+the safe common case, sandboxed JS for everything else — and defaults to the
+restricted language precisely because the sandbox is the expensive part.
+
+### The script path is a security decision before it is a feature
+
+This platform is multi-tenant and **RLS is inert under the app's database role**.
+Executing tenant-supplied code in-process would put arbitrary code next to every
+tenant's data with nothing underneath to contain it. The sandbox is therefore not
+a hardening task to schedule later; it is the feature. Non-negotiable properties:
+no filesystem, no network, no host bindings, hard CPU and memory ceilings, and a
+timeout — a decoder is a pure function from bytes to JSON and needs nothing else.
+
+The natural execution point is the ingest path in the **processor** service,
+where `shared/payload_codec` already runs, rather than the API.
+
+### Runtime-supplied codecs also settle the licensing question
+
+Milesight's codecs are **GPL-3.0**. Vendoring them into `shared/payload_codec`
+raises a real licensing question for a commercial product, which is why the
+vendor README flags it.
+
+The script path sidesteps it rather than answering it. GPL obligations attach on
+*distribution*: if a customer supplies the vendor's codec into their own device
+type at runtime, we never ship it. Supporting runtime codecs is therefore the
+licensing-clean route as well as the low-friction one — and that is an argument
+for the design, not merely a consolation.
+
 ### Why a driver, and not just a command codec
 
 An earlier draft of this change covered downlink encoding only. That is not
@@ -94,13 +154,19 @@ existing `decoder` is **absorbed, never replaced** — today's behaviour stays t
 default, so telemetry decoding for 68 live meters is untouched until a driver
 explicitly overrides it.
 
-1. **Driver model + transport binding + downlink encode + per-driver timing +
-   the unacknowledgeable terminal state.** Commands become genuinely sendable to
-   fire-and-forget hardware, and the 60-second lie is gone.
+1. **Driver model + transport binding + declarative downlink encode + per-driver
+   timing + the unacknowledgeable terminal state.** Commands become genuinely
+   sendable to fire-and-forget hardware, and the 60-second lie is gone. B METERS
+   is the worked example, declarative, no sandbox needed yet.
 2. **Acknowledgement correlation through uplink decode.** The existing `decoder`
    becomes a driver's uplink half. Correlation keys on *(device, opcode)* with at
    most one in flight per pair, because no third-party device echoes our id.
-3. **Retire the `_detect_protocol` heuristics** in favour of the declared
+3. **The script codec path and its sandbox.** Milesight is the worked example —
+   a vendor's own `*-decoder.js` / `*-encoder.js` used unmodified. Deliberately
+   last: it is the phase with a genuine security surface, and phases 1-2 deliver
+   working multi-vendor commands without it. Shipping it early to save
+   transcription effort would trade a schedule for an attack surface.
+4. **Retire the `_detect_protocol` heuristics** in favour of the declared
    transport, once every live device type declares one.
 
 ## Capabilities
