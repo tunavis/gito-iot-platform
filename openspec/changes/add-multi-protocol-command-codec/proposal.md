@@ -1,3 +1,21 @@
+> **Framing (2026-08-01).** This is not a B METERS change and not a LoRaWAN
+> change. The platform's purpose is multi-vendor, multi-device, multi-protocol
+> integration — that is the bar Cumulocity, ThingsBoard and AWS IoT already
+> meet, each by treating "how to speak to this device" as **data** rather than
+> code. We currently treat it as code, with one hardcoded dialect.
+>
+> B METERS earns its place here only as evidence, and it is unusually good
+> evidence: **one vendor's two product lines already share nothing.** IWM-LR3/LR4
+> uses a 5-byte header with the verb baked into the opcode; RFM-LR1 uses a 2-byte
+> header with an explicit Set/Query/Action verb over a shared index space. Their
+> acknowledgement models differ. Their timeouts differ by three orders of
+> magnitude. And `0x0A` means "reset the microcontroller" on one and "read CPU
+> temperature" on the other.
+>
+> If a single vendor's own catalogue cannot share a codec, no global table can.
+> The unit of declaration must be the **device type**, and the design must be
+> settled before a second vendor arrives rather than retrofitted after.
+
 ## Why
 
 The platform can only send commands to devices that speak **its own JSON
@@ -100,6 +118,34 @@ capability enabled on them **last**, once the rest demonstrably works.
 **Not blocked by ChirpStack reachability.** The ChirpStack environment exists but
 is on another network. Encoding is unit-testable against expected bytes with no
 network server at all; only the final end-to-end needs the connection.
+
+## What else is hardcoded that a second vendor breaks
+
+Found while establishing the above. Each is somewhere the platform assumes one
+dialect, and each is a separate way the next integration fails:
+
+- **`_detect_protocol()` guesses.** `dev_eui` implies LoRaWAN, a `webhook_url`
+  implies HTTP, everything else defaults to MQTT. Heuristics do not survive N
+  protocols, and the device type's declared `connectivity.protocol` is ignored
+  entirely.
+- **The command TTL is a constant** (`DEVICE_RESPONSE_TTL_SECONDS = 60`). An
+  IWM meter reports on an interval of up to **12 hours**, and its interval is
+  NFC-only — not settable over the air. A 60-second timeout marks every such
+  command failed long before the device could possibly have answered.
+- **"Delivered" assumes the device echoes our correlation id** through telemetry.
+  No third-party device does. IWM echoes the opcode; RFM echoes the whole frame
+  and has a real NACK; two commands across the two families never acknowledge at
+  all. Correlation must be declared per type, and "cannot be acknowledged" must
+  be a legal, honest terminal state.
+- **`decoder` is LoRaWAN-shaped**, so the uplink half has the same problem the
+  downlink half does.
+- **Receive windows are not modelled.** Both B METERS families have a ~2-minute
+  post-join CONFIGURE window that is the only period with frequent RX slots.
+  Class A LoRaWAN devices receive only after an uplink. Nothing in the platform
+  knows a command may have to wait for the device to speak first.
+
+None of these are B METERS problems. They are the shape of the general problem,
+found using the one vendor whose manuals we have.
 
 ## Open Questions
 
