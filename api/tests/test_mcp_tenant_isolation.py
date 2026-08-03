@@ -184,6 +184,12 @@ class TestNoToolReturnsAnotherTenantsData:
             ("get_hierarchy", lambda: read.get_hierarchy(seeded.a)),
             ("get_fleet_health", lambda: read.get_fleet_health(seeded.a)),
             ("get_asset_tree", lambda: read.get_asset_tree(seeded.a)),
+            (
+                "get_command_status",
+                lambda: read.get_command_status(
+                    seeded.a, device_id=seeded.b_device, command_id=uuid4()
+                ),
+            ),
         ]:
             try:
                 result = await call()

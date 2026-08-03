@@ -1225,6 +1225,12 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
     executed:  { bg: 'bg-green-50 border-green-200', text: 'text-green-700', label: 'Executed' },
     failed:    { bg: 'bg-red-50 border-red-200', text: 'text-red-600', label: 'Failed' },
     timed_out: { bg: 'bg-gray-100 border-gray-300', text: 'text-gray-600', label: 'Timed Out' },
+    // The fallback below is `pending`, so any status missing from this map is
+    // shown as still waiting. For these three that is a lie about a decision
+    // that was already made — and `delivered_unconfirmed` is a success.
+    delivered_unconfirmed: { bg: 'bg-indigo-50 border-indigo-200', text: 'text-indigo-700', label: 'Delivered (no ack)' },
+    awaiting_approval: { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', label: 'Awaiting Approval' },
+    rejected:  { bg: 'bg-red-50 border-red-200', text: 'text-red-600', label: 'Rejected' },
   };
 
   const formatTime = (iso: string | null) => {
@@ -1629,6 +1635,9 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
               <option value="executed">Executed</option>
               <option value="failed">Failed</option>
               <option value="timed_out">Timed Out</option>
+              <option value="delivered_unconfirmed">Delivered (no ack)</option>
+              <option value="awaiting_approval">Awaiting Approval</option>
+              <option value="rejected">Rejected</option>
             </select>
             <button
               onClick={loadCommands}
@@ -1754,6 +1763,13 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
                       {cmd.status === 'timed_out' && (
                         <p className="mt-2 text-xs text-th-muted">
                           Expired at {formatTime(cmd.expires_at)} — device did not respond in time.
+                        </p>
+                      )}
+
+                      {cmd.status === 'delivered_unconfirmed' && (
+                        <p className="mt-2 text-xs text-th-muted">
+                          Delivered at {formatTime(cmd.sent_at)} — this device type cannot
+                          acknowledge this command, so there is no confirmation to wait for.
                         </p>
                       )}
                     </div>

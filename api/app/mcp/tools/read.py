@@ -30,12 +30,14 @@ from app.routers import (
     alert_rules_unified,
     analytics,
     assets,
+    commands,
     device_types,
     devices,
     hierarchy,
     telemetry,
     telemetry_aggregate,
 )
+from app.schemas.commands import CommandResponse
 
 # ── Shared shaping (tasks 4.10, 4.11) ────────────────────────────────────────
 
@@ -382,6 +384,64 @@ async def get_asset_tree(ctx: ToolContext) -> dict:
         return {"items": items, "total": len(items)}
 
 
+# ── get_command_status ───────────────────────────────────────────────────────
+#
+# `send_device_command` hands back an approval reference and then, until this
+# tool existed, the agent knew nothing further, forever — there was no tool that
+# read a command back. That was survivable while every command expired after
+# sixty seconds. With per-driver response windows of up to twelve hours, an agent
+# will *never* learn the outcome inside one conversation, and a model with no way
+# to check either stays silent or guesses.
+
+# What each status actually means, written for a model to repeat to a person.
+# The two that matter are the ones a plain status string reads backwards:
+# `delivered_unconfirmed` is a success, and `sent` is not one yet.
+_STATUS_MEANING = {
+    "awaiting_approval": (
+        "Requested. A person has not decided yet, and NOTHING has been sent to the "
+        "device. Do not describe this as done or in progress."
+    ),
+    "rejected": "A person refused this command. It was never sent, and it will not be.",
+    "pending": "Approved and accepted by the platform, not yet handed to the transport.",
+    "sent": (
+        "Handed to the device's transport. This is NOT confirmation the device "
+        "received or acted on it — say 'sent', not 'done'."
+    ),
+    "delivered": "The transport reports the device received it. It has not yet reported a result.",
+    "delivered_unconfirmed": (
+        "Delivered, and this device can never confirm this command — its driver says "
+        "the command produces no reply of any kind. This is the terminal success "
+        "state for such commands. Report it as delivered, and say plainly that the "
+        "device cannot acknowledge it, rather than implying either success or failure."
+    ),
+    "executed": "The device reported it carried the command out.",
+    "failed": "It did not go through. `error_message` says why.",
+    "timed_out": (
+        "The device's response window passed with no answer. That window comes from "
+        "the device type's driver, so this means the device stayed silent for as long "
+        "as its own hardware should have needed — not merely that a default elapsed."
+    ),
+}
+
+
+async def get_command_status(ctx: ToolContext, device_id: UUID, command_id: UUID) -> dict:
+    async with tool_session(ctx) as session:
+        command = await call_route(
+            commands.get_command,
+            tenant_id=ctx.tenant_id,
+            device_id=device_id,
+            command_id=command_id,
+            session=session,
+            current_tenant=ctx.tenant_id,
+        )
+        out = CommandResponse.model_validate(command).model_dump(mode="json")
+        out["meaning"] = _STATUS_MEANING.get(
+            out["status"],
+            "Unrecognised status — report it verbatim rather than interpreting it.",
+        )
+        return out
+
+
 # ── Catalogue ────────────────────────────────────────────────────────────────
 #
 # A list of (name, function, description) rather than a decorator, so that
@@ -457,6 +517,18 @@ READ_TOOLS: list[tuple[str, Any, str]] = [
         "distribution (a device whose last_seen has aged past its type's offline "
         "threshold counts as offline, whatever its status column says), device "
         "type mix, battery, and alarm counts by state and severity.",
+    ),
+    (
+        "get_command_status",
+        get_command_status,
+        "The current state of one command you requested, by the approval "
+        "reference send_device_command returned plus the device id. Call this "
+        "before saying anything about what happened to a command — requesting one "
+        "tells you nothing about its outcome, a person may not have decided yet, "
+        "and some devices take up to twelve hours to answer. The `meaning` field "
+        "says what the status actually implies; use it rather than inferring from "
+        "the status word, because 'sent' is not success and "
+        "'delivered_unconfirmed' is.",
     ),
     (
         "get_asset_tree",

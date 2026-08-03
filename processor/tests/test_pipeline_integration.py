@@ -197,7 +197,10 @@ def _make_processor_mock(
     processor.db_service.device_exists = AsyncMock(return_value=device_exists)
     processor.db_service.get_active_alert_rules = AsyncMock(return_value=[])
     processor.db_service.get_key_mapping = AsyncMock(return_value={})
-    processor.db_service.get_decoder = AsyncMock(return_value=None)
+    # (decoder spec, driver) — a device type with neither, which is every live
+    # one. `get_codec` returns both from one row because a driver's `telemetry`
+    # is the decoder spec.
+    processor.db_service.get_codec = AsyncMock(return_value=(None, None))
 
     # Redis service mock
     mock_redis = AsyncMock()

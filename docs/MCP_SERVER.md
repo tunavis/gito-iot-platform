@@ -74,6 +74,7 @@ from the same query.
 | `get_hierarchy` | Organisation → site → group tree with rollup counts |
 | `get_fleet_health` | One tenant-wide snapshot: devices, status mix, alarms |
 | `get_asset_tree` | Assets with subtree-inclusive device and alarm rollups |
+| `get_command_status` | What became of one requested command, plus what its status *means* |
 
 Two shaping rules apply to all of them:
 

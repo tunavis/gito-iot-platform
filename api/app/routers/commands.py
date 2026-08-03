@@ -3,6 +3,10 @@
 Send commands to devices and track their lifecycle:
   pending → sent → delivered → executed (or failed / timed_out)
 
+A device type whose driver lists a command as unacknowledgeable goes
+  pending → delivered_unconfirmed
+instead, terminal on delivery, because that device will never answer.
+
 Devices respond through normal telemetry with reserved keys:
   command_id, command_status, command_result, command_error
 The MQTT processor correlates responses and updates command status.
@@ -15,6 +19,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_session, RLSSession
 from app.models.base import Device, DeviceCommand, User
@@ -28,6 +33,12 @@ from app.schemas.commands import (
     PendingApprovalListResponse,
 )
 from app.services.command_dispatch import CommandDispatchService
+from payload_codec.driver import (
+    command_opcode,
+    driver_for,
+    is_unacknowledgeable,
+    response_window_seconds,
+)
 from app.services.tenant_access import validate_tenant_access
 from app.dependencies import get_current_tenant, require_command_role
 
@@ -58,9 +69,14 @@ _dispatch = CommandDispatchService()
 # found the next morning is a deliberate act rather than a stale click.
 APPROVAL_WINDOW = timedelta(hours=24)
 
-# The device's window to answer, measured from approval. Matches CommandCreate's
-# ttl_seconds default — the approval path takes no TTL of its own, because the
-# requester is a model and the number would be a guess.
+# The device's window to answer, for a device type that declares no driver.
+#
+# It is no longer a tuning value: a driver's `response_window_seconds` replaces
+# it for any type that declares one, because sixty seconds against a B METERS
+# IWM reporting every twelve hours — over NFC only, so not adjustable remotely —
+# is not mistuned, it is wrong by three orders of magnitude. This constant
+# survives as the default for everything that has not declared otherwise, which
+# is what keeps today's behaviour today's behaviour.
 DEVICE_RESPONSE_TTL_SECONDS = 60
 
 
@@ -69,15 +85,19 @@ DEVICE_RESPONSE_TTL_SECONDS = 60
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def _assert_supports_commands(session: RLSSession, device: Device) -> None:
-    """Reject a command the device type says it cannot accept.
+async def _resolve_device_type(session: RLSSession, device: Device) -> Optional[DeviceType]:
+    """Load the device's type, rejecting a command the type says it cannot accept.
 
-    Checked before recording an approval request too, not only before
-    dispatching: putting a command a device can never run in front of a person
-    to approve wastes the one reviewer the gate exists to involve.
+    Returns the type so its driver can be read once and carried through encoding,
+    protocol selection and timing — three questions with one answer, which is the
+    point of the driver being a single declaration.
+
+    The capability check happens before recording an approval request too, not
+    only before dispatching: putting a command a device can never run in front of
+    a person to approve wastes the one reviewer the gate exists to involve.
     """
     if not device.device_type_id:
-        return
+        return None
     result = await session.execute(select(DeviceType).where(DeviceType.id == device.device_type_id))
     device_type = result.scalar_one_or_none()
     caps = device_type.capabilities if device_type else None
@@ -86,10 +106,42 @@ async def _assert_supports_commands(session: RLSSession, device: Device) -> None
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device type does not support commands",
         )
+    return device_type
+
+
+async def _reserve_opcode(session: RLSSession, command: DeviceCommand) -> None:
+    """Flush a command holding its opcode, refusing a second one in flight.
+
+    The uniqueness is a partial index (migration 030), not a check here, because
+    two dispatches arriving together would both read "nothing outstanding" and
+    both proceed. This function only turns the database's refusal into an
+    answer a caller can act on — it is not the guard, and must never become it.
+
+    Flushing is done **before** anything is dispatched, so a refused command has
+    not already reached the device.
+    """
+    try:
+        await session.flush()
+    except IntegrityError as e:
+        if "uq_device_commands_inflight_opcode" not in str(e.orig):
+            raise
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Another command using opcode 0x{command.opcode:02x} is already "
+                f"awaiting an answer from this device. This device identifies its "
+                f"answers only by opcode, so a second one in flight would make both "
+                f"replies ambiguous. Wait for the first, or let it expire."
+            ),
+        ) from e
 
 
 async def _dispatch_now(
-    session: RLSSession, device: Device, command: DeviceCommand
+    session: RLSSession,
+    device: Device,
+    command: DeviceCommand,
+    device_type: Optional[DeviceType] = None,
 ) -> DeviceCommand:
     """Send a command to its device and record the outcome.
 
@@ -97,9 +149,18 @@ async def _dispatch_now(
     approval endpoint come through here, so "sent" means the same thing whichever
     path created the command, and there is one place to look when it does not.
     """
-    success, error = await _dispatch.dispatch(device, command)
+    driver = driver_for(device_type)
+    success, error = await _dispatch.dispatch(device, command, driver, device_type)
 
-    if success:
+    if success and is_unacknowledgeable(driver, command.command_name):
+        # Terminal on delivery. This device can never answer this command — an
+        # IWM RESET restarts the microcontroller, an RFM 0x03 0x05 re-joins with
+        # factory defaults — so leaving it pending guarantees it is swept to
+        # `timed_out`, which records a correctly delivered command as a failure.
+        command.status = "delivered_unconfirmed"
+        command.sent_at = datetime.now(timezone.utc)
+        command.completed_at = command.sent_at
+    elif success:
         command.status = "sent"
         command.sent_at = datetime.now(timezone.utc)
     else:
@@ -212,7 +273,16 @@ async def send_command(
     command here.
     """
     device = await _resolve_device(session, tenant_id, device_id, current_tenant)
-    await _assert_supports_commands(session, device)
+    device_type = await _resolve_device_type(session, device)
+
+    # An explicit ttl_seconds still wins — a caller asking for a shorter window
+    # has made a deliberate choice and is capped at an hour anyway. Omitting it
+    # is what defers to the device type, which is the only party that knows
+    # whether this radio can answer inside a minute.
+    driver = driver_for(device_type)
+    ttl = body.ttl_seconds
+    if ttl is None:
+        ttl = response_window_seconds(driver, DEVICE_RESPONSE_TTL_SECONDS)
 
     now = datetime.now(timezone.utc)
     command = DeviceCommand(
@@ -222,12 +292,13 @@ async def send_command(
         parameters=body.parameters,
         status="pending",
         created_at=now,
-        expires_at=now + timedelta(seconds=body.ttl_seconds),
+        expires_at=now + timedelta(seconds=ttl),
+        opcode=command_opcode(driver, body.command_name),
     )
     session.add(command)
-    await session.flush()  # get command.id for dispatch
+    await _reserve_opcode(session, command)  # also gets command.id for dispatch
 
-    return await _dispatch_now(session, device, command)
+    return await _dispatch_now(session, device, command, device_type)
 
 
 @approvals_router.get("", response_model=PendingApprovalListResponse)
@@ -314,13 +385,18 @@ async def request_command_approval(
     path and no timeout sweep looks at, so nothing can pick it up by accident.
     """
     device = await _resolve_device(session, tenant_id, device_id, current_tenant)
-    await _assert_supports_commands(session, device)
+    device_type = await _resolve_device_type(session, device)
 
     now = datetime.now(timezone.utc)
     command = DeviceCommand(
         tenant_id=tenant_id,
         device_id=device_id,
         command_name=command_name,
+        # Recorded now, constrained later: the in-flight index covers
+        # pending/sent/delivered only, so a request may wait behind a command
+        # already in flight. The conflict, if there is one, surfaces at approve
+        # — which is where it becomes real and where a person is looking.
+        opcode=command_opcode(driver_for(device_type), command_name),
         parameters=parameters,
         status="awaiting_approval",
         requested_by=requested_by,
@@ -364,14 +440,26 @@ async def approve_command(
         session, tenant_id, device_id, command_id, current_tenant
     )
 
+    device_type = await _resolve_device_type(session, device)
+
     command.approved_by = current_user_id
     command.approved_at = now
     command.status = "pending"
     # Restart the clock: the TTL from here is the device's to answer within, and
-    # it must not inherit whatever is left of the human's approval window.
-    command.expires_at = now + timedelta(seconds=DEVICE_RESPONSE_TTL_SECONDS)
+    # it must not inherit whatever is left of the human's approval window. The
+    # length is the device type's if it declares one — this path takes no TTL
+    # from its caller, because the requester is a model and the number would be
+    # a guess.
+    command.expires_at = now + timedelta(
+        seconds=response_window_seconds(driver_for(device_type), DEVICE_RESPONSE_TTL_SECONDS)
+    )
 
-    return await _dispatch_now(session, device, command)
+    # `pending` is the first status the in-flight opcode index covers, so this is
+    # where a second identical command is refused — before dispatch, and while
+    # the row lock from `_lock_pending_for_decision` is still held.
+    await _reserve_opcode(session, command)
+
+    return await _dispatch_now(session, device, command, device_type)
 
 
 @router.post("/{command_id}/reject", response_model=CommandResponse)

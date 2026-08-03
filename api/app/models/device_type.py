@@ -82,6 +82,13 @@ class DeviceType(BaseModel):
     # {"type": "declarative", "fields": [{"name","offset","length","type","scale",...}]}
     decoder = Column(JSONB, nullable=True, default=None)
 
+    # Device Driver — how the platform speaks to this device type: transport
+    # binding, downlink command encoding, acknowledgement semantics and timing.
+    # NULL means the pre-driver behaviour, which is the compatibility guarantee
+    # rather than an unconfigured state. Schema and validation:
+    # shared/payload_codec/payload_codec/driver.py.
+    driver = Column(JSONB, nullable=True, default=None)
+
     # Status
     is_active = Column(Boolean, default=True, nullable=False)
     device_count = Column(Integer, default=0, nullable=False)  # cached count

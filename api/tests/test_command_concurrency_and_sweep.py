@@ -167,7 +167,10 @@ class TestConcurrentApprovalDispatchesOnce:
         dispatched = 0
         lock = asyncio.Lock()
 
-        async def counting_dispatch(device, command):
+        # `*_` absorbs the driver and device type `_dispatch_now` now passes
+        # through. A fixed two-argument stub would fail with a TypeError that
+        # looks nothing like the race this test is about.
+        async def counting_dispatch(device, command, *_):
             nonlocal dispatched
             async with lock:
                 dispatched += 1
@@ -346,3 +349,85 @@ class TestTheSweepLeavesApprovalsAlone:
             ).scalar()
 
         assert status == "rejected"
+
+
+class TestOneCommandInFlightPerOpcode:
+    """The correlation key's uniqueness, enforced where it cannot be raced.
+
+    No third-party device echoes this platform's `command_id` — a B METERS IWM
+    answers with the same `Fct` byte, an RFM-LR1 with the same `Index` — so an
+    answer is matched by (device, opcode). That is only unambiguous while at
+    most one such command is in flight, and an application-level "is anything
+    outstanding?" check cannot make it true: two dispatches arriving together
+    both read "no" and both insert. `uq_device_commands_inflight_opcode` is the
+    thing that actually holds, so it is what these tests exercise.
+    """
+
+    async def _insert(self, maker, tenant_id, device_id, *, status, opcode, hours=1):
+        command_id = uuid.uuid4()
+        now = datetime.now(UTC)
+        async with maker() as s:
+            await s.execute(
+                text(
+                    "INSERT INTO device_commands (id, tenant_id, device_id, command_name,"
+                    " parameters, status, opcode, created_at, expires_at)"
+                    " VALUES (:i, :t, :d, 'set_reporting_interval', '{}', :s, :o, :c, :e)"
+                ),
+                {
+                    "i": str(command_id),
+                    "t": str(tenant_id),
+                    "d": str(device_id),
+                    "s": status,
+                    "o": opcode,
+                    "c": now,
+                    "e": now + timedelta(hours=hours),
+                },
+            )
+            await s.commit()
+        return command_id
+
+    @pytest.mark.asyncio
+    async def test_a_second_in_flight_command_on_the_same_opcode_is_refused(self, scratch):
+        maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
+        await self._insert(maker, tenant_id, device_id, status="sent", opcode=0x22)
+
+        with pytest.raises(Exception) as exc:
+            await self._insert(maker, tenant_id, device_id, status="pending", opcode=0x22)
+        assert "uq_device_commands_inflight_opcode" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_a_different_opcode_is_fine(self, scratch):
+        """The control. A constraint that refused everything would pass the
+        test above while breaking every device with more than one command."""
+        maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
+        await self._insert(maker, tenant_id, device_id, status="sent", opcode=0x22)
+        await self._insert(maker, tenant_id, device_id, status="pending", opcode=0x25)
+
+    @pytest.mark.asyncio
+    async def test_a_finished_command_stops_reserving_its_opcode(self, scratch):
+        """The index covers pending/sent/delivered only. Once a device has
+        answered, the next identical command must go straight through — a meter
+        whose reporting interval can be set once per twelve hours would be
+        useless."""
+        maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
+        await self._insert(maker, tenant_id, device_id, status="executed", opcode=0x22)
+        await self._insert(maker, tenant_id, device_id, status="timed_out", opcode=0x22)
+        await self._insert(maker, tenant_id, device_id, status="delivered_unconfirmed", opcode=0x22)
+        await self._insert(maker, tenant_id, device_id, status="pending", opcode=0x22)
+
+    @pytest.mark.asyncio
+    async def test_commands_with_no_opcode_are_unconstrained(self, scratch):
+        """Every device type without a driver. A partial index over NULLs would
+        otherwise make the pre-driver fleet unable to send two commands at once."""
+        maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
+        for _ in range(3):
+            await self._insert(maker, tenant_id, device_id, status="pending", opcode=None)
+
+    @pytest.mark.asyncio
+    async def test_an_awaiting_approval_request_does_not_reserve_the_opcode(self, scratch):
+        """A request is waiting on a person, not a radio. Blocking it behind a
+        command in flight would refuse it at the wrong moment — the conflict
+        belongs at approve, where it becomes real and where someone is looking."""
+        maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
+        await self._insert(maker, tenant_id, device_id, status="sent", opcode=0x22)
+        await self._insert(maker, tenant_id, device_id, status="awaiting_approval", opcode=0x22)

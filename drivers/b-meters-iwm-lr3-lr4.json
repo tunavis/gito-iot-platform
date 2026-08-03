@@ -1,0 +1,922 @@
+{
+  "vendor": "B METERS",
+  "model": "IWM-LR3 / IWM-LR4",
+  "source": "v1.0_IWM-LR3_LR4_UM_EN — User Manual v1.0; see openspec/changes/add-device-driver-model/research/b-meters-commands.md",
+  "frame": "5-byte header (Fct, C/R/A, Err, Chain, Len) followed by Len payload bytes. Multi-byte fields are MSB first. Most payloads open with a Device Type byte whose value is 0x04 in every documented request.",
+  "transport": {
+    "mode": "payload",
+    "protocol": "lorawan",
+    "lorawan": {
+      "f_port": 1,
+      "confirmed": false
+    }
+  },
+  "commands": {
+    "mode": "declarative",
+    "definitions": {
+      "get_fw_version": {
+        "description": "0x07 — read the firmware version. The only command with no Device Type byte.",
+        "constants": {
+          "fct": 7,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 0
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "reset": {
+        "description": "0x0A — restart the microcontroller. Answers nothing, ever: the mailbox is re-initialised. Forces a re-join, which re-enters the ~2-minute CONFIGURE window.",
+        "constants": {
+          "fct": 10,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 1,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "set_date_and_time": {
+        "description": "0x14 — set date and time. All seven date fields are plain binary Uint8_t, not BCD.",
+        "constants": {
+          "fct": 20,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 8,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "day",
+            "offset": 6,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "day_of_week",
+            "offset": 7,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "month",
+            "offset": 8,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "year",
+            "offset": 9,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "hours",
+            "offset": 10,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "minutes",
+            "offset": 11,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "seconds",
+            "offset": 12,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "get_date_and_time": {
+        "description": "0x15 — read date and time.",
+        "constants": {
+          "fct": 21,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 1,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "set_revolution_counters": {
+        "description": "0x16 — set the meter's initial consumption. Bits 31-30 of forward_counter select the unit (0b00 litres, 0b01 decalitres, 0b10 hectolitres) and MUST agree with the K index set by set_meter_par.",
+        "constants": {
+          "fct": 22,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 6,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "forward_counter",
+            "offset": 6,
+            "length": 4,
+            "type": "uint32",
+            "endian": "big"
+          },
+          {
+            "name": "reset_backward",
+            "offset": 10,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "get_revolution_counters": {
+        "description": "0x17 — read the counters. The answer's byte widths are ambiguous in the manual; that is a decode concern and does not affect this request.",
+        "constants": {
+          "fct": 23,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 1,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "set_meter_par": {
+        "description": "0x1A — set the physical counter parameters. Whole-struct write: read with get_meter_par first and re-send the unchanged fields, or they are clobbered.",
+        "constants": {
+          "fct": 26,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 5,
+          "device_type": 4,
+          "reserved": 0
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "active",
+            "offset": 6,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "k_index",
+            "offset": 7,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "medium",
+            "offset": 8,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "reserved",
+            "offset": 9,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "get_meter_par": {
+        "description": "0x1B — read the physical counter parameters.",
+        "constants": {
+          "fct": 27,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 1,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "set_alarm_par": {
+        "description": "0x26 — set the alarm detection parameters. Whole-struct write: sending it to toggle one flag overwrites the reverse-flow threshold, loss-control time, VIF and battery threshold. GET_ALARM_PAR (0x27) first. The manual's own worked examples for this command are internally inconsistent — do not copy their values; low_battery_threshold_mv defaults to 2200.",
+        "constants": {
+          "fct": 38,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 9,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "alarm_threshold_reverse",
+            "offset": 6,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "loss_control_time",
+            "offset": 7,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "transmission_vif",
+            "offset": 8,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "temperature",
+            "offset": 9,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "low_battery_threshold_mv",
+            "offset": 10,
+            "length": 4,
+            "type": "uint32",
+            "endian": "big"
+          }
+        ]
+      },
+      "get_alarm_par": {
+        "description": "0x27 — read the alarm detection parameters. Required before any set_alarm_par.",
+        "constants": {
+          "fct": 39,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 1,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "get_alarm_data": {
+        "description": "0x28 — read stored alarm data. Its answer's date packing is undocumented; that blocks the decoder, not this request.",
+        "constants": {
+          "fct": 40,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 1,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          }
+        ]
+      },
+      "set_alarm_data": {
+        "description": "0x29 — set the alarm flags. Bit 0 magnetic, 1 removal, 2 blinding, 3 loss, 4 reverse stream, 5 low battery. Writing 0 clears all alarms.",
+        "constants": {
+          "fct": 41,
+          "cra": 0,
+          "err": 0,
+          "chain": 0,
+          "len": 5,
+          "device_type": 4
+        },
+        "fields": [
+          {
+            "name": "fct",
+            "offset": 0,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "cra",
+            "offset": 1,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "err",
+            "offset": 2,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "chain",
+            "offset": 3,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "len",
+            "offset": 4,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "device_type",
+            "offset": 5,
+            "length": 1,
+            "type": "uint8"
+          },
+          {
+            "name": "alarm_flags",
+            "offset": 6,
+            "length": 4,
+            "type": "uint32",
+            "endian": "big"
+          }
+        ]
+      }
+    }
+  },
+  "telemetry_note": "No telemetry decoder yet. The IWM manual leaves four fields undecodable — the alarm dates are typed Uint32_t 'dd/mm/yy' with no packing described and no worked example, and 0x17's stated Len contradicts its own byte table. B METERS' integrators' supplement (ticket@bmeters.com) is what closes those. Guessing offsets from examples the vendor got wrong is how a meter reads plausibly and wrongly. The encoder was never blocked by this.",
+  "acknowledgement": {
+    "mode": "echo_opcode",
+    "opcode_field": "fct",
+    "response": {
+      "opcode_offset": 0,
+      "kind_offset": 1,
+      "ack_values": [
+        1
+      ],
+      "error_offset": 2,
+      "error_names": {
+        "0x01": "Invalid date, or a counter out of range",
+        "0x02": "Device type error — the device type byte is incorrect",
+        "0x03": "Wrong request — an incorrect password was present",
+        "0x04": "Error length",
+        "0x05": "EEPROM write error",
+        "0x07": "Data error"
+      },
+      "note": "ack_values is [1] and not [1, 2]. The manual documents C/R/A 0x02 as an 'Acknowledge frame' but never shows one, while all five worked examples answer with 0x01 — and the answer tables that print 0 are copy-paste errors the research identified. Matching a frame kind the vendor never demonstrated would close commands on evidence nobody has seen.",
+      "payloads": {
+        "0x28": {
+          "description": "GET_ALARM_DATA answer. Each alarm date is day / month / year-2000 / 0x00 plain binary — NOT an epoch and NOT BCD. Recovered from nine captured frames (54 date fields, zero invalid) rather than from the manual, which types these Uint32_t 'dd/mm/yy' and never says how that packs. A date of 0/0/2000 means the alarm has never fired.",
+          "fields": [
+            {
+              "name": "alarm_flags",
+              "offset": 6,
+              "length": 4,
+              "type": "uint32",
+              "endian": "big"
+            },
+            {
+              "name": "magnetic_alarm",
+              "offset": 9,
+              "length": 1,
+              "type": "uint8",
+              "bit": 0
+            },
+            {
+              "name": "removal_alarm",
+              "offset": 9,
+              "length": 1,
+              "type": "uint8",
+              "bit": 1
+            },
+            {
+              "name": "blinding_alarm",
+              "offset": 9,
+              "length": 1,
+              "type": "uint8",
+              "bit": 2
+            },
+            {
+              "name": "loss_alarm",
+              "offset": 9,
+              "length": 1,
+              "type": "uint8",
+              "bit": 3
+            },
+            {
+              "name": "reverse_flow_alarm",
+              "offset": 9,
+              "length": 1,
+              "type": "uint8",
+              "bit": 4
+            },
+            {
+              "name": "low_battery_alarm",
+              "offset": 9,
+              "length": 1,
+              "type": "uint8",
+              "bit": 5
+            },
+            {
+              "name": "magnetic_alarm_day",
+              "offset": 10,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "magnetic_alarm_month",
+              "offset": 11,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "magnetic_alarm_year",
+              "offset": 12,
+              "length": 1,
+              "type": "uint8",
+              "value_offset": 2000
+            },
+            {
+              "name": "removal_alarm_day",
+              "offset": 14,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "removal_alarm_month",
+              "offset": 15,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "removal_alarm_year",
+              "offset": 16,
+              "length": 1,
+              "type": "uint8",
+              "value_offset": 2000
+            },
+            {
+              "name": "blinding_alarm_day",
+              "offset": 18,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "blinding_alarm_month",
+              "offset": 19,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "blinding_alarm_year",
+              "offset": 20,
+              "length": 1,
+              "type": "uint8",
+              "value_offset": 2000
+            },
+            {
+              "name": "loss_alarm_day",
+              "offset": 22,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "loss_alarm_month",
+              "offset": 23,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "loss_alarm_year",
+              "offset": 24,
+              "length": 1,
+              "type": "uint8",
+              "value_offset": 2000
+            },
+            {
+              "name": "reverse_flow_alarm_day",
+              "offset": 26,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "reverse_flow_alarm_month",
+              "offset": 27,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "reverse_flow_alarm_year",
+              "offset": 28,
+              "length": 1,
+              "type": "uint8",
+              "value_offset": 2000
+            },
+            {
+              "name": "low_battery_alarm_day",
+              "offset": 30,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "low_battery_alarm_month",
+              "offset": 31,
+              "length": 1,
+              "type": "uint8"
+            },
+            {
+              "name": "low_battery_alarm_year",
+              "offset": 32,
+              "length": 1,
+              "type": "uint8",
+              "value_offset": 2000
+            }
+          ]
+        }
+      }
+    },
+    "response_window_seconds": 43200,
+    "unacknowledgeable_commands": [
+      "reset"
+    ]
+  },
+  "receive_window": {
+    "class": null,
+    "class_note": "The IWM manual has no Class row, unlike the RFM's. Class A is the safe operational assumption for a 10-year battery meter, but it is not documented, so it is not asserted here.",
+    "post_join_seconds": 120,
+    "post_join_note": "The ~2-minute CONFIGURE window after join is the only period with frequent uplinks, so the only period with frequent RX slots. It is the intended window for provisioning (0x14, 0x16, 0x1A, 0x26).",
+    "operational_interval_seconds": 43200,
+    "operational_interval_note": "12 hours, configurable over NFC only — there is no downlink command to change it. A downlink queued in OPERATIONAL state may wait a full interval before the device opens an RX window."
+  }
+}

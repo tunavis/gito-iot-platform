@@ -29,10 +29,14 @@ separate codec definitions. See [Comparison](#comparison) at the end.
 > communication is done on LoRaWAN **port 1**." — p.12
 
 - **Downlink port: 1.** Stated explicitly.
-- **Uplink port: NOT STATED.** The word "port" appears nowhere else in a protocol
-  sense in this manual. The periodic measurement report (p.8–10) and the command
-  answers (§3.x "H2R" blocks) are described without any port number. Do not assume
-  port 1 for uplink from this document — it is simply absent.
+- **Uplink port: NOT STATED in the manual** — the word "port" appears nowhere else in
+  a protocol sense. The periodic measurement report (p.8–10) and the command answers
+  (§3.x "H2R" blocks) are described without any port number.
+
+  **RESOLVED 2026-08-03 from our own fleet: uplinks arrive on port 1.** 5,449 stored
+  uplinks from 61 live devices in `raw_uplinks`, every one on `f_port = 1`. B METERS'
+  own TTN codec agrees — `iwmlr3.js` handles `case 1:` and returns `unknown FPort`
+  for anything else. Both directions are port 1, as on the RFM.
 - LoRaWAN version: "LoRaWAN v.1.0.1 standard commands" (p.8).
 - **LoRaWAN Class: NOT STATED.** The Specification table (p.7) has no Class row
   (unlike the RFM manual, which does). Class A is the safe operational assumption for
@@ -353,10 +357,41 @@ Request `0x28 0x00 0x00 0x00 0x01 0x04`. Answer `Len = 0x1D` (29) = Device Type 
 Alarm Flags bitfield (verbatim): "Bit 0: magnetic / Bit 1: Removal / Bit 2: Blinding /
 Bit 3: Loss bit / Bit 4: Reverse stream / Bit 5: Low battery".
 
-⚠ The date fields are typed `Uint32_t` and described only as "dd/mm/yy". **The manual
-never says how a dd/mm/yy date packs into 4 bytes.** No worked example exists. Do not
-guess this encoding — it must come from a real device capture or the integrators'
-document.
+⚠ The date fields are typed `Uint32_t` and described only as "dd/mm/yy". The manual
+never says how a dd/mm/yy date packs into 4 bytes and gives no worked example.
+
+**RESOLVED 2026-08-03 from real device captures.** Nine `0x28` answers from live
+IWM-LR3/LR4 meters were posted to the ChirpStack forum
+([thread 22344](https://forum.chirpstack.io/t/convert-dates-decoding-an-pplink-after-a-downlink-bmeter-iwm-lr3-4/22344),
+October 2024). The packing is **not** an epoch — it is four plain binary bytes:
+
+| off | len | field |
+|---|---|---|
+| 0 | 1 | Day (1-31) |
+| 1 | 1 | Month (1-12) |
+| 2 | 1 | Year, offset from 2000 |
+| 3 | 1 | `0x00`, always |
+
+Same plain-`Uint8_t` convention the manual already uses for `0x14 SET_DATE_AND_TIME`,
+which is why it was never going to be BCD or an epoch.
+
+Verified across all 9 frames × 6 date fields — **54 fields, zero invalid**: every day
+1-31, every month 1-12, every year `0x12`-`0x18` (2018-2024, and the thread is from
+October 2024). Corroborated independently by the Alarm Flags: in every frame where a
+flag bit is set, that alarm's own date field is populated. Example, frame 6:
+
+```
+28 01 00 00 1D 04 | 00 00 00 08 | 00000000 | 18 09 18 00 | 00000000 | 1C 09 18 00 | ...
+                     flags=0x08                removal                 loss
+                     (bit 3 = Loss)            24/09/2024              28/09/2024
+```
+
+The forum poster's error was reading the four bytes as a big-endian `uint32` epoch,
+which produced dates in 1971-1973.
+
+This meets the bar this document set — a real device capture — so the IWM decoder is
+**no longer blocked** on the integrators' supplement for this field. Dates from *our*
+own meters should still be checked against this the first time we read one.
 
 #### 0x29 SET_ALARM_DATA — request 10 bytes / answer 5 bytes
 
@@ -701,9 +736,9 @@ Ordered by risk:
 
 | # | Gap | Device | Impact |
 |---|---|---|---|
-| 1 | `0x28 GET_ALARM_DATA` date fields: `Uint32_t` "dd/mm/yy" with **no packing described** and no example | IWM | Cannot decode alarm dates. Decode-only — does not block the encoder. |
+| ~~1~~ | ~~`0x28 GET_ALARM_DATA` date fields~~ | IWM | **CLOSED 2026-08-03** — day/month/year-2000/`0x00`, verified over 54 captured fields. See §1.4. |
 | 2 | `0x17` answer: `Len = 0x09` contradicts the byte-width row (sums to 6). Backward Counter is 1 or 4 bytes | IWM | Cannot decode counters reliably. Decode-only. |
-| 3 | Uplink port unknown | IWM | Must be observed from a live device before an uplink decoder can be routed. |
+| ~~3~~ | ~~Uplink port unknown~~ | IWM | **CLOSED 2026-08-03** — port 1, from 5,449 of our own uplinks. See §1.1. |
 | 4 | `Device Type` values unenumerated; tables say `0x04`, one example says `0x01` | IWM | Use `0x04` (six worked examples agree); verify on first live command. |
 | 5 | `Chain` field never described | IWM | Send `0x00` (every example does). |
 | 6 | Confirmed vs unconfirmed downlink unspecified | both | Integration choice; start unconfirmed, revisit if delivery is unreliable. |
@@ -718,3 +753,61 @@ names it directly:
 **Recommendation: request the B METERS integrators' document (ticket@bmeters.com)
 before implementing the IWM decoder.** The RFM-LR1 encoder can be built from this
 manual alone — its worked examples verify every field.
+
+*Update 2026-08-03: gaps 1 and 3 have since been closed from real captures without
+the supplement. It is still worth requesting for gaps 2 and 7.*
+
+---
+
+## Part 3 — B METERS' own published codec, and why we do not use it
+
+B METERS publish an IWM-LR3 codec in TTN's device repository
+([`vendor/b-meters/`](https://github.com/TheThingsNetwork/lorawan-devices/tree/master/vendor/b-meters)):
+`iwmlr3.js`, `iwmlr3-codec.yaml`, an 868 profile, and device metadata. Checked
+2026-08-03. **It is wrong for our fleet, in two independent ways.**
+
+### It reads the wrong VIF values
+
+The codec branches on the unit byte at offset 11 being `0x0D`, `0x0E` or `0x0F`:
+
+```js
+if (input.bytes[11] === 0x0D) { data.vif = input.bytes[11]*1; }        // litres
+else if (input.bytes[11] === 0x0E){ data.vif = input.bytes[11]*10; }   // decalitres
+else if (input.bytes[11] === 0x0F) { data.vif = input.bytes[11] * 100; }
+```
+
+**Our 61 live meters send `0x13`** — which is what the manual says (§1.4, `0x26`
+Transmission VIF: 0 = litres `0x13`, 1 = decalitres `0x14`, 2 = hectolitres `0x15`,
+3 = m³ `0x16`), and what our own declarative decoder already uses via
+`scale_exponent_base: 19`. Against a real payload the published codec falls through
+every branch and leaves `vif` undefined.
+
+Note also that the arithmetic is nonsense even on its own terms: it multiplies the
+*VIF code* by the unit factor, yielding 13, 140 and 1500 rather than a scale.
+
+### Its worked example does not match its own code
+
+`iwmlr3-codec.yaml` gives one example. Running the codec on that example's input:
+
+```
+input   : [0x2C,0x4A,0x20,0x01,0x00,0x22,0x01,0x00,0x00,0x00,0x00,0x0D,0x02]
+actual  : {"application":44,"valueCounter":73802,"flowCounter":290,...}
+claimed : {aplication:44, valueCounter:00012074, flowCounter:00000134,...}
+```
+
+The expected outputs were hand-written mixing hex and decimal within one number
+(`0x4A` rendered as "74", `0x22` as "34"), and the field name is misspelled
+`aplication` against the code's `application`.
+
+### What it is still good for
+
+It confirms the uplink port (`case 1:`) and the 13-byte periodic-report layout —
+application, `valueCounter`, `flowCounter`, `indexK`, `medium`, `vif`, `alarm` — which
+matches our decoder's field offsets exactly. It is corroboration of structure, not a
+codec to adopt.
+
+**Consequence for the driver model:** this is evidence for the script-codec path
+rather than against it. A sandboxed vendor codec that is wrong fails visibly and
+degrades to "payload undecodable" for one message; a hand-transcription of the same
+wrong codec is silently wrong forever. It is also a reminder that "official vendor
+codec" is not a synonym for "correct".

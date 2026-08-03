@@ -11,6 +11,7 @@ from sqlalchemy import (
     Float,
     Index,
     Boolean,
+    SmallInteger,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base
@@ -201,13 +202,21 @@ class DeviceCommand(BaseModel):
     )
     command_name = Column(String(100), nullable=False)
     parameters = Column(JSONB, default={})
-    status = Column(String(20), default="pending", nullable=False)
+    # 32, not 20: 'delivered_unconfirmed' is 21 characters (migration 029).
+    status = Column(String(32), default="pending", nullable=False)
     response = Column(JSONB, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     sent_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # The byte this command's device echoes when it answers (migration 030).
+    # NULL when the device type declares no driver or no correlation — no
+    # third-party device echoes `id`, and no first-party one needs an opcode.
+    # A partial unique index on (device_id, opcode) over the in-flight statuses
+    # is what makes "at most one in flight per pair" true rather than intended.
+    opcode = Column(SmallInteger, nullable=True)
 
     # Approval gate (migrations 027, 028). All of these are NULL for commands
     # issued through the UI/REST path, which is never gated — a NULL
@@ -234,8 +243,12 @@ class DeviceCommand(BaseModel):
         Index("idx_device_commands_device", "device_id"),
         Index("idx_device_commands_status", "status"),
         CheckConstraint(
+            # 'delivered_unconfirmed' is terminal: the command reached the device
+            # and its driver says this device can never acknowledge it. The sweep
+            # only touches pending/sent/delivered, so it is excluded from expiry
+            # by construction rather than by a second list to keep in step.
             "status IN ('pending', 'sent', 'delivered', 'executed', 'failed', "
-            "'timed_out', 'awaiting_approval', 'rejected')",
+            "'timed_out', 'awaiting_approval', 'rejected', 'delivered_unconfirmed')",
             name="valid_command_status",
         ),
     )

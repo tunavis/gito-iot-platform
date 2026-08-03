@@ -14,8 +14,15 @@ class CommandCreate(BaseModel):
         ..., min_length=1, max_length=100, examples=["reboot", "set_interval"]
     )
     parameters: dict[str, Any] = Field(default_factory=dict, examples=[{"interval": 30}])
-    ttl_seconds: int = Field(
-        default=60, ge=5, le=3600, description="Time-to-live in seconds before command times out"
+    ttl_seconds: Optional[int] = Field(
+        default=None,
+        ge=5,
+        le=3600,
+        description=(
+            "Time-to-live in seconds before the command times out. Omit to use the "
+            "device type's declared response window — a meter that reports every "
+            "twelve hours cannot answer inside any value expressible here."
+        ),
     )
 
 

@@ -5,7 +5,31 @@ from typing import Optional, List, Any, Dict
 from uuid import UUID
 from enum import Enum
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+
+from payload_codec.driver import DriverError, validate_driver
+
+_DRIVER_DESCRIPTION = (
+    "How the platform speaks to this device type: transport binding, downlink "
+    "command encoding, acknowledgement semantics and timing. Omit it entirely "
+    "for the pre-driver behaviour. Validated here so a byte offset transcribed "
+    "wrongly from a vendor manual is refused on save rather than at dispatch. "
+    "Schema: shared/payload_codec/payload_codec/driver.py."
+)
+
+
+def _validate_driver_field(value: Optional[dict]) -> Optional[dict]:
+    """Reject a malformed driver at the API boundary, with the reason.
+
+    Shared by create and update rather than written twice: a declaration that
+    only one of the two paths checks is a declaration that arrives through the
+    other one.
+    """
+    try:
+        validate_driver(value)
+    except DriverError as e:
+        raise ValueError(str(e)) from e
+    return value
 
 
 class DeviceCategory(str, Enum):
@@ -166,6 +190,9 @@ class DeviceTypeCreate(BaseModel):
         default=None,
         description="Declarative byte-layout payload decoder, used only when the network server hasn't decoded the uplink. E.g. {'type': 'declarative', 'fields': [{'name': 'flow_rate', 'offset': 0, 'length': 2, 'type': 'uint16', 'scale': 0.1}]}",
     )
+    driver: Optional[dict] = Field(default=None, description=_DRIVER_DESCRIPTION)
+
+    _check_driver = field_validator("driver")(_validate_driver_field)
 
     @model_validator(mode="after")
     def validate_unique_field_names(self) -> "DeviceTypeCreate":
@@ -200,7 +227,10 @@ class DeviceTypeUpdate(BaseModel):
     metadata: Optional[dict] = None
     key_mapping: Optional[Dict[str, str]] = None
     decoder: Optional[dict] = None
+    driver: Optional[dict] = Field(default=None, description=_DRIVER_DESCRIPTION)
     is_active: Optional[bool] = None
+
+    _check_driver = field_validator("driver")(_validate_driver_field)
 
     @model_validator(mode="after")
     def validate_unique_field_names(self) -> "DeviceTypeUpdate":
@@ -237,6 +267,7 @@ class DeviceTypeResponse(BaseModel):
     metadata: Optional[dict] = Field(None, validation_alias="extra_metadata")
     key_mapping: Optional[Dict[str, str]] = Field(default={})
     decoder: Optional[dict] = Field(default=None)
+    driver: Optional[dict] = Field(default=None)
 
     is_active: bool
     device_count: int

@@ -278,6 +278,85 @@ dashboard builder is also out of scope; it is a layout grid, not a graph.
 
 ---
 
+## 🔌 Device drivers — `drivers/*.json` + `payload_codec.driver`
+
+How the platform speaks to a class of hardware is **data on the device type**
+(`device_types.driver`, JSONB, nullable), not code: transport binding, downlink
+encoding, acknowledgement semantics and timing in one declaration. Adding a
+vendor must require no platform source change — that is the acceptance
+criterion, and `api/tests/test_device_driver.py` enforces it by onboarding a
+fictional third vendor with a third header shape by declaration alone.
+
+**A NULL driver is the compatibility guarantee, not an unconfigured state.**
+Every accessor returns the pre-driver behaviour for `None`, so the live fleet
+dispatches, decodes and expires exactly as it did. Never "fix" a device type by
+giving it a driver it does not need.
+
+**Drivers are file-defined and version-controlled** — they live in `drivers/`
+and are applied by PUTting the JSON as a device type's `driver` field. Adding a
+vendor is therefore a deploy, deliberately: byte offsets transcribed from a
+vendor manual want review, diffs and history, not a text box at 5pm. The
+device-type UI's *command schema* editor is a different thing and stays as it
+is — it describes what a command means to a user (name, parameters, ranges),
+while a driver describes how those bytes go on the wire.
+
+The module lives in **`shared/payload_codec/payload_codec/driver.py`**, not in
+the API, because the processor reads drivers too — uplink decoding and
+acknowledgement correlation happen at ingest. Both Dockerfiles already install
+that package. A second copy would be two readers of one declaration format,
+free to drift, and the first symptom would be a command whose answer nobody
+matched.
+
+Encoding reuses the same package's `encode()`. A header is not a special
+mechanism, it is fields at offsets 0..n whose values happen to be fixed, so a
+B METERS IWM's 5-byte header and an RFM's 2-byte header are the same code with
+different declarations. Constants win over caller-supplied parameters and a
+collision **raises** — a caller must never reach the opcode byte.
+
+**Acknowledgement correlates on (device, opcode)**, never on `command_id` —
+no third-party device echoes ours. An IWM answers with the same `Fct` byte, an
+RFM echoes the whole frame and refuses with `0x02 <Index>`; both are two bytes
+read at declared offsets (`acknowledgement.response`), so a third vendor's
+dialect of "yes" also needs no code. `device_commands.opcode` holds the key and
+a **partial unique index** (`uq_device_commands_inflight_opcode`, migration 030)
+refuses a second command on the same pair while one is in flight — two answers
+to one opcode cannot be told apart. It is an index and not a router check
+because two dispatches arriving together would both read "nothing outstanding".
+The correlating write is `_correlate_driver_ack` in the processor.
+
+`driver.telemetry` has absorbed `device_types.decoder` — same field keys, same
+engine, so it is a move and not a translation. The column stays the fallback
+and is still what every live device type uses; `get_codec()` returns both from
+one row. Neither B METERS driver carries a decoder yet (the IWM manual leaves
+four fields undecodable; RFM uplinks concatenate frames with no length byte,
+which a fixed-offset spec cannot express) — recorded in the files themselves.
+
+Three things phase 1 changed that live outside this module:
+
+- `_detect_protocol` (shared with `ota_dispatch`) consults the driver, then the
+  device type's `connectivity.protocol`, then the old heuristics, and **raises**
+  for a protocol it cannot dispatch. It used to default to MQTT, so a `modbus`
+  device had its commands published to an MQTT channel and reported as sent.
+- `DEVICE_RESPONSE_TTL_SECONDS = 60` is now only the no-driver default;
+  `acknowledgement.response_window_seconds` replaces it per type. An IWM reports
+  every 12 hours, NFC-settable only — 60s was wrong by three orders of magnitude.
+- `delivered_unconfirmed` is a terminal command status for devices that can
+  never acknowledge (IWM `RESET`, RFM `0x03 0x05`). The sweep only touches
+  pending/sent/delivered, so it is excluded from expiry by construction.
+
+`transport.mode` (`payload` | `register_map` | `edge_gateway`) is explicit from
+day one and only `payload` is implemented; the others are **refused on write**.
+Register/address-space protocols have no message to encode at all, and
+discovering that later as a "special case" is the rewrite the discriminator
+exists to prevent. See `openspec/changes/add-device-driver-model/design.md` for
+the three protocol families and which one is in scope.
+
+Script codecs (a vendor's own `*-encoder.js`) are phase 3 and are currently
+refused — the sandbox is the feature, not a hardening task, because RLS is inert
+under the app's database role.
+
+---
+
 ## 🤖 MCP Server — `api/app/mcp/`
 
 Agent-facing tools live in `api/app/mcp/`, mounted at `/mcp` on the same FastAPI
@@ -310,6 +389,11 @@ Writes are approval-gated: `send_device_command` records a command with
 `status='awaiting_approval'`, dispatches nothing, and requires a `reason` that is
 shown to the approver. A person decides at `/dashboard/approvals` (Approve sends
 it; Reject records the refusal and sends nothing).
+
+`get_command_status` is how an agent learns the outcome — without it the model
+gets an approval reference and then knows nothing further, forever. It returns a
+`meaning` string alongside the status, because the two that matter read
+backwards: `sent` is not success, and `delivered_unconfirmed` is.
 
 Every tool must declare `ToolAnnotations` — `read_only_hint` on reads,
 `destructive_hint` on the write. `register()` has no default for it, so omitting

@@ -23,14 +23,45 @@ import redis.asyncio as aioredis
 
 from app.config import get_settings
 from app.models.base import Device
+from payload_codec.driver import DISPATCHABLE_PROTOCOLS, declared_protocol
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
 
-def _detect_protocol(device: Device) -> str:
-    """Determine delivery protocol from device fields."""
+class UnsupportedProtocolError(ValueError):
+    """The resolved protocol has no dispatch path, so nothing was sent.
+
+    Raised rather than defaulted. Before drivers existed an unrecognised
+    protocol fell through to MQTT, so a device type declaring `modbus` had its
+    commands published to an MQTT channel and reported as sent — a wrong answer
+    delivered quietly, which is worse than a refusal.
+    """
+
+
+def _detect_protocol(device: Device, driver: dict = None, device_type=None) -> str:
+    """Determine delivery protocol: declaration first, heuristics only as a fallback.
+
+    Order — the driver's `transport.protocol`, then the device type's declared
+    `connectivity.protocol`, then the field heuristics that were the whole
+    mechanism before this change. A device type with neither behaves exactly as
+    it does today.
+
+    Raises `UnsupportedProtocolError` for anything this platform cannot put on
+    the wire. Both dispatchers catch it and record the reason on the command.
+    """
+    protocol = declared_protocol(driver, device_type) or _infer_protocol(device)
+    if protocol not in DISPATCHABLE_PROTOCOLS:
+        raise UnsupportedProtocolError(
+            f"Protocol {protocol!r} has no dispatch path "
+            f"(supported: {sorted(DISPATCHABLE_PROTOCOLS)}). Nothing was sent."
+        )
+    return protocol
+
+
+def _infer_protocol(device: Device) -> str:
+    """Guess the protocol from device fields — the pre-driver behaviour, unchanged."""
     attrs = device.attributes or {}
     # Explicit override wins
     if attrs.get("protocol"):

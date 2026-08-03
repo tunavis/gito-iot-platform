@@ -629,6 +629,17 @@ class NotificationBackgroundTasks:
 
         Commands have an expires_at timestamp set at creation. If the device
         hasn't responded by then, the command is moved to 'timed_out' status.
+
+        The per-driver response window is honoured here without this query
+        knowing anything about drivers: `routers/commands.py` computes
+        `expires_at` from the device type's declaration, so a twelve-hour meter
+        is simply not yet expired. Deliberately not a join — the sweep runs on a
+        timer over the whole table, and resolving a driver per row would put the
+        driver model on a path that has no need to read it.
+
+        `delivered_unconfirmed` is absent from the status list on purpose: it is
+        terminal, and rewriting it to `timed_out` would turn a command this
+        platform knows was delivered into a recorded failure.
         """
         try:
             session_gen = get_session()

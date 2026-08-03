@@ -1,0 +1,187 @@
+{
+  "vendor": "B METERS",
+  "model": "RFM-LR1 (LoRaWAN module for the GSD8-RFM water meter)",
+  "source": "Manual-RFM_LR1_1.1.2_ENG — User Manual v1.1.2; see openspec/changes/add-device-driver-model/research/b-meters-commands.md",
+  "frame": "2-byte header (Type, Index) followed by data whose width is fixed per Index. Type is 0x01 Set / 0x02 Query / 0x03 Action on downlink. No length byte, no error byte, no Device Type byte — nothing at all in common with this vendor's own IWM line, and byte 0x0A means CPU temperature here and 'reset the microcontroller' there.",
+
+  "transport": {
+    "mode": "payload",
+    "protocol": "lorawan",
+    "lorawan": {
+      "f_port": 1,
+      "confirmed": false
+    }
+  },
+
+  "commands": {
+    "mode": "declarative",
+    "definitions": {
+      "set_status": {
+        "description": "0x01 0x20 — write the alarm status byte. The written value is a mask of alarms to KEEP: 0x00 clears all, 0xFF clears none, 0x80 clears all but 'module removed'.",
+        "constants": {"type": 1, "index": 32},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"},
+          {"name": "keep_mask", "offset": 2, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "set_reporting_interval": {
+        "description": "0x01 0x22 — reporting interval in minutes, 1 to 10080 (7 days).",
+        "constants": {"type": 1, "index": 34},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"},
+          {"name": "minutes", "offset": 2, "length": 2, "type": "uint16", "endian": "big"}
+        ]
+      },
+
+      "set_starting_value": {
+        "description": "0x01 0x25 — the meter's starting volume in litres. Intended for the ~2-minute CONFIGURE window after join; the meter should not be in use during calibration.",
+        "constants": {"type": 1, "index": 37},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"},
+          {"name": "litres", "offset": 2, "length": 4, "type": "uint32", "endian": "big"}
+        ]
+      },
+
+      "set_q3_max_flow": {
+        "description": "0x01 0x2B — Q3 max flow in litres per hour, matching the mechanical meter's rating.",
+        "constants": {"type": 1, "index": 43},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"},
+          {"name": "litres_per_hour", "offset": 2, "length": 2, "type": "uint16", "endian": "big"}
+        ]
+      },
+
+      "set_leak_window_size": {
+        "description": "0x01 0x2C — leak detection window, in 15-second sample counts, 1 to 255.",
+        "constants": {"type": 1, "index": 44},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"},
+          {"name": "samples", "offset": 2, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "set_leak_zero_tolerance": {
+        "description": "0x01 0x2D — max opto phase changes still considered 'not moving', 0 to 255.",
+        "constants": {"type": 1, "index": 45},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"},
+          {"name": "phase_changes", "offset": 2, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_fw_build_hash": {
+        "description": "0x02 0x03 — the firmware build hash (6 x Uint8).",
+        "constants": {"type": 2, "index": 3},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_cpu_voltage": {
+        "description": "0x02 0x06 — CPU voltage, 25 mV per LSB.",
+        "constants": {"type": 2, "index": 6},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_cpu_temperature": {
+        "description": "0x02 0x0A — CPU temperature, 0.01 C per LSB with a 50 C offset. Note that 0x0A on this vendor's IWM line is RESET.",
+        "constants": {"type": 2, "index": 10},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_status": {
+        "description": "0x02 0x20 — the alarm status bitfield.",
+        "constants": {"type": 2, "index": 32},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_volume": {
+        "description": "0x02 0x21 — meter volume in litres.",
+        "constants": {"type": 2, "index": 33},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_reporting_interval": {
+        "description": "0x02 0x22 — the configured reporting interval in minutes.",
+        "constants": {"type": 2, "index": 34},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_starting_value": {
+        "description": "0x02 0x25 — the configured starting volume in litres.",
+        "constants": {"type": 2, "index": 37},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "query_back_flow_volume": {
+        "description": "0x02 0x27 — reverse-flow volume in litres.",
+        "constants": {"type": 2, "index": 39},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      },
+
+      "reset_device": {
+        "description": "0x03 0x05 — remote reset. The device re-joins with ALL SETTINGS BACK TO FACTORY DEFAULT and answers nothing.",
+        "constants": {"type": 3, "index": 5},
+        "fields": [
+          {"name": "type", "offset": 0, "length": 1, "type": "uint8"},
+          {"name": "index", "offset": 1, "length": 1, "type": "uint8"}
+        ]
+      }
+    }
+  },
+
+  "telemetry_note": "No telemetry decoder yet, and not because the format is unknown — it is fully documented. A single RFM uplink may carry several Type|Index|Data triples back to back with no length byte ('012100001738012008' is Volume plus Status), and the declarative field spec addresses fixed offsets. Decoding this needs a length-per-index loop, which is a codec shape this engine does not have. Recorded here rather than half-declared: a spec that read only the first frame would silently drop the second.",
+
+  "acknowledgement": {
+    "mode": "echo_frame",
+    "opcode_field": "index",
+    "response": {
+      "opcode_offset": 1,
+      "kind_offset": 0,
+      "ack_values": [1],
+      "nack_values": [2],
+      "note": "Type 0x01 is 'Data' on the uplink and 0x02 is 'Command NACK' — the only real negative acknowledgement in either B METERS family. KNOWN AMBIGUITY: the unsolicited status and volume reports (indexes 0x20 and 0x21) are byte-identical in shape to the echo of a Set on the same index, and the manual offers nothing to tell them apart. A periodic status uplink will therefore close an outstanding set_status. That is the best available answer rather than a defect to hide — the echoed value IS the device's current status — but it means a set on 0x20 or 0x21 is confirmed by the next report even if the device never applied it."
+    },
+    "response_window_seconds": 14400,
+    "unacknowledgeable_commands": ["reset_device"],
+    "note": "A successful Set is echoed byte-for-byte as 0x01 <Index> <the written data>, so a write can be verified end to end. A refusal comes back as 0x02 <Index>. Correlation is by Index; there is no correlation id."
+  },
+
+  "receive_window": {
+    "class": "A",
+    "post_join_seconds": 120,
+    "post_join_note": "The CONFIGURE window is ~2 minutes after join, with at least five uplinks at increasing 15s-to-2min intervals. It is the intended window for set_starting_value.",
+    "operational_interval_seconds": 14400,
+    "operational_interval_note": "4 hours by default, settable over the air via set_reporting_interval (1 minute to 7 days). A queued downlink waits up to one interval.",
+    "rejoin_note": "The device re-joins if it hears nothing from the network for 288 uplinks (~36 days), so a network server that never sends downlinks causes periodic re-joins."
+  }
+}

@@ -196,6 +196,7 @@ async def create_device_type(
         key_mapping=device_type_data.key_mapping or {},
         command_schema=device_type_data.command_schema or {},
         decoder=device_type_data.decoder,
+        driver=device_type_data.driver,
     )
 
     session.add(device_type)
@@ -440,6 +441,15 @@ async def clone_device_type(
         default_settings=source.default_settings,
         connectivity=source.connectivity,
         extra_metadata=source.extra_metadata,
+        # These four were being dropped: a clone came back looking like its
+        # source in the UI while speaking a different wire format. For `driver`
+        # that is the worst version of it — the clone silently falls back to the
+        # pre-driver JSON payload, which a third-party meter cannot parse, and
+        # reports every command as sent.
+        command_schema=source.command_schema,
+        key_mapping=source.key_mapping,
+        decoder=source.decoder,
+        driver=source.driver,
     )
 
     session.add(clone)

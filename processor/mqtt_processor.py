@@ -19,6 +19,7 @@ Architecture (Phase 2):
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -36,6 +37,7 @@ from psycopg.rows import dict_row
 
 from alarm_core import Rule as AlarmRule, evaluate as evaluate_alarm_rules
 from payload_codec import decode as decode_payload
+from payload_codec import parse_acknowledgement, telemetry_spec
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -167,8 +169,8 @@ class DatabaseService:
         self._deveui_cache: dict[str, tuple[float, tuple[str, str] | None]] = {}
         # key_mapping cache: {device_id: (monotonic_time, {raw_key: canonical_key})}
         self._key_mapping_cache: dict[str, tuple[float, dict[str, str]]] = {}
-        # payload decoder cache: {device_id: (monotonic_time, spec | None)}
-        self._decoder_cache: dict[str, tuple[float, dict | None]] = {}
+        # codec cache: {device_id: (monotonic_time, (decoder spec | None, driver | None))}
+        self._decoder_cache: dict[str, tuple[float, tuple[dict | None, dict | None]]] = {}
         # alert rules cache: {(tenant_id, device_id): (expires_monotonic, rules)}
         self._rules_cache: dict[tuple[str, str], tuple[float, list]] = {}
 
@@ -247,31 +249,46 @@ class DatabaseService:
             return payload
         return {mapping.get(k, k): v for k, v in payload.items()}
 
-    async def get_decoder(self, device_id: str) -> dict | None:
-        """Return the device type's payload decoder spec, or None. Cached 5 min."""
+    async def get_codec(self, device_id: str) -> tuple[dict | None, dict | None]:
+        """Return (uplink decoder spec, driver) for a device. Cached 5 min.
+
+        Both come from one row because the driver has absorbed the decoder: a
+        driver's `telemetry` **is** the decoder spec, in the same shape, read by
+        the same engine, so preferring it is a move rather than a translation.
+        The standalone `device_types.decoder` column stays the fallback — every
+        live device type uses it and none has a driver, which is what makes
+        absorbing it a no-op for the fleet.
+        """
         now = time.monotonic()
         cached = self._decoder_cache.get(device_id)
         if cached and (now - cached[0]) < UNIT_CACHE_TTL:
             return cached[1]
 
         spec: dict | None = None
+        driver: dict | None = None
         try:
             async with self.conn_pool.connection() as conn:
                 result = await conn.execute(
-                    "SELECT dt.decoder FROM devices d "
+                    "SELECT dt.decoder, dt.driver FROM devices d "
                     "JOIN device_types dt ON d.device_type_id = dt.id WHERE d.id = %s",
                     (device_id,),
                 )
                 row = await result.fetchone()
                 if row:
-                    raw = row.get("decoder") if isinstance(row, dict) else row[0]
-                    if isinstance(raw, dict):
-                        spec = raw
+                    decoder, raw_driver = (
+                        (row.get("decoder"), row.get("driver"))
+                        if isinstance(row, dict)
+                        else (row[0], row[1])
+                    )
+                    driver = raw_driver if isinstance(raw_driver, dict) else None
+                    spec = telemetry_spec(driver)
+                    if spec is None and isinstance(decoder, dict):
+                        spec = decoder
         except Exception as e:
-            logger.debug(f"Decoder lookup failed for {device_id}: {e}")
+            logger.debug(f"Codec lookup failed for {device_id}: {e}")
 
-        self._decoder_cache[device_id] = (now, spec)
-        return spec
+        self._decoder_cache[device_id] = (now, (spec, driver))
+        return spec, driver
 
     async def mark_device_seen(self, tenant_id: str, device_id: str) -> None:
         """Bump last_seen/status for a device whose uplink produced no telemetry
@@ -1515,6 +1532,90 @@ class MQTTProcessor:
                 "Failed to correlate command response %s: %s", command_id, e
             )
 
+    async def _correlate_driver_ack(
+        self, tenant_id: str, device_id: str, driver: dict, raw_b64: str
+    ) -> None:
+        """Close a command that this uplink is the device's answer to.
+
+        The sibling above correlates on `command_id`, which only a device built
+        for this platform's own convention echoes. **No third-party device does.**
+        A B METERS IWM answers with the same `Fct` byte it was sent; an RFM-LR1
+        echoes the whole frame and refuses with `0x02 <Index>`. So the key here is
+        (device, opcode), and `uq_device_commands_inflight_opcode` is what makes
+        that unambiguous — at most one command per pair can be in flight, so the
+        UPDATE below can touch at most one row without ordering or a limit.
+
+        Runs on every uplink from a device whose type has a driver, so it must be
+        cheap and it must not mistake a measurement for an answer;
+        `parse_acknowledgement` returns None for anything not recognisably one.
+        """
+        try:
+            raw = base64.b64decode(raw_b64, validate=False)
+        except Exception:
+            return
+
+        ack = parse_acknowledgement(driver, raw)
+        if ack is None:
+            return
+
+        # 'executed' and 'failed' are the lifecycle's existing terminal states —
+        # a device answering is exactly what they have always meant. The raw
+        # frame is kept as the response so an operator can read what came back
+        # even where the platform cannot yet decode its payload.
+        new_status = "executed" if ack.accepted else "failed"
+        # The raw frame is always kept, decoded or not, so an operator can read
+        # what came back even where the platform cannot yet interpret it — which
+        # for most IWM answers is still the case. `payload` carries whatever the
+        # driver declared a layout for, and stays out of telemetry: an answer is
+        # not a measurement.
+        response = {"raw_b64": raw_b64, "opcode": ack.opcode}
+        if ack.payload:
+            response["payload"] = ack.payload
+
+        try:
+            async with self.db_service.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
+                )
+                cur = await conn.execute(
+                    """UPDATE device_commands
+                       SET status = %s,
+                           response = %s::jsonb,
+                           error_message = %s,
+                           completed_at = now()
+                       WHERE device_id = %s::uuid
+                         AND tenant_id = %s::uuid
+                         AND opcode = %s
+                         AND status IN ('pending', 'sent', 'delivered')""",
+                    (new_status, json.dumps(response), ack.reason,
+                     device_id, tenant_id, ack.opcode),
+                )
+                await conn.commit()
+                if cur.rowcount:
+                    logger.info(
+                        "Command acknowledgement correlated",
+                        extra={
+                            "device_id": device_id,
+                            "opcode": ack.opcode,
+                            "status": new_status,
+                            "reason": ack.reason,
+                        },
+                    )
+                else:
+                    # Common and not an error: a device re-sending an answer, or
+                    # answering after its window closed. Logged because "the
+                    # device did reply, just too late" is the one thing a
+                    # timed_out row cannot tell anyone.
+                    logger.debug(
+                        "Uplink from %s parsed as an answer to opcode 0x%02x, but no "
+                        "command was waiting for it",
+                        device_id, ack.opcode,
+                    )
+        except Exception as e:
+            logger.error(
+                "Failed to correlate acknowledgement for device %s: %s", device_id, e
+            )
+
     async def _handle_ota_progress(
         self, tenant_id: str, device_id: str, payload: dict
     ) -> None:
@@ -1639,10 +1740,11 @@ class MQTTProcessor:
             sensor_data = cs_msg.get("object")
             codec_used: str | None = None
 
+            decoder_spec, driver = await self.db_service.get_codec(device_id)
+
             if sensor_data and isinstance(sensor_data, dict) and set(sensor_data) - NS_PLACEHOLDER_KEYS:
                 codec_used = "ns"
             else:
-                decoder_spec = await self.db_service.get_decoder(device_id)
                 decoded = decode_payload(decoder_spec, raw_b64, f_port) if decoder_spec else {}
                 if decoded:
                     sensor_data = decoded
@@ -1653,6 +1755,13 @@ class MQTTProcessor:
                     tenant_id, device_id, raw_b64, f_port,
                     decoded=codec_used is not None, codec_used=codec_used,
                 )
+
+            # Correlate a command acknowledgement, before the "nothing decoded"
+            # return below. An answer is not a measurement: an IWM's reply to
+            # 0x27 or an RFM's NACK carries no telemetry at all, so a command
+            # would never be closed if this ran after that return.
+            if raw_b64 and driver:
+                await self._correlate_driver_ack(tenant_id, device_id, driver, raw_b64)
 
             if not sensor_data or not isinstance(sensor_data, dict):
                 logger.warning(
