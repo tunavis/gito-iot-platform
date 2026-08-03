@@ -137,7 +137,7 @@ class _FakeHttpSession:
         return False
 
 
-async def _dispatch_capture(device, command, driver=None, device_type=None):
+async def _dispatch_capture(device, command, driver=None, device_type=None, session=None):
     """Dispatch for real, with the two transports replaced by recorders.
 
     Returns (success, error, redis_publishes, http_posts).
@@ -149,7 +149,7 @@ async def _dispatch_capture(device, command, driver=None, device_type=None):
     with patch.object(
         cd.aioredis, "from_url", new=AsyncMock(return_value=redis)
     ), patch.object(cd.aiohttp, "ClientSession", lambda *a, **k: _FakeHttpSession(posts)):
-        success, error = await service.dispatch(device, command, driver, device_type)
+        success, error = await service.dispatch(device, command, driver, device_type, session)
 
     return success, error, redis.published, posts
 

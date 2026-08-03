@@ -31,6 +31,11 @@ dependencies = [
     "pydantic-settings==2.14.2",
     "pyjwt==2.11.0",
     "passlib[bcrypt]==1.7.4",
+    # Declared directly, not inherited from python-jose's [cryptography]
+    # extra. `app/services/secrets.py` imports Fernet itself, and a
+    # load-bearing dependency held only through someone else's extra
+    # disappears the day that package restructures.
+    "cryptography>=42,<51",
     "python-multipart==0.0.32",
     "python-dotenv==1.0.0",
     "redis==5.0.1",

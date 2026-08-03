@@ -180,6 +180,34 @@ async def _validate_device_fks(
             )
 
 
+
+async def _validate_integration(session, tenant_id, integration_id):
+    """Refuse a network server belonging to someone else.
+
+    RLS is inert under the application's database role, so this query *is* the
+    tenant boundary rather than a second line of defence. A device bound to
+    another tenant's integration would have its downlinks published to that
+    tenant's broker.
+    """
+    if integration_id is None:
+        return
+    from app.models.base import Integration
+
+    found = (
+        await session.execute(
+            select(Integration).where(
+                Integration.id == integration_id,
+                Integration.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if found is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Integration not found in this tenant",
+        )
+
+
 @router.post(
     "",
     response_model=SuccessResponse,
@@ -257,10 +285,13 @@ async def create_device(
         asset_id=device_data.asset_id,
         dev_eui=device_data.dev_eui,
         ttn_app_id=device_data.ttn_app_id,
+        integration_id=device_data.integration_id,
         device_profile_id=device_data.device_profile_id,
         attributes=attrs,
         status="offline",
     )
+
+    await _validate_integration(session, current_tenant, device_data.integration_id)
 
     session.add(device)
     await session.commit()
@@ -387,6 +418,11 @@ async def update_device(
         device.dev_eui = device_data.dev_eui
     if device_data.ttn_app_id is not None:
         device.ttn_app_id = device_data.ttn_app_id
+    # `model_fields_set`, not `is not None`: unbinding a device is an explicit
+    # null, and it must be possible to say so.
+    if "integration_id" in device_data.model_fields_set:
+        await _validate_integration(session, tenant_id, device_data.integration_id)
+        device.integration_id = device_data.integration_id
     if device_data.device_profile_id is not None:
         device.device_profile_id = device_data.device_profile_id
 

@@ -69,10 +69,37 @@ PARAM_META = {
 }
 
 
+# Commands the driver knows how to encode but the UI does not offer.
+#
+# The driver still defines all twelve — that is the wire knowledge, transcribed
+# from the manual and under version control. This list is the *affordance*: what
+# a person is given a button for. Separating the two is the point of the design.
+#
+# Four of these can disturb the consumption data the whole fleet exists to
+# report, and one of those does it as a side effect nobody would expect:
+WITHHELD = {
+    "set_revolution_counters": "overwrites the consumption counter directly",
+    "set_meter_par": "changes the K index — litres per revolution, so every later reading",
+    "set_alarm_par": (
+        "whole-struct write including the transmission VIF, which is the UNIT volume is "
+        "reported in; sending it to toggle one flag silently rewrites the rest"
+    ),
+    "reset": "forces a re-join; the manual says consumption is saved and restored, unverified",
+    "set_date_and_time": "not volume, but re-times every subsequent reading",
+    "set_alarm_data": "not volume, but clears alarm history",
+}
+
+# Set to True only when someone has decided, per command, that it should be
+# clickable. Defaulting this to True is how a safeguard becomes a comment.
+EXPOSE_WRITES = False
+
+
 def build_command_schema(driver: dict) -> dict:
     """One UI entry per driver command; parameters are the fields not fixed by it."""
     schema = {}
     for name, definition in driver["commands"]["definitions"].items():
+        if name in WITHHELD and not EXPOSE_WRITES:
+            continue
         constants = definition.get("constants") or {}
         params = []
         for field in definition["fields"]:
@@ -137,8 +164,13 @@ async def main() -> int:
 
         print(f"applied to {row.name} ({row.id})")
         print(f"  capabilities : {caps}")
-        print(f"  commands     : {', '.join(sorted(command_schema))}")
+        print(f"  offered      : {', '.join(sorted(command_schema))}")
         print(f"  decoder      : {'unchanged' if row.decoder else 'none'}")
+        if not EXPOSE_WRITES:
+            print(f"  withheld     : {len(WITHHELD)} write command(s) the driver can still "
+                  f"encode but the UI does not offer —")
+            for name, why in sorted(WITHHELD.items()):
+                print(f"                 {name}: {why}")
         return 0
     finally:
         await gen.aclose()

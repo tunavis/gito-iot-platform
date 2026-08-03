@@ -427,6 +427,10 @@ async def execute_campaign(
             firmware_url=fw.url,
             firmware_hash=fw.hash,
             firmware_version=fw.version,
+            # So a bound device resolves its own network server. Without this an
+            # OTA image would go to the platform default — a different server
+            # from the one that device's commands go to.
+            session=session,
         )
         campaign_device = campaign_devices_by_device_id.get(device.id)
         if ok:

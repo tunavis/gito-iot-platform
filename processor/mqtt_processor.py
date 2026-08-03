@@ -169,6 +169,9 @@ class DatabaseService:
         self._deveui_cache: dict[str, tuple[float, tuple[str, str] | None]] = {}
         # key_mapping cache: {device_id: (monotonic_time, {raw_key: canonical_key})}
         self._key_mapping_cache: dict[str, tuple[float, dict[str, str]]] = {}
+        # last application id written per device, so a correct value is not
+        # re-written on every uplink
+        self._app_id_cache: dict[str, str] = {}
         # codec cache: {device_id: (monotonic_time, (decoder spec | None, driver | None))}
         self._decoder_cache: dict[str, tuple[float, tuple[dict | None, dict | None]]] = {}
         # alert rules cache: {(tenant_id, device_id): (expires_monotonic, rules)}
@@ -289,6 +292,45 @@ class DatabaseService:
 
         self._decoder_cache[device_id] = (now, (spec, driver))
         return spec, driver
+
+    async def record_application_id(
+        self, tenant_id: str, device_id: str, application_id: str
+    ) -> None:
+        """Remember which network-server application a device reports from.
+
+        The downlink topic cannot be formed without it, and it arrives on every
+        single uplink — in the MQTT topic and in `deviceInfo.applicationId` —
+        where it was previously discarded.
+
+        Written only when it changes, so this is not a database write per uplink.
+        The in-process cache is keyed by device and holds the last value seen; a
+        device moved to another application updates on its next message.
+        """
+        if not application_id:
+            return
+        if self._app_id_cache.get(device_id) == application_id:
+            return
+        try:
+            async with self.conn_pool.connection() as conn:
+                await conn.execute(
+                    "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
+                )
+                await conn.execute(
+                    "UPDATE devices SET ttn_app_id = %s, updated_at = now() "
+                    "WHERE id = %s AND tenant_id = %s "
+                    # An explicitly set value wins: only fill it in or correct a
+                    # value we ourselves observed. A NULL is an omission to fix.
+                    "AND (ttn_app_id IS NULL OR ttn_app_id <> %s)",
+                    (application_id, device_id, tenant_id, application_id),
+                )
+                await conn.commit()
+            self._app_id_cache[device_id] = application_id
+            logger.info(
+                "Recorded network-server application for device",
+                extra={"device_id": device_id, "application_id": application_id},
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Failed to record application id for %s: %s", device_id, e)
 
     async def mark_device_seen(self, tenant_id: str, device_id: str) -> None:
         """Bump last_seen/status for a device whose uplink produced no telemetry
@@ -1026,6 +1068,10 @@ class BridgeWorker:
 
             lock_renewer = asyncio.create_task(self._renew_lock_loop(redis, lock_key, status_key))
             count_flusher = asyncio.create_task(self._flush_count_loop())
+            # Downlinks go out on THIS client, so a bridge can only ever reach its
+            # own broker. That is what makes "a command never reaches the wrong
+            # network server" a constraint rather than a promise.
+            downlinker = asyncio.create_task(self._downlink_loop(client))
 
             try:
                 async for message in client.messages:
@@ -1048,12 +1094,78 @@ class BridgeWorker:
             finally:
                 lock_renewer.cancel()
                 count_flusher.cancel()
+                downlinker.cancel()
                 for t in (lock_renewer, count_flusher):
                     try:
                         await t
                     except asyncio.CancelledError:
                         pass
                 await self._flush_count_to_db()
+
+    async def _downlink_loop(self, client) -> None:
+        """Forward queued downlinks to ChirpStack on this bridge's own connection.
+
+        The API publishes to `chirpstack-downlink:{integration_id}` and returns —
+        it holds no broker connection of its own. This is the same shape as the
+        existing Redis to local-MQTT `CommandBridge`, pointed at a tenant's
+        ChirpStack broker instead.
+
+        ChirpStack's MQTT integration is bidirectional: it subscribes to
+        `application/{app}/device/{devEui}/command/down` and enqueues whatever
+        arrives. So no ChirpStack API token is needed for this path at all — the
+        credential that would otherwise be required carries authority over every
+        device on the server.
+        """
+        channel = f"chirpstack-downlink:{self.integration_id}"
+        redis = None
+        try:
+            # A dedicated connection: pub/sub mode blocks it, so it cannot be the
+            # one the bridge uses for its lock and status keys. Same reason the
+            # local CommandBridge opens its own.
+            redis = await aioredis.from_url(
+                self.redis_service.redis_url, decode_responses=True
+            )
+            async with redis.pubsub() as ps:
+                await ps.subscribe(channel)
+                logger.info("ChirpStack bridge %s listening for downlinks on %s",
+                            self.integration_id, channel)
+                async for msg in ps.listen():
+                    if msg["type"] != "message":
+                        continue
+                    try:
+                        d = json.loads(msg["data"])
+                        topic = (
+                            f"application/{d['application_id']}"
+                            f"/device/{d['dev_eui']}/command/down"
+                        )
+                        # ChirpStack v4 requires devEui in the body as well as the
+                        # topic; v3 did not. Sending both is correct for v4 and
+                        # harmless for v3.
+                        body = json.dumps({
+                            "devEui": d["dev_eui"],
+                            "confirmed": bool(d.get("confirmed", False)),
+                            "fPort": int(d["f_port"]),
+                            "data": d["data"],
+                        })
+                        await client.publish(topic, body, qos=1)
+                        logger.info(
+                            "ChirpStack downlink published",
+                            extra={
+                                "integration_id": self.integration_id,
+                                "dev_eui": d["dev_eui"],
+                                "f_port": d["f_port"],
+                                "topic": topic,
+                            },
+                        )
+                    except Exception as e:  # noqa: BLE001 - one bad message must not stop the loop
+                        logger.error("Failed to publish ChirpStack downlink: %s", e)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.error("ChirpStack downlink loop for %s ended: %s", self.integration_id, e)
+        finally:
+            if redis is not None:
+                await redis.aclose()
 
     async def _renew_lock_loop(self, redis, lock_key: str, status_key: str) -> None:
         """Renew the Redis lock and status TTL periodically.
@@ -1735,6 +1847,12 @@ class MQTTProcessor:
             # declarative decoder. Every uplink's raw bytes are persisted regardless
             # of outcome so a decoder authored later can be replayed over history
             # (raw_uplinks table).
+            # The application this device reports from — needed to address a
+            # downlink back to it, and stated by the device's own traffic.
+            await self.db_service.record_application_id(
+                tenant_id, device_id, (cs_msg.get("deviceInfo") or {}).get("applicationId")
+            )
+
             raw_b64 = cs_msg.get("data")
             f_port  = cs_msg.get("fPort")
             sensor_data = cs_msg.get("object")

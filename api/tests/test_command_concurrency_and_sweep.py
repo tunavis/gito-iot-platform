@@ -431,3 +431,45 @@ class TestOneCommandInFlightPerOpcode:
         maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
         await self._insert(maker, tenant_id, device_id, status="sent", opcode=0x22)
         await self._insert(maker, tenant_id, device_id, status="awaiting_approval", opcode=0x22)
+
+
+class TestDeletingANetworkServerDetachesRatherThanDeletes:
+    """`ON DELETE SET NULL` on `devices.integration_id` — easy to write and easy
+    to get wrong, and the wrong version deletes meters."""
+
+    @pytest.mark.asyncio
+    async def test_the_device_survives_and_reverts_to_the_unbound_path(self, scratch):
+        maker, tenant_id, device_id = scratch["maker"], scratch["tenant_id"], scratch["device_id"]
+        integration_id = uuid.uuid4()
+
+        async with maker() as s:
+            await s.execute(
+                text(
+                    "INSERT INTO integrations (id, tenant_id, name, provider, config,"
+                    " downlink_mode) VALUES (:i, :t, :n, 'chirpstack_mqtt',"
+                    " '{\"broker_url\": \"b\"}'::jsonb, 'mqtt')"
+                ),
+                {"i": str(integration_id), "t": str(tenant_id), "n": f"ns-{uuid.uuid4().hex[:8]}"},
+            )
+            await s.execute(
+                text("UPDATE devices SET integration_id = :i WHERE id = :d"),
+                {"i": str(integration_id), "d": str(device_id)},
+            )
+            await s.commit()
+
+        async with maker() as s:
+            await s.execute(
+                text("DELETE FROM integrations WHERE id = :i"), {"i": str(integration_id)}
+            )
+            await s.commit()
+
+        async with maker() as s:
+            row = (
+                await s.execute(
+                    text("SELECT id, integration_id FROM devices WHERE id = :d"),
+                    {"d": str(device_id)},
+                )
+            ).first()
+
+        assert row is not None, "deleting a network server must not delete its devices"
+        assert row[1] is None, "the binding must be cleared, not left dangling"

@@ -33,11 +33,22 @@ from payload_codec.driver import (
     lorawan_params,
     mqtt_topic,
 )
+from app.services.network_server import (
+    MODE_MQTT,
+    NetworkServerCannotReceive,
+    NetworkServerUnresolved,
+)
+from app.services.network_server import resolve as resolve_network_server
 from app.services.ota_dispatch import UnsupportedProtocolError, _detect_protocol
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# Redis channel prefix the processor's ChirpStack bridges subscribe to,
+# one per integration. Mirrors the existing `{tenant}/devices/{id}/commands`
+# convention that already feeds the local MQTT CommandBridge.
+CHIRPSTACK_DOWNLINK_CHANNEL = "chirpstack-downlink"
 
 
 class CommandDispatchService:
@@ -52,6 +63,7 @@ class CommandDispatchService:
         command: DeviceCommand,
         driver: Optional[dict] = None,
         device_type=None,
+        session=None,
     ) -> tuple[bool, str]:
         """Dispatch a command to a device.
 
@@ -103,9 +115,18 @@ class CommandDispatchService:
             elif protocol == "http":
                 return await self._dispatch_http(device, payload, encoded)
             elif protocol == "lorawan":
-                return await self._dispatch_lorawan(device, payload, encoded, driver)
+                return await self._dispatch_lorawan(device, payload, encoded, driver, session)
             else:
                 return False, f"Unsupported protocol: {protocol}"
+        except (NetworkServerUnresolved, NetworkServerCannotReceive) as e:
+            # Not a transport failure — the platform could not say *where* this
+            # device is. Recorded verbatim, because "which server" is not
+            # something an operator can infer from a timeout.
+            logger.warning(
+                "network_server_unresolved",
+                extra={"device_id": str(device.id), "command_id": str(command.id), "reason": str(e)},
+            )
+            return False, str(e)
         except Exception as e:
             logger.error(f"Command dispatch failed for device {device.id}: {e}")
             return False, str(e)
@@ -178,14 +199,19 @@ class CommandDispatchService:
         payload: dict,
         encoded: Optional[bytes],
         driver: Optional[dict],
+        session=None,
     ) -> tuple[bool, str]:
         """Send command as a ChirpStack downlink on the driver's port."""
-        attrs = device.attributes or {}
-        chirpstack_url = attrs.get("chirpstack_server") or settings.CHIRPSTACK_API_URL
-        api_key = attrs.get("chirpstack_api_key") or settings.CHIRPSTACK_API_KEY
-
-        if not chirpstack_url or not api_key:
-            return False, "ChirpStack not configured for this device"
+        # Which network server, resolved from the device's binding. A device that
+        # names one and cannot be resolved raises rather than falling back — see
+        # network_server.resolve.
+        if device.integration_id is not None and session is None:
+            raise NetworkServerUnresolved(
+                "This device is bound to a network server, but dispatch was called "
+                "without a session to resolve it. Refusing to fall back to the "
+                "platform default, which would reach a different server."
+            )
+        server = await resolve_network_server(session, device)
 
         payload_bytes = json.dumps(payload).encode() if encoded is None else encoded
         b64_payload = base64.b64encode(payload_bytes).decode()
@@ -196,7 +222,10 @@ class CommandDispatchService:
         # rather than fixed here.
         f_port, confirmed = lorawan_params(driver)
 
-        url = f"{chirpstack_url.rstrip('/')}/api/devices/{device.dev_eui}/queue"
+        if server.mode == MODE_MQTT:
+            return await self._queue_mqtt_downlink(device, server, b64_payload, f_port, confirmed)
+
+        url = f"{server.api_url.rstrip('/')}/api/devices/{device.dev_eui}/queue"
         body = {
             "queueItem": {
                 "confirmed": confirmed,
@@ -210,7 +239,7 @@ class CommandDispatchService:
                 url,
                 json=body,
                 headers={
-                    "Authorization": f"Bearer {api_key}",
+                    "Authorization": f"Bearer {server.api_key}",
                     "Content-Type": "application/json",
                 },
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -219,3 +248,58 @@ class CommandDispatchService:
                     return True, ""
                 text = await resp.text()
                 return False, f"ChirpStack returned {resp.status}: {text}"
+
+    async def _queue_mqtt_downlink(
+        self,
+        device: Device,
+        server,
+        b64_payload: str,
+        f_port: int,
+        confirmed: bool,
+    ) -> tuple[bool, str]:
+        """Hand the downlink to the bridge that is already connected to the broker.
+
+        The API deliberately opens no broker connection. It publishes to Redis and
+        returns; `ChirpStackBridge` in the processor — one per integration, already
+        holding a live client — does the sending.
+
+        That is not just tidiness. A bridge can only publish to *its own* broker,
+        so a downlink physically cannot reach the wrong network server. Resolving
+        an endpoint in the API and connecting from here would make that a
+        correctness argument instead of a constraint. It also means a client whose
+        broker is unreachable leaves a queued message rather than a blocked request.
+        """
+        application_id = device.ttn_app_id
+        if not application_id:
+            # The topic cannot be formed without it, and guessing would publish
+            # into some other application on the same broker.
+            return False, (
+                "This device has no network-server application recorded, so a "
+                "downlink cannot be addressed. It is learned from the device's own "
+                "uplinks — wait for one, or set it explicitly."
+            )
+
+        message = json.dumps({
+            "integration_id": str(server.integration_id),
+            "application_id": application_id,
+            "dev_eui": device.dev_eui,
+            "f_port": f_port,
+            "confirmed": confirmed,
+            "data": b64_payload,
+        })
+
+        redis = await aioredis.from_url(self._redis_url, decode_responses=True)
+        try:
+            channel = f"{CHIRPSTACK_DOWNLINK_CHANNEL}:{server.integration_id}"
+            listeners = await redis.publish(channel, message)
+            if not listeners:
+                # Nobody is bridging this integration right now. Reported rather
+                # than dropped into Redis, because pub/sub has no queue: a message
+                # with no subscriber is simply gone, and "sent" would be a lie.
+                return False, (
+                    f"No connected bridge for network server {server.integration_id}. "
+                    f"The downlink was not published — pub/sub does not retain it."
+                )
+            return True, ""
+        finally:
+            await redis.aclose()

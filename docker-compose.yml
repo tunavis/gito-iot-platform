@@ -110,6 +110,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://gito:${DB_PASSWORD:-dev-password}@postgres:5432/gito
       REDIS_URL: redis://keydb:6379/0
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-min-32-chars-xxxxx}
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY}
       JWT_ALGORITHM: HS256
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: 1883

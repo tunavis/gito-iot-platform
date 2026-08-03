@@ -23,6 +23,12 @@ import redis.asyncio as aioredis
 
 from app.config import get_settings
 from app.models.base import Device
+from app.services.network_server import (
+    MODE_REST,
+    NetworkServerCannotReceive,
+    NetworkServerUnresolved,
+)
+from app.services.network_server import resolve as resolve_network_server
 from payload_codec.driver import DISPATCHABLE_PROTOCOLS, declared_protocol
 
 logger = logging.getLogger(__name__)
@@ -92,8 +98,15 @@ class OTADispatchService:
         firmware_url: str,
         firmware_hash: str,
         firmware_version: str,
+        session=None,
     ) -> tuple[bool, str]:
         """Send OTA command to a single device.
+
+        `session` resolves the device's network server binding, exactly as a
+        command does. OTA and commands share one transport, so they must not
+        disagree about where a device is — a firmware image posted to the wrong
+        network server is the same defect as a command posted there, with a
+        larger blast radius.
 
         Returns:
             (success, error_message)
@@ -115,7 +128,7 @@ class OTADispatchService:
                 )
             elif protocol == "lorawan":
                 return await self._dispatch_lorawan(
-                    device, firmware_url, firmware_hash, firmware_version
+                    device, firmware_url, firmware_hash, firmware_version, session
                 )
             elif protocol == "http":
                 return await self._dispatch_http(
@@ -123,6 +136,12 @@ class OTADispatchService:
                 )
             else:
                 return False, f"Unsupported protocol: {protocol}"
+        except (NetworkServerUnresolved, NetworkServerCannotReceive) as e:
+            logger.warning(
+                "ota_network_server_unresolved",
+                extra={"device_id": str(device.id), "reason": str(e)},
+            )
+            return False, str(e)
         except Exception as e:
             logger.error(f"OTA dispatch failed for device {device.id}: {e}")
             return False, str(e)
@@ -169,13 +188,28 @@ class OTADispatchService:
         firmware_url: str,
         firmware_hash: str,
         firmware_version: str,
+        session=None,
     ) -> tuple[bool, str]:
-        attrs = device.attributes or {}
-        chirpstack_url = attrs.get("chirpstack_server") or settings.CHIRPSTACK_API_URL
-        api_key = attrs.get("chirpstack_api_key") or settings.CHIRPSTACK_API_KEY
+        # The same resolver a command uses. Two copies would disagree about
+        # where a device is, which is the whole reason `_detect_protocol` is
+        # shared rather than duplicated.
+        if device.integration_id is not None and session is None:
+            raise NetworkServerUnresolved(
+                "This device is bound to a network server, but OTA dispatch was "
+                "called without a session to resolve it. Refusing to fall back to "
+                "the platform default, which would reach a different server."
+            )
+        server = await resolve_network_server(session, device)
 
-        if not chirpstack_url or not api_key:
-            return False, "ChirpStack not configured for this device"
+        if server.mode != MODE_REST:
+            # OTA payloads are not driver-encoded and have no MQTT downlink shape
+            # yet. Stated rather than silently posted to the REST default, which
+            # for an `mqtt` binding would be a different server entirely.
+            return False, (
+                f"OTA over {server.mode!r} is not implemented. This device's network "
+                f"server accepts downlinks by {server.mode!r}, and firmware dispatch "
+                f"currently speaks only {MODE_REST!r}."
+            )
 
         import base64
 
@@ -189,7 +223,7 @@ class OTADispatchService:
         ).encode()
         b64_payload = base64.b64encode(payload_bytes).decode()
 
-        url = f"{chirpstack_url.rstrip('/')}/api/devices/{device.dev_eui}/queue"
+        url = f"{server.api_url.rstrip('/')}/api/devices/{device.dev_eui}/queue"
         body = {
             "queueItem": {
                 "confirmed": False,
@@ -202,7 +236,10 @@ class OTADispatchService:
             async with session.post(
                 url,
                 json=body,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {server.api_key}",
+                    "Content-Type": "application/json",
+                },
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status in (200, 201):

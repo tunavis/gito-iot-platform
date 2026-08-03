@@ -39,7 +39,22 @@ class DeviceCreate(BaseModel):
         None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
     )
     app_key: Optional[str] = Field(None, description="LoRaWAN Application Key")
-    ttn_app_id: Optional[str] = Field(None, description="TTN application ID")
+    ttn_app_id: Optional[str] = Field(
+        None,
+        description=(
+            "Network-server application this device belongs to. Named for TTN "
+            "historically; it holds the ChirpStack application id today and is "
+            "learned from the device's own uplinks when not set explicitly."
+        ),
+    )
+    integration_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "The network server this device is reached through, for downlinks. "
+            "Omit for the pre-binding behaviour. A device that names one never "
+            "falls back to a platform-wide default."
+        ),
+    )
     device_profile_id: Optional[str] = Field(None, description="Device profile UUID")
     # MQTT fields
     mqtt_client_id: Optional[str] = Field(None, description="MQTT client ID override")
@@ -66,7 +81,22 @@ class DeviceUpdate(BaseModel):
     dev_eui: Optional[str] = Field(
         None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
     )
-    ttn_app_id: Optional[str] = Field(None, description="TTN application ID")
+    ttn_app_id: Optional[str] = Field(
+        None,
+        description=(
+            "Network-server application this device belongs to. Named for TTN "
+            "historically; it holds the ChirpStack application id today and is "
+            "learned from the device's own uplinks when not set explicitly."
+        ),
+    )
+    integration_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "The network server this device is reached through, for downlinks. "
+            "Omit for the pre-binding behaviour. A device that names one never "
+            "falls back to a platform-wide default."
+        ),
+    )
     device_profile_id: Optional[str] = Field(None, description="Device profile UUID")
 
 
@@ -94,6 +124,7 @@ class DeviceResponse(BaseModel):
     # LoRaWAN fields (use actual DB column names)
     dev_eui: Optional[str] = None
     ttn_app_id: Optional[str] = None
+    integration_id: Optional[UUID] = None
     device_profile_id: Optional[str] = None
     ttn_synced: bool = False
     created_at: datetime

@@ -357,6 +357,56 @@ under the app's database role.
 
 ---
 
+## 🛰️ Network server binding — `api/app/services/network_server.py`
+
+**Uplinks and downlinks are independent, and both are declared.** ChirpStack
+publishes uplinks to a broker the processor subscribes to (anonymously, to
+`mqtt.cordys.co.za:2883`); there is **no direct connection to ChirpStack**.
+Because its MQTT integration is bidirectional, downlinks go to the same broker
+on `application/{app}/device/{eui}/command/down` — **no API token exists or is
+needed** for that path.
+
+But not every client gives broker access. So `integrations.downlink_mode` is an
+**explicit discriminator** — `mqtt` | `rest` | `none` — validated on write and by
+a database CHECK, never inferred from how uplinks happen to arrive. Same pattern
+as the driver's `transport.mode`, same reason.
+
+`none` is an answer, not an absence: a client who forwards uplinks and grants
+nothing back. A command to such a device is **refused at issue**
+(`_assert_reachable`), before a row exists — otherwise it queues, expires against
+a twelve-hour window and is recorded `timed_out`, blaming a meter that was never
+asked. NULL is different: it means "not configured yet".
+
+**`devices.integration_id` names the server, and an explicit binding NEVER falls
+back.** Bound and usable → dispatch; bound but missing/disabled/unconfigured →
+refuse with the reason; unbound (all 67 others today) → the pre-binding order.
+Falling back would send to *a* server — the wrong one — and report success.
+
+**MQTT downlinks publish on `ChirpStackBridge`'s own connection**, fed from Redis
+(`chirpstack-downlink:{integration_id}`). The API opens no broker connections.
+This makes multi-instance structural rather than argued: a bridge cannot reach
+another server's broker. Zero Redis subscribers is reported, not swallowed —
+pub/sub does not retain.
+
+`ota_dispatch` resolves through the **same** resolver; OTA and commands share one
+transport and must not disagree about where a device is.
+
+**The application id comes from the device's own uplinks** into
+`devices.ttn_app_id` (badly named, provider-agnostic in practice), captured at
+ingest. Observation wins over a hand-entered value — the device is the authority
+on where it reports from. Setting it by hand only seeds a device that has not yet
+spoken.
+
+Outbound credentials use `EncryptedString` (`app/services/secrets.py`) — a column
+type, not a helper, so no write path can store plaintext. Key from
+`SECRET_ENCRYPTION_KEY`, no default in compose. Not needed for an anonymous
+broker; needed for a REST token or a broker password.
+
+`scripts/network_server_bindings.py` reports bound vs unbound. It proposes and
+never applies — a wrong binding is silent, and a person is the check.
+
+---
+
 ## 🤖 MCP Server — `api/app/mcp/`
 
 Agent-facing tools live in `api/app/mcp/`, mounted at `/mcp` on the same FastAPI

@@ -47,6 +47,9 @@ def _make_device(tenant_id, device_id, org_id):
     device.asset_id = None
     device.dev_eui = None
     device.ttn_app_id = None
+    # The network-server binding (migration 031). A MagicMock here fails
+    # DeviceResponse validation, which is the mock leaking rather than a defect.
+    device.integration_id = None
     device.device_profile_id = None
     device.ttn_synced = False
     device.created_at = datetime.now(timezone.utc)

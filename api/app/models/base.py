@@ -15,6 +15,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base
+
+from app.services.secrets import EncryptedString
 from datetime import datetime
 import uuid
 
@@ -134,6 +136,15 @@ class Device(BaseModel):
     signal_strength = Column(Integer)
     attributes = Column(JSONB, default={}, nullable=False)  # Device-specific attributes
     ttn_app_id = Column(String(100), nullable=True)  # TTN Server app ID (provider-agnostic)
+
+    # The network server this device is reached through, for downlinks
+    # (migration 031). NULL means the pre-binding resolution order, which is the
+    # compatibility guarantee — but a device that DOES name an integration never
+    # falls back to a global default, because dispatching to the wrong server
+    # reports success. See app/services/network_server.py.
+    integration_id = Column(
+        UUID(as_uuid=True), ForeignKey("integrations.id", ondelete="SET NULL"), nullable=True
+    )
     device_profile_id = Column(String(100), nullable=True)  # Device profile UUID
     ttn_synced = Column(
         Boolean, default=False, nullable=False
@@ -555,6 +566,22 @@ class Integration(BaseModel):
     )  # partial unique enforced by DB index
     key_prefix = Column(String(12), nullable=True)
     config = Column(JSONB, nullable=False, server_default="{}")
+
+    # Downlink half of the same network server (migration 031). `config` holds
+    # the MQTT endpoint uplinks arrive on; ChirpStack's queue API is a different
+    # host and port, so one row now describes both directions — which is what
+    # makes "add a network server" a single act.
+    # Explicit, never inferred from how uplinks arrive — the two directions are
+    # independent. 'none' is an answer (this server accepts no downlinks, so its
+    # commands are refused at issue), distinct from NULL, which is an omission.
+    downlink_mode = Column(String(20), nullable=True)
+    # REST base URL. `mqtt` mode reuses the broker already in `config`.
+    downlink_api_url = Column(Text, nullable=True)
+    # A real column and not a `config` key, so the type can enforce encryption:
+    # there is no write path that reaches this without encrypting. Unrelated to
+    # `key_hash` above, which is a hash of an INBOUND key and cannot
+    # authenticate an outbound call.
+    downlink_api_key = Column(EncryptedString, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     message_count = Column(Integer, nullable=False, default=0)

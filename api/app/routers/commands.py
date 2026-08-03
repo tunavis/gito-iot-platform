@@ -33,6 +33,8 @@ from app.schemas.commands import (
     PendingApprovalListResponse,
 )
 from app.services.command_dispatch import CommandDispatchService
+from app.services.network_server import NetworkServerCannotReceive
+from app.services.network_server import resolve as resolve_network_server
 from payload_codec.driver import (
     command_opcode,
     driver_for,
@@ -109,6 +111,28 @@ async def _resolve_device_type(session: RLSSession, device: Device) -> Optional[
     return device_type
 
 
+async def _assert_reachable(session: RLSSession, device: Device) -> None:
+    """Refuse a command to a device whose network server accepts no downlinks.
+
+    Checked **before a row exists**, not at dispatch. A command that is created
+    and then fails still enters the lifecycle, waits out its response window —
+    up to twelve hours for a B METERS IWM — and is recorded `timed_out`, which
+    asserts the device stayed silent. It was never asked. The same reason
+    `_assert_supports_commands` runs before the approval path writes anything.
+
+    Only `none` is refused here. Everything else that can go wrong with a
+    binding is a fault to fix rather than an answer, and belongs at dispatch
+    where the reason is recorded on the row.
+    """
+    try:
+        await resolve_network_server(session, device)
+    except NetworkServerCannotReceive as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except Exception:
+        # Any other resolution problem is dispatch's to report, on the row.
+        return
+
+
 async def _reserve_opcode(session: RLSSession, command: DeviceCommand) -> None:
     """Flush a command holding its opcode, refusing a second one in flight.
 
@@ -150,7 +174,10 @@ async def _dispatch_now(
     path created the command, and there is one place to look when it does not.
     """
     driver = driver_for(device_type)
-    success, error = await _dispatch.dispatch(device, command, driver, device_type)
+    # The session goes through so the LoRaWAN path can resolve the device's
+    # network server binding. Without it, a bound device would have to fall back
+    # to the platform default — a different server, reported as sent.
+    success, error = await _dispatch.dispatch(device, command, driver, device_type, session)
 
     if success and is_unacknowledgeable(driver, command.command_name):
         # Terminal on delivery. This device can never answer this command — an
@@ -386,6 +413,10 @@ async def request_command_approval(
     """
     device = await _resolve_device(session, tenant_id, device_id, current_tenant)
     device_type = await _resolve_device_type(session, device)
+    # Refused before an approval request is recorded too: putting a command a
+    # device can never receive in front of a person wastes the one reviewer the
+    # gate exists to involve.
+    await _assert_reachable(session, device)
 
     now = datetime.now(timezone.utc)
     command = DeviceCommand(

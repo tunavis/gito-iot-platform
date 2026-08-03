@@ -81,6 +81,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ Database initialization warning: {e}")
 
+    # `SecretKeyMissing` is deliberately NOT caught: if encrypted credentials
+    # exist and the key is gone, booting anyway means every downlink fails the
+    # moment someone needs one, from a service reporting itself healthy.
+    #
+    # An unreachable database *is* caught, because that is a different failure —
+    # we cannot know whether any secrets exist, and `init_db` above already
+    # tolerates it. Failing here instead would mean the app could no longer start
+    # without a database, which it always could.
+    from app.database import get_session
+    from app.services.secrets import SecretKeyMissing, assert_key_available_if_needed
+
+    try:
+        _gen = get_session()
+        _session = await _gen.__anext__()
+        try:
+            await assert_key_available_if_needed(_session)
+            print("✅ Secret encryption key checked")
+        finally:
+            await _gen.aclose()
+    except SecretKeyMissing:
+        raise
+    except Exception as e:
+        print(f"⚠️ Could not check the secret encryption key: {e}")
+
     # Initialize shared Redis client for app-wide use
     try:
         app_state_redis = aioredis.from_url(settings.REDIS_URL)

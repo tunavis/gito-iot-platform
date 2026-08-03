@@ -1,6 +1,6 @@
 """Pydantic schemas for integration management API."""
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional, Any
 from datetime import datetime
 from uuid import UUID
@@ -98,6 +98,42 @@ class ProviderEnum(str, Enum):
     chirpstack_mqtt = "chirpstack_mqtt"
 
 
+# Declared, never inferred from how this server's uplinks arrive. The two
+# directions are independent: one client forwards uplinks over MQTT and accepts
+# downlinks on the same broker; another pushes uplinks over HTTP and accepts
+# downlinks only through a REST API; a third can send to us and receive nothing.
+DOWNLINK_MODES = ("mqtt", "rest", "none")
+
+_DOWNLINK_MODE_DESC = (
+    "How downlinks reach this network server. 'mqtt' publishes to the broker in "
+    "config on application/{app}/device/{eui}/command/down. 'rest' POSTs to "
+    "downlink_api_url. 'none' means this server accepts no downlinks, and "
+    "commands to its devices are refused when issued rather than left to expire. "
+    "Omit if not configured yet — which is different from 'none'."
+)
+
+
+def _validate_downlink(mode, api_url, config):
+    """Refuse a declaration that cannot be acted on, when it is saved.
+
+    At dispatch it is too late: the command already exists, and a mode the
+    platform cannot perform would look like the device failing to answer.
+    """
+    if mode is None:
+        return
+    if mode not in DOWNLINK_MODES:
+        raise ValueError(
+            f"downlink_mode must be one of {list(DOWNLINK_MODES)}, got {mode!r}"
+        )
+    if mode == "rest" and not api_url:
+        raise ValueError("downlink_mode 'rest' requires downlink_api_url")
+    if mode == "mqtt" and not (config or {}).get("broker_url"):
+        raise ValueError(
+            "downlink_mode 'mqtt' requires a broker_url in config — the same broker "
+            "its uplinks arrive on"
+        )
+
+
 class IntegrationCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100, description="Human-readable name")
     provider: ProviderEnum = Field(description="LoRaWAN network server provider")
@@ -119,6 +155,20 @@ class IntegrationUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     config: Optional[dict[str, Any]] = None
     is_active: Optional[bool] = None
+    downlink_mode: Optional[str] = Field(None, description=_DOWNLINK_MODE_DESC)
+    downlink_api_url: Optional[str] = Field(
+        None, description="REST base URL, for downlink_mode 'rest' only."
+    )
+    # Write-only. Encrypted by the column type on the way in and never returned;
+    # reads get a mask, the way key_prefix already works for inbound keys.
+    downlink_api_key: Optional[str] = Field(
+        None, description="Outbound credential. Stored encrypted, never returned."
+    )
+
+    @model_validator(mode="after")
+    def check_downlink(self) -> "IntegrationUpdate":
+        _validate_downlink(self.downlink_mode, self.downlink_api_url, self.config)
+        return self
 
 
 class SetupInstructions(BaseModel):
