@@ -106,12 +106,11 @@ chosen device. Changing what existing data means in order to avoid changing a
 schema is a cost that comes due later, somewhere else, to someone else.
 
 **Not a substitute for external monitoring.** An in-platform notification cannot
-report that the platform is down, because it is the platform. `/api/health`
-already reports `degraded` with `checks.ingestion.status: "stalled"`,
-unauthenticated and with no code change, and an external monitor watching it
-covers both the stall and the case this change structurally cannot. See
-`docs/setup/UPTIME_MONITORING.md`. The two are complementary; shipping this
-change is not a reason to skip that one.
+report that the platform is down, because it is the platform. Grafana already has
+a provisioned TimescaleDB datasource and can alert on the same signal with one
+SQL query and no code — see the ingestion-stall section of `docs/GRAFANA.md`.
+That covers both the stall and the case this change structurally cannot. The two
+are complementary; shipping this change is not a reason to skip that one.
 
 ## Status
 

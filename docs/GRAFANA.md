@@ -154,6 +154,47 @@ For infrastructure monitoring:
 - MQTT broker health
 - Prometheus scrape success rate
 - API service uptime
+- **Ingestion stall** — see below, this one has an outage behind it
+
+#### Ingestion stall alert
+
+The highest-value panel to build first. A dropped MQTT subscription once ate 43
+hours of telemetry across all 68 devices before anyone noticed, and an 11-hour
+outage repeated it. Per-device offline detection structurally cannot catch this:
+when the ingest path dies, every device goes offline *correctly* and no single
+device looks wrong.
+
+One query against the TimescaleDB datasource — the same signal the platform's own
+`check_ingestion_stall` uses:
+
+```sql
+SELECT extract(epoch FROM now() - max(last_seen)) AS stall_seconds
+FROM devices
+```
+
+Alert when `stall_seconds > 900`, which matches the platform's default
+`INGESTION_STALL_THRESHOLD_SECONDS`. **If you change one, change the other** —
+they are deliberately two readers of the same signal (see below), so they can
+drift.
+
+`max(last_seen)` rather than `max(ts)` on a telemetry table is intentional: same
+signal, tens of rows instead of a scan over the whole telemetry history. It
+crosses tenants on purpose — a stall is a platform fault, not a tenant's.
+
+`NULL` means no device has ever reported: a fresh deployment, not a fault. Guard
+the alert condition so an empty fleet does not page anyone.
+
+**Why duplicate a check the platform already performs.** The platform's own stall
+notification is `openspec/changes/add-notification-sources` and is not built yet.
+Even once it is, it cannot tell you the platform is down — it *is* the platform.
+An external check is the only thing covering that case, and duplication is the
+point rather than an oversight: this one keeps working when the API does not.
+
+If you would rather poll HTTP than query the database, `/api/health` reports the
+same thing unauthenticated at `checks.ingestion.status`. One trap if you do:
+**a degraded platform returns HTTP 200 on purpose** (`api/app/main.py:239` — a 503
+would make Docker restart the API over a fault living in the processor). Match on
+the response body, not the status code.
 
 ## API Endpoints for Dashboard Variables
 
