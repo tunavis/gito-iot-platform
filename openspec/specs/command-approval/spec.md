@@ -17,7 +17,7 @@ was insufficient, because finding a request through it requires already
 suspecting the device it targets.
 
 Reaching a user who is **not** signed in requires notification, which is deferred
-to `add-approval-notifications` — the notification pipeline is keyed on
+to `add-notification-sources` — the notification pipeline is keyed on
 `alert_events` by a NOT NULL foreign key and has no generic path to reuse. Until
 then this requirement is knowingly partial: a request is findable, not announced.
 
