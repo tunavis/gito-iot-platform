@@ -130,6 +130,37 @@ payloads are not driver-encoded and have no MQTT shape. An `mqtt`-bound device i
 told so plainly rather than having its image posted to a REST default that would
 be a different server.
 
-**Queue expiry.** ChirpStack holds a queued downlink indefinitely (`Expires at:
-Never`), while our command expires on its own window. A command we have given up
-on can still be delivered later. Harmless for a read, not for a write.
+## Queue expiry: the one thing that cannot be made right
+
+ChirpStack holds a queued downlink **indefinitely** unless an expiry was set
+(`Expires at: Never` in its Queue tab), while our command expires on its own
+window. So a command marked `timed_out` can still be delivered days later, when
+the meter next wakes.
+
+**Over MQTT this cannot be fixed.** The queue-item expiry added in ChirpStack
+v4.10.1 is settable through its gRPC/REST API only — not in the MQTT
+`command/down` body — and there is no MQTT flush either. Confirmed against the
+ChirpStack community forum, January 2025:
+
+> "So either you send using MQTT but no expiration date, or you send using the
+> API with an expiration date but no custom UUID."
+
+So the platform does the only honest thing available: it says so. A timed-out
+command carries
+
+> The device did not answer within its response window. This does not revoke the
+> downlink: a network server still holding it may deliver it when the device next
+> wakes.
+
+and the same wording reaches the device page and `get_command_status`, so an
+operator and an agent are told the same thing. **`timed_out` means "no answer
+yet", not "cancelled".**
+
+Harmless for a read. For a write it is the difference between being told "this
+did not happen", retrying, and having the original land afterwards — so plan
+writes around it, and prefer read-modify-write commands that are safe to repeat.
+
+Revoking properly would need ChirpStack's API — a token with authority over
+every device on the server, which the MQTT path exists to avoid needing. That is
+a trade to make deliberately if and when writes matter more than the smaller
+credential surface, not a gap to close by reflex.

@@ -133,10 +133,20 @@
 
 ## 7. Retire the heuristics (phase 4)
 
-- [ ] 7.1 Once every live device type declares a transport, remove the
+- [x] 7.1 Once every live device type declares a transport, remove the
       `dev_eui`/`webhook_url`/default-MQTT inference from `_detect_protocol`.
-- [ ] 7.2 Confirm `ota_dispatch` still resolves correctly — it shares
-      `_detect_protocol` and inherits this change.
+      Done 2026-08-03. A per-device `attributes.protocol` override survives —
+      someone typed it, so it is a declaration and not a guess. Nothing declared
+      now raises. Measured first: all 68 devices have a `dev_eui` with
+      `ttn_synced = false`, so the heuristic answered **mqtt for every LoRaWAN
+      meter** — it was a source of wrong answers, not a safety net.
+- [x] 7.2 Confirm `ota_dispatch` still resolves correctly — it shares
+      `_detect_protocol` and inherits this change. It did **not**: it never
+      passed the device type, so it resolved `mqtt` for all 68 LoRaWAN meters and
+      would have published firmware to a channel no meter listens on, reporting
+      success. Fixed — `dispatch()` now takes `device_type`, and
+      `routers/firmware.py` loads them in one query. This is why the task said
+      *confirm* rather than *assume*.
 
 ## 8. Documentation
 

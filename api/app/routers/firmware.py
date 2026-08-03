@@ -421,6 +421,21 @@ async def execute_campaign(
         .all()
     )
 
+    # Device types in one query, so protocol detection reads each device's
+    # declaration. Without this OTA guesses, and the guess is wrong for every
+    # LoRaWAN device whose `ttn_synced` is false.
+    from app.models.device_type import DeviceType
+
+    type_ids = {d.device_type_id for d in devices if d.device_type_id}
+    device_types = {}
+    if type_ids:
+        device_types = {
+            dt.id: dt
+            for dt in (
+                await session.execute(select(DeviceType).where(DeviceType.id.in_(type_ids)))
+            ).scalars()
+        }
+
     for device in devices:
         ok, err = await dispatcher.dispatch(
             device=device,
@@ -431,6 +446,7 @@ async def execute_campaign(
             # OTA image would go to the platform default — a different server
             # from the one that device's commands go to.
             session=session,
+            device_type=device_types.get(device.device_type_id),
         )
         campaign_device = campaign_devices_by_device_id.get(device.id)
         if ok:

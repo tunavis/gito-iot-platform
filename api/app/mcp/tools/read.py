@@ -419,7 +419,10 @@ _STATUS_MEANING = {
     "timed_out": (
         "The device's response window passed with no answer. That window comes from "
         "the device type's driver, so this means the device stayed silent for as long "
-        "as its own hardware should have needed — not merely that a default elapsed."
+        "as its own hardware should have needed — not merely that a default elapsed. "
+        "It does NOT mean the command was cancelled: a network server still holding "
+        "the downlink may deliver it when the device next wakes. Do not tell anyone "
+        "the command will not happen — say it has not happened yet and was not revoked."
     ),
 }
 

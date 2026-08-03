@@ -334,9 +334,15 @@ which a fixed-offset spec cannot express) — recorded in the files themselves.
 Three things phase 1 changed that live outside this module:
 
 - `_detect_protocol` (shared with `ota_dispatch`) consults the driver, then the
-  device type's `connectivity.protocol`, then the old heuristics, and **raises**
-  for a protocol it cannot dispatch. It used to default to MQTT, so a `modbus`
-  device had its commands published to an MQTT channel and reported as sent.
+  device type's `connectivity.protocol`, then a per-device
+  `attributes.protocol` override — and **raises** if none of them answer or if
+  the answer cannot be dispatched. **The heuristics are gone** (phase 4). They
+  were not a safety net: all 68 devices have a `dev_eui` with `ttn_synced =
+  false`, so `dev_eui AND ttn_synced → lorawan` missed and every LoRaWAN meter
+  fell through to the MQTT default. Commands were saved by the declaration;
+  **OTA was not**, because it never passed the device type — it resolved `mqtt`
+  for the whole fleet. Both now read the declaration, and `routers/firmware.py`
+  loads device types so OTA can.
 - `DEVICE_RESPONSE_TTL_SECONDS = 60` is now only the no-driver default;
   `acknowledgement.response_window_seconds` replaces it per type. An IWM reports
   every 12 hours, NFC-settable only — 60s was wrong by three orders of magnitude.

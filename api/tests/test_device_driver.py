@@ -137,7 +137,16 @@ class _FakeHttpSession:
         return False
 
 
-async def _dispatch_capture(device, command, driver=None, device_type=None, session=None):
+# Phase 4 removed the guessing, so a fixture that wants a transport declares one
+# — as every real device type does.
+LORAWAN_TYPE = DeviceType(connectivity={"protocol": "lorawan"})
+MQTT_TYPE = DeviceType(connectivity={"protocol": "mqtt"})
+HTTP_TYPE = DeviceType(connectivity={"protocol": "http"})
+
+
+async def _dispatch_capture(
+    device, command, driver=None, device_type=LORAWAN_TYPE, session=None
+):
     """Dispatch for real, with the two transports replaced by recorders.
 
     Returns (success, error, redis_publishes, http_posts).
@@ -248,7 +257,7 @@ class TestADeviceTypeWithNoDriverIsUnchanged:
         device = _device(dev_eui=None, ttn_synced=False)
         command = _command("reboot", {"delay": 5})
 
-        ok, err, published, _ = await _dispatch_capture(device, command)
+        ok, err, published, _ = await _dispatch_capture(device, command, device_type=MQTT_TYPE)
 
         assert (ok, err) == (True, "")
         assert len(published) == 1
@@ -263,7 +272,7 @@ class TestADeviceTypeWithNoDriverIsUnchanged:
         )
         command = _command("reboot", {"delay": 5})
 
-        ok, err, _, posts = await _dispatch_capture(device, command)
+        ok, err, _, posts = await _dispatch_capture(device, command, device_type=HTTP_TYPE)
 
         assert (ok, err) == (True, "")
         assert len(posts) == 1
@@ -349,14 +358,29 @@ class TestAnUnknownProtocolRefusesRatherThanDefaulting:
         device_type = DeviceType(connectivity={"protocol": "mqtt"})
         assert _detect_protocol(_device(), driver, device_type) == "http"
 
-    def test_a_type_with_neither_still_gets_the_old_heuristics(self):
-        assert _detect_protocol(_device()) == "lorawan"
-        assert _detect_protocol(_device(dev_eui=None, ttn_synced=False)) == "mqtt"
+    def test_nothing_declared_raises_rather_than_defaulting(self):
+        """Phase 4. The heuristics are gone. They inferred MQTT for a LoRaWAN
+        meter whose `ttn_synced` was false — every device in this fleet — so they
+        were a source of wrong answers rather than a safety net."""
+        with pytest.raises(UnsupportedProtocolError, match="No protocol is declared"):
+            _detect_protocol(_device())
+        with pytest.raises(UnsupportedProtocolError, match="no longer guesses"):
+            _detect_protocol(_device(dev_eui=None, ttn_synced=False))
+        with pytest.raises(UnsupportedProtocolError):
+            _detect_protocol(_device(attributes={"webhook_url": "https://x"}))
+
+    def test_a_per_device_override_is_a_declaration_and_survives(self):
+        """Someone typed it, so it is not a guess. It sits after the device type,
+        which is the reviewed, version-controlled statement."""
+        assert _detect_protocol(_device(attributes={"protocol": "http"})) == "http"
+        # And the device type still beats it.
         assert (
             _detect_protocol(
-                _device(dev_eui=None, ttn_synced=False, attributes={"webhook_url": "https://x"})
+                _device(attributes={"protocol": "http"}),
+                None,
+                DeviceType(connectivity={"protocol": "mqtt"}),
             )
-            == "http"
+            == "mqtt"
         )
 
 
@@ -1009,3 +1033,48 @@ class TestTheIWMAlarmDataAnswer:
     def test_a_failure_answer_carries_no_payload(self):
         ack = parse_acknowledgement(IWM, bytes([0x28, 0x01, 0x04, 0x00, 0x00]))
         assert ack is not None and not ack.accepted and ack.payload == {}
+
+
+# ── Phase 4: OTA reads the declaration, and the heuristic is not a safety net ──
+
+
+class TestOTAReadsTheDeclarationToo:
+    """Task 7.2. `ota_dispatch` shares `_detect_protocol`, so it inherits the
+    declaration — but only if it is *given* the device type.
+
+    It was not. Found on the live fleet 2026-08-03: every device has a `dev_eui`
+    and `ttn_synced = false`, so the heuristics infer **mqtt** for a LoRaWAN
+    meter. Firmware would have been published to a channel no meter listens on
+    and reported as sent."""
+
+    def _lorawan_type(self):
+        return DeviceType(connectivity={"protocol": "lorawan"}, driver=IWM)
+
+    def test_without_the_device_type_there_is_now_no_answer_at_all(self):
+        """The device shape that made this real: dev_eui present, ttn_synced
+        false. The heuristic used to answer `mqtt` here — confidently and wrongly
+        for a LoRaWAN meter. Since phase 4 it refuses instead, which is why OTA
+        had to start passing the device type rather than being left to guess."""
+        device = _device(ttn_synced=False)
+        with pytest.raises(UnsupportedProtocolError, match="No protocol is declared"):
+            _detect_protocol(device)
+        assert _detect_protocol(device, IWM, self._lorawan_type()) == "lorawan"
+
+    def test_ota_with_the_device_type_resolves_lorawan(self):
+        device = _device(ttn_synced=False)
+        from payload_codec.driver import driver_for
+
+        device_type = self._lorawan_type()
+        assert _detect_protocol(device, driver_for(device_type), device_type) == "lorawan"
+
+    @pytest.mark.asyncio
+    async def test_ota_dispatch_accepts_a_device_type(self):
+        """The signature is the fix; assert it exists so it cannot regress to a
+        positional call that silently drops it."""
+        import inspect
+
+        from app.services.ota_dispatch import OTADispatchService
+
+        params = inspect.signature(OTADispatchService.dispatch).parameters
+        assert "device_type" in params, "OTA must be able to read the declaration"
+        assert "session" in params, "OTA must be able to resolve the binding"

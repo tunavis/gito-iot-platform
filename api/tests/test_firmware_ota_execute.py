@@ -57,6 +57,10 @@ class TestExecuteCampaignPersistsPerDeviceOutcome:
                 ),  # tenant-ownership guard on body.device_ids
                 _result(first=fw),  # firmware lookup
                 _result(all_=[ok_device, failing_device]),  # devices list
+                # Device types, so OTA reads each device's declared protocol
+                # rather than guessing. The guess is wrong for every LoRaWAN
+                # device whose ttn_synced is false — which is the whole fleet.
+                _result(all_=[]),
             ]
         )
 

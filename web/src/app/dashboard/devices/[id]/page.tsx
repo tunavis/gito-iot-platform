@@ -1762,7 +1762,9 @@ function DeviceCommands({ deviceId, deviceStatus, deviceType }: { deviceId: stri
 
                       {cmd.status === 'timed_out' && (
                         <p className="mt-2 text-xs text-th-muted">
-                          Expired at {formatTime(cmd.expires_at)} — device did not respond in time.
+                          Expired at {formatTime(cmd.expires_at)} — the device did not respond in
+                          time. This did not cancel the downlink: if the network server still holds
+                          it, it may be delivered when the device next wakes.
                         </p>
                       )}
 

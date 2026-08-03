@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.models.base import Device, DeviceCommand, Integration
+from app.models.device_type import DeviceType
 from app.services import command_dispatch as cd
 from app.services import network_server as ns
 
@@ -104,11 +105,16 @@ class _FakeHttpSession:
         return False
 
 
-async def _dispatch(device, session=None):
+# Every real device type declares its protocol, and since phase 4 the platform
+# no longer guesses when none does. So the fixtures declare one too.
+LORAWAN_TYPE = DeviceType(connectivity={"protocol": "lorawan"})
+
+
+async def _dispatch(device, session=None, device_type=LORAWAN_TYPE):
     posts = []
     service = cd.CommandDispatchService(redis_url="redis://unused")
     with patch.object(cd.aiohttp, "ClientSession", lambda *a, **k: _FakeHttpSession(posts)):
-        ok, err = await service.dispatch(device, _command(), None, None, session)
+        ok, err = await service.dispatch(device, _command(), None, device_type, session)
     return ok, err, posts
 
 
@@ -283,7 +289,7 @@ async def _dispatch_mqtt(device, integration, listeners=1, driver=None):
     with patch.object(cd.aioredis, "from_url", new=AsyncMock(return_value=redis)), \
          patch.object(cd.aiohttp, "ClientSession", lambda *a, **k: _FakeHttpSession(posts)):
         ok, err = await service.dispatch(
-            device, _command(), driver, None, _session_returning(integration)
+            device, _command(), driver, LORAWAN_TYPE, _session_returning(integration)
         )
     return ok, err, redis.published, posts
 
@@ -404,6 +410,7 @@ class TestFirmwareResolvesTheSameWay:
             ok, err = await ota.OTADispatchService().dispatch(
                 device=device, firmware_url="https://fw", firmware_hash="h",
                 firmware_version="1.0", session=_session_returning(integration),
+                device_type=LORAWAN_TYPE,
             )
 
         assert (ok, err) == (True, "")
@@ -424,6 +431,7 @@ class TestFirmwareResolvesTheSameWay:
             ok, err = await ota.OTADispatchService().dispatch(
                 device=device, firmware_url="https://fw", firmware_hash="h",
                 firmware_version="1.0", session=_session_returning(integration),
+                device_type=LORAWAN_TYPE,
             )
         assert ok is False and "not implemented" in err and posts == []
 
@@ -438,7 +446,7 @@ class TestFirmwareResolvesTheSameWay:
              patch.object(ns.settings, "CHIRPSTACK_API_KEY", "global-key"):
             ok, err = await ota.OTADispatchService().dispatch(
                 device=device, firmware_url="https://fw", firmware_hash="h",
-                firmware_version="1.0",
+                firmware_version="1.0", device_type=LORAWAN_TYPE,
             )
         assert ok is False and "without a session" in err and posts == []
 

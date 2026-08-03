@@ -640,6 +640,16 @@ class NotificationBackgroundTasks:
         `delivered_unconfirmed` is absent from the status list on purpose: it is
         terminal, and rewriting it to `timed_out` would turn a command this
         platform knows was delivered into a recorded failure.
+
+        **`timed_out` does not mean the downlink is dead.** Our window closing
+        and the network server's queue are independent: ChirpStack holds a queued
+        item indefinitely unless an expiry was set, and an expiry **cannot be set
+        over MQTT** — only through its API. So a command we have given up on can
+        still be delivered days later, when the meter next wakes.
+
+        Harmless for a read. For a write it is the difference between an operator
+        being told "this did not happen", retrying, and having the original land
+        afterwards — so the row says so rather than leaving it to be discovered.
         """
         try:
             session_gen = get_session()
@@ -650,7 +660,18 @@ class NotificationBackgroundTasks:
                     text(
                         """
                         UPDATE device_commands
-                        SET status = 'timed_out', completed_at = now()
+                        SET status = 'timed_out',
+                            completed_at = now(),
+                            -- COALESCE so a real dispatch error is not overwritten
+                            -- by this. It says what timing out does NOT mean.
+                            error_message = COALESCE(
+                                error_message,
+                                'The device did not answer within its response window. '
+                                'This does not revoke the downlink: a network server '
+                                'still holding it may deliver it when the device next '
+                                'wakes. ChirpStack queue items do not expire unless an '
+                                'expiry was set, and expiry cannot be set over MQTT.'
+                            )
                         WHERE status IN ('pending', 'sent', 'delivered')
                           AND expires_at < now()
                         RETURNING id

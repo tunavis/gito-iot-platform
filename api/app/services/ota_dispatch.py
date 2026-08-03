@@ -29,7 +29,11 @@ from app.services.network_server import (
     NetworkServerUnresolved,
 )
 from app.services.network_server import resolve as resolve_network_server
-from payload_codec.driver import DISPATCHABLE_PROTOCOLS, declared_protocol
+from payload_codec.driver import (
+    DISPATCHABLE_PROTOCOLS,
+    declared_protocol,
+    driver_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +54,21 @@ def _detect_protocol(device: Device, driver: dict = None, device_type=None) -> s
     """Determine delivery protocol: declaration first, heuristics only as a fallback.
 
     Order — the driver's `transport.protocol`, then the device type's declared
-    `connectivity.protocol`, then the field heuristics that were the whole
-    mechanism before this change. A device type with neither behaves exactly as
-    it does today.
+    `connectivity.protocol`, then a per-device `attributes.protocol` override.
+    **There is no fallback beyond that**: nothing declared raises.
 
     Raises `UnsupportedProtocolError` for anything this platform cannot put on
     the wire. Both dispatchers catch it and record the reason on the command.
     """
-    protocol = declared_protocol(driver, device_type) or _infer_protocol(device)
+    protocol = declared_protocol(driver, device_type) or _device_override(device)
+    if protocol is None:
+        raise UnsupportedProtocolError(
+            "No protocol is declared for this device. Its driver, its device type's "
+            "`connectivity.protocol`, and its own `attributes.protocol` are all "
+            "unset, and this platform no longer guesses — the guess used to default "
+            "to MQTT, which is wrong for every LoRaWAN device. Declare it on the "
+            "device type."
+        )
     if protocol not in DISPATCHABLE_PROTOCOLS:
         raise UnsupportedProtocolError(
             f"Protocol {protocol!r} has no dispatch path "
@@ -66,20 +77,34 @@ def _detect_protocol(device: Device, driver: dict = None, device_type=None) -> s
     return protocol
 
 
-def _infer_protocol(device: Device) -> str:
-    """Guess the protocol from device fields — the pre-driver behaviour, unchanged."""
-    attrs = device.attributes or {}
-    # Explicit override wins
-    if attrs.get("protocol"):
-        return attrs["protocol"].lower()
-    # LoRaWAN: has dev_eui synced to ChirpStack
-    if device.dev_eui and device.ttn_synced:
-        return "lorawan"
-    # HTTP push: device registered a callback URL
-    if attrs.get("webhook_url") or attrs.get("callback_url"):
-        return "http"
-    # Default: MQTT
-    return "mqtt"
+def _device_override(device: Device) -> Optional[str]:
+    """A protocol stated on the device itself, or None.
+
+    This is a *declaration*, not a guess — someone typed it — so it survives the
+    retirement of the heuristics below. It sits after the device type because a
+    type-level driver is the reviewed, version-controlled statement and this is
+    the per-device escape hatch.
+    """
+    protocol = (device.attributes or {}).get("protocol")
+    return protocol.lower() if isinstance(protocol, str) and protocol.strip() else None
+
+
+# The heuristics are gone (driver model, phase 4). They were:
+#
+#     if device.dev_eui and device.ttn_synced:      return "lorawan"
+#     if attrs.get("webhook_url"):                  return "http"
+#     return "mqtt"                                 # <- the dangerous one
+#
+# Removed because they were not a safety net, they were a source of wrong
+# answers. Measured on the live fleet 2026-08-03: all 68 devices have a `dev_eui`
+# and `ttn_synced = false`, so the first rule missed and every LoRaWAN meter fell
+# through to the MQTT default. Commands were saved by the declaration; OTA, which
+# was not passing the device type, was resolving `mqtt` for all 68 and would have
+# published firmware to a channel no meter listens on.
+#
+# Removing them cannot change behaviour for any device that declares a protocol,
+# because the declaration short-circuits first. It only changes what happens when
+# nothing is declared, and there the answer should be a refusal.
 
 
 class OTADispatchService:
@@ -99,6 +124,7 @@ class OTADispatchService:
         firmware_hash: str,
         firmware_version: str,
         session=None,
+        device_type=None,
     ) -> tuple[bool, str]:
         """Send OTA command to a single device.
 
@@ -111,7 +137,12 @@ class OTADispatchService:
         Returns:
             (success, error_message)
         """
-        protocol = _detect_protocol(device)
+        # The device type, so protocol detection reads the declaration rather
+        # than guessing. Without it `_detect_protocol` falls to the heuristics,
+        # and those infer MQTT for a LoRaWAN meter whose `ttn_synced` is false —
+        # which is every device in this fleet. Firmware would have been published
+        # to a channel no meter listens on, and reported as sent.
+        protocol = _detect_protocol(device, driver_for(device_type), device_type)
         logger.info(
             "ota_dispatch",
             extra={
