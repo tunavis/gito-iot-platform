@@ -43,7 +43,7 @@ interface Device {
   last_seen: string | null;
   battery_level: number | null;
   dev_eui?: string;
-  ttn_app_id?: string;
+  lorawan_app_id?: string;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;

@@ -398,10 +398,11 @@ pub/sub does not retain.
 transport and must not disagree about where a device is.
 
 **The application id comes from the device's own uplinks** into
-`devices.ttn_app_id` (badly named, provider-agnostic in practice), captured at
-ingest. Observation wins over a hand-entered value — the device is the authority
-on where it reports from. Setting it by hand only seeds a device that has not yet
-spoken.
+`devices.lorawan_app_id`, captured at ingest. Observation wins over a
+hand-entered value — the device is the authority on where it reports from.
+Setting it by hand only seeds a device that has not yet spoken. (Renamed from
+`ttn_app_id` by migration 032; it never held a TTN id here, and the name is
+provider-agnostic because ChirpStack, TTN, Helium and Actility all populate it.)
 
 Outbound credentials use `EncryptedString` (`app/services/secrets.py`) — a column
 type, not a helper, so no write path can store plaintext. Key from

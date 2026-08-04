@@ -73,8 +73,10 @@ against that.
 
 The topic is `application/{application_id}/device/{dev_eui}/command/down`, so the
 application id is required. It is captured automatically from each uplink into
-`devices.ttn_app_id` — badly named for historical reasons, provider-agnostic in
-practice.
+`devices.lorawan_app_id` — provider-agnostic; ChirpStack, TTN, Helium and
+Actility all populate the same column. (It was called `ttn_app_id` until
+migration 032, which is worth knowing when reading older commits: it never held
+a TTN id in this deployment.)
 
 An **observed** value wins over a hand-entered one: the device is the authority on
 where it reports from, and addressing a downlink to where someone *believed* it

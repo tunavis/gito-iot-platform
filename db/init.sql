@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS devices (
     battery_level FLOAT,
     signal_strength INTEGER,
     attributes JSONB NOT NULL DEFAULT '{}',
-    ttn_app_id VARCHAR(100),
+    lorawan_app_id VARCHAR(100),
     device_profile_id VARCHAR(100),
     ttn_synced BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

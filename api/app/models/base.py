@@ -135,7 +135,10 @@ class Device(BaseModel):
     battery_level = Column(Float)
     signal_strength = Column(Integer)
     attributes = Column(JSONB, default={}, nullable=False)  # Device-specific attributes
-    ttn_app_id = Column(String(100), nullable=True)  # TTN Server app ID (provider-agnostic)
+    # The application namespace on whichever network server this device reports
+    # from. Captured at ingest from the uplink; provider-agnostic. Renamed from
+    # ttn_app_id in migration 032 — it never held a TTN id in this deployment.
+    lorawan_app_id = Column(String(100), nullable=True)
 
     # The network server this device is reached through, for downlinks
     # (migration 031). NULL means the pre-binding resolution order, which is the

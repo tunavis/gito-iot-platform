@@ -38,7 +38,8 @@ endpoint of ours, with a REST token for downlinks or nothing at all.
 
 **Non-Goals:**
 - The HTTP **uplink** webhook route. It does not exist and is the next change.
-- Renaming `ttn_app_id`.
+- Renaming `ttn_app_id`. (Done afterwards on its own, in migration 032 —
+  `lorawan_app_id`. Kept out of here on purpose.)
 - Multi-instance uplink routing — already works, per integration.
 - A general-purpose secrets subsystem. One class of secret, kept small.
 

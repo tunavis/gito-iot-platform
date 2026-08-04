@@ -35,9 +35,9 @@ into the `devices.attributes` JSONB blob rather than first-class columns (except
   alongside any other attribute fields; there are no `latitude`/`longitude` columns
   on `devices`
 
-### Requirement: Setting dev_eui/ttn_app_id/device_profile_id triggers async ChirpStack/TTN sync, best-effort
+### Requirement: Setting dev_eui/lorawan_app_id/device_profile_id triggers async ChirpStack/TTN sync, best-effort
 The system SHALL, after `POST` or `PUT /devices/{id}` when LoRaWAN fields
-(`dev_eui`, `ttn_app_id`, `device_profile_id`) are present/changed, call
+(`dev_eui`, `lorawan_app_id`, `device_profile_id`) are present/changed, call
 `DeviceManagementService.sync_to_chirpstack()`. A failure there is caught, logged
 as `chirpstack_sync_failed_on_create`/`_on_update`, and does **not** fail the HTTP
 request — the device row is still created/updated even if the ChirpStack sync fails.

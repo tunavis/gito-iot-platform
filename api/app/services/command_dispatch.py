@@ -269,7 +269,7 @@ class CommandDispatchService:
         correctness argument instead of a constraint. It also means a client whose
         broker is unreachable leaves a queued message rather than a blocked request.
         """
-        application_id = device.ttn_app_id
+        application_id = device.lorawan_app_id
         if not application_id:
             # The topic cannot be formed without it, and guessing would publish
             # into some other application on the same broker.

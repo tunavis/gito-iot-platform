@@ -316,11 +316,11 @@ class DatabaseService:
                     "SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,)
                 )
                 await conn.execute(
-                    "UPDATE devices SET ttn_app_id = %s, updated_at = now() "
+                    "UPDATE devices SET lorawan_app_id = %s, updated_at = now() "
                     "WHERE id = %s AND tenant_id = %s "
                     # An explicitly set value wins: only fill it in or correct a
                     # value we ourselves observed. A NULL is an omission to fix.
-                    "AND (ttn_app_id IS NULL OR ttn_app_id <> %s)",
+                    "AND (lorawan_app_id IS NULL OR lorawan_app_id <> %s)",
                     (application_id, device_id, tenant_id, application_id),
                 )
                 await conn.commit()

@@ -114,10 +114,12 @@ change, not a detail of it.
 
 ## Open Questions
 
-- Whether `ttn_app_id` should be renamed now that it holds ChirpStack
-  application ids. Its comment already claims provider-agnostic; renaming
-  touches the devices router and schemas and is deliberately deferred rather
-  than smuggled in here.
+- ~~Whether `ttn_app_id` should be renamed now that it holds ChirpStack
+  application ids.~~ **Resolved (2026-08-04): renamed to `lorawan_app_id` by
+  migration 032, in its own change.** The protocol, not the vendor, is the
+  stable fact. Deferring it here was right — it touched 17 files across the
+  API, processor, scripts and frontend, which is exactly the diff that should
+  not ride along inside a change about downlink routing.
 - Whether an MQTT downlink should wait for the broker's PUBACK before a command
   is marked `sent`. QoS 1 gives delivery to the *broker*, not to ChirpStack, so
   "sent" would still be weaker than it sounds.

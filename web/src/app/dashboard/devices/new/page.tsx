@@ -164,7 +164,7 @@ function NewDeviceForm() {
     name: '', serial_number: '', description: '', tags: [] as string[], newTag: '',
   });
   const [network, setNetwork] = useState({
-    dev_eui: prefillDevEui, app_key: '', ttn_app_id: '', mqtt_client_id: '',
+    dev_eui: prefillDevEui, app_key: '', lorawan_app_id: '', mqtt_client_id: '',
   });
   const [placement, setPlacement] = useState({
     site_id: '', device_group_id: '', latitude: '', longitude: '',
@@ -254,7 +254,7 @@ function NewDeviceForm() {
       if (network.dev_eui)      body.dev_eui    = network.dev_eui;
       if (protocol === 'lorawan') {
         if (network.app_key)    body.app_key    = network.app_key;
-        if (network.ttn_app_id) body.ttn_app_id = network.ttn_app_id;
+        if (network.lorawan_app_id) body.lorawan_app_id = network.lorawan_app_id;
       } else if (network.mqtt_client_id) {
         body.mqtt_client_id = network.mqtt_client_id;
       }
@@ -507,8 +507,8 @@ function NewDeviceForm() {
 
                 <FormRow label="Application ID"
                   hint="Application ID from your TTN console or ChirpStack instance.">
-                  <input type="text" value={network.ttn_app_id}
-                    onChange={e => setNetwork({ ...network, ttn_app_id: e.target.value })}
+                  <input type="text" value={network.lorawan_app_id}
+                    onChange={e => setNetwork({ ...network, lorawan_app_id: e.target.value })}
                     placeholder="e.g. my-application-v3"
                     className={input.base} />
                 </FormRow>
@@ -612,7 +612,7 @@ function NewDeviceForm() {
                   {protocol === 'lorawan' ? (
                     <>
                       <SummaryRow label="DevEUI"   value={network.dev_eui || '—'} mono />
-                      {network.ttn_app_id && <SummaryRow label="TTN App" value={network.ttn_app_id} />}
+                      {network.lorawan_app_id && <SummaryRow label="LoRaWAN App" value={network.lorawan_app_id} />}
                     </>
                   ) : (
                     <SummaryRow label="Auth method" value="Device Token (generated after creation)" />

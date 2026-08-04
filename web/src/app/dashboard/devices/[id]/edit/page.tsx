@@ -62,7 +62,7 @@ interface Device {
   firmware_version?: string | null;
   hardware_version?: string | null;
   dev_eui?: string | null;
-  ttn_app_id?: string | null;
+  lorawan_app_id?: string | null;
   device_profile_id?: string | null;
   organization_id: string;
   site_id: string;
@@ -108,7 +108,7 @@ export default function EditDevicePage() {
     tags: [] as string[],
     newTag: '',
     dev_eui: '',
-    ttn_app_id: '',
+    lorawan_app_id: '',
     device_profile_id: '',
     organization_id: '',
     site_id: '',
@@ -174,7 +174,7 @@ export default function EditDevicePage() {
         tags: deviceData.attributes?.tags || [],
         newTag: '',
         dev_eui: deviceData.dev_eui || '',
-        ttn_app_id: deviceData.ttn_app_id || '',
+        lorawan_app_id: deviceData.lorawan_app_id || '',
         device_profile_id: deviceData.device_profile_id || '',
         organization_id: deviceData.organization_id || '',
         site_id: deviceData.site_id || '',
@@ -265,7 +265,7 @@ export default function EditDevicePage() {
 
       // LoRaWAN fields
       if (form.dev_eui) body.dev_eui = form.dev_eui;
-      if (form.ttn_app_id) body.ttn_app_id = form.ttn_app_id;
+      if (form.lorawan_app_id) body.lorawan_app_id = form.lorawan_app_id;
       if (form.device_profile_id) body.device_profile_id = form.device_profile_id;
 
       const response = await fetch(
@@ -464,8 +464,8 @@ export default function EditDevicePage() {
                   <label className="block text-sm font-medium text-th-primary mb-1">Application ID</label>
                   <input
                     type="text"
-                    value={form.ttn_app_id}
-                    onChange={e => setForm(prev => ({ ...prev, ttn_app_id: e.target.value }))}
+                    value={form.lorawan_app_id}
+                    onChange={e => setForm(prev => ({ ...prev, lorawan_app_id: e.target.value }))}
                     placeholder="e.g. my-application-v3"
                     className={input.base}
                   />

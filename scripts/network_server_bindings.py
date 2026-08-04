@@ -19,7 +19,7 @@ SELECT
     i.name                                   AS server,
     i.downlink_mode                          AS mode,
     count(*)                                 AS devices,
-    count(*) FILTER (WHERE d.ttn_app_id IS NULL) AS missing_application
+    count(*) FILTER (WHERE d.lorawan_app_id IS NULL) AS missing_application
 FROM devices d
 JOIN integrations i ON i.id = d.integration_id
 GROUP BY 1, 2
@@ -31,8 +31,8 @@ SELECT
     coalesce(dt.name, '(no type)')           AS device_type,
     count(*)                                 AS devices,
     count(*) FILTER (WHERE d.dev_eui IS NOT NULL) AS lorawan,
-    count(DISTINCT d.ttn_app_id)             AS applications_seen,
-    max(d.ttn_app_id)                        AS example_application
+    count(DISTINCT d.lorawan_app_id)             AS applications_seen,
+    max(d.lorawan_app_id)                        AS example_application
 FROM devices d
 LEFT JOIN device_types dt ON dt.id = d.device_type_id
 WHERE d.integration_id IS NULL

@@ -9,7 +9,7 @@ metric keys:
 
 Supported protocols (detected from device attributes):
   mqtt      - Publish command to {tenant_id}/devices/{device_id}/commands
-  lorawan   - ChirpStack downlink (device has dev_eui + ttn_app_id)
+  lorawan   - ChirpStack downlink (device has dev_eui + lorawan_app_id)
   http      - POST to device attributes["webhook_url"]
 """
 

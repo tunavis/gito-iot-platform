@@ -313,7 +313,7 @@ class TestTheMQTTDownlinkPath:
     @pytest.mark.asyncio
     async def test_it_queues_for_the_bridge_and_posts_to_no_rest_api(self):
         integration = _integration(**MQTT_INTEGRATION)
-        device = _device(integration_id=integration.id, ttn_app_id=APP_ID)
+        device = _device(integration_id=integration.id, lorawan_app_id=APP_ID)
 
         ok, err, published, posts = await _dispatch_mqtt(device, integration)
 
@@ -342,7 +342,7 @@ class TestTheMQTTDownlinkPath:
             "commands": {"mode": "passthrough_json"},
         }
         integration = _integration(**MQTT_INTEGRATION)
-        device = _device(integration_id=integration.id, ttn_app_id=APP_ID)
+        device = _device(integration_id=integration.id, lorawan_app_id=APP_ID)
 
         _, _, published, _ = await _dispatch_mqtt(device, integration, driver=driver)
         body = json.loads(published[0][1])
@@ -353,7 +353,7 @@ class TestTheMQTTDownlinkPath:
         """The topic cannot be formed without it, and guessing would publish
         into some other application on the same broker."""
         integration = _integration(**MQTT_INTEGRATION)
-        device = _device(integration_id=integration.id, ttn_app_id=None)
+        device = _device(integration_id=integration.id, lorawan_app_id=None)
 
         ok, err, published, _ = await _dispatch_mqtt(device, integration)
         assert ok is False
@@ -365,7 +365,7 @@ class TestTheMQTTDownlinkPath:
         """Redis pub/sub does not retain a message with no subscriber. Reporting
         `sent` when nobody was listening would be the clearest possible lie."""
         integration = _integration(**MQTT_INTEGRATION)
-        device = _device(integration_id=integration.id, ttn_app_id=APP_ID)
+        device = _device(integration_id=integration.id, lorawan_app_id=APP_ID)
 
         ok, err, published, _ = await _dispatch_mqtt(device, integration, listeners=0)
         assert ok is False
@@ -378,10 +378,10 @@ class TestTheMQTTDownlinkPath:
         a = _integration(name="A", **MQTT_INTEGRATION)
         b = _integration(name="B", **MQTT_INTEGRATION)
         _, _, pub_a, _ = await _dispatch_mqtt(
-            _device(integration_id=a.id, ttn_app_id=APP_ID), a
+            _device(integration_id=a.id, lorawan_app_id=APP_ID), a
         )
         _, _, pub_b, _ = await _dispatch_mqtt(
-            _device(integration_id=b.id, ttn_app_id=APP_ID), b
+            _device(integration_id=b.id, lorawan_app_id=APP_ID), b
         )
         assert pub_a[0][0] != pub_b[0][0]
         assert pub_a[0][0].endswith(str(a.id)) and pub_b[0][0].endswith(str(b.id))
@@ -425,7 +425,7 @@ class TestFirmwareResolvesTheSameWay:
         from app.services import ota_dispatch as ota
 
         integration = _integration(**MQTT_INTEGRATION)
-        device = _device(integration_id=integration.id, ttn_app_id=APP_ID)
+        device = _device(integration_id=integration.id, lorawan_app_id=APP_ID)
         posts = []
         with patch.object(ota.aiohttp, "ClientSession", lambda *a, **k: _FakeHttpSession(posts)):
             ok, err = await ota.OTADispatchService().dispatch(

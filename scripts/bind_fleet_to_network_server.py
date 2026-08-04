@@ -63,7 +63,7 @@ async def main() -> int:
         no_app = 0
         for d in unbound:
             d.integration_id = server.id
-            if not d.ttn_app_id:
+            if not d.lorawan_app_id:
                 no_app += 1
         await s.commit()
 

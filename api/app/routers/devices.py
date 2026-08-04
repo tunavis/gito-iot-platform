@@ -284,7 +284,7 @@ async def create_device(
         device_group_id=device_data.device_group_id,
         asset_id=device_data.asset_id,
         dev_eui=device_data.dev_eui,
-        ttn_app_id=device_data.ttn_app_id,
+        lorawan_app_id=device_data.lorawan_app_id,
         integration_id=device_data.integration_id,
         device_profile_id=device_data.device_profile_id,
         attributes=attrs,
@@ -298,7 +298,7 @@ async def create_device(
     await session.refresh(device)
 
     # Trigger async ChirpStack/TTN sync if LoRaWAN fields present
-    if device_data.dev_eui or device_data.ttn_app_id:
+    if device_data.dev_eui or device_data.lorawan_app_id:
         device_mgmt = DeviceManagementService(session)
         try:
             await device_mgmt.sync_to_chirpstack(device, is_update=False)
@@ -416,8 +416,8 @@ async def update_device(
         device.asset_id = device_data.asset_id
     if device_data.dev_eui is not None:
         device.dev_eui = device_data.dev_eui
-    if device_data.ttn_app_id is not None:
-        device.ttn_app_id = device_data.ttn_app_id
+    if device_data.lorawan_app_id is not None:
+        device.lorawan_app_id = device_data.lorawan_app_id
     # `model_fields_set`, not `is not None`: unbinding a device is an explicit
     # null, and it must be possible to say so.
     if "integration_id" in device_data.model_fields_set:
@@ -433,7 +433,7 @@ async def update_device(
     # Trigger async TTN sync if LoRaWAN fields were updated
     has_lorawan_update = (
         device_data.dev_eui is not None
-        or device_data.ttn_app_id is not None
+        or device_data.lorawan_app_id is not None
         or device_data.device_profile_id is not None
     )
     if has_lorawan_update:

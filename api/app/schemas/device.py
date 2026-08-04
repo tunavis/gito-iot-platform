@@ -39,12 +39,12 @@ class DeviceCreate(BaseModel):
         None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
     )
     app_key: Optional[str] = Field(None, description="LoRaWAN Application Key")
-    ttn_app_id: Optional[str] = Field(
+    lorawan_app_id: Optional[str] = Field(
         None,
         description=(
-            "Network-server application this device belongs to. Named for TTN "
-            "historically; it holds the ChirpStack application id today and is "
-            "learned from the device's own uplinks when not set explicitly."
+            "Network-server application this device belongs to. Provider-agnostic "
+            "— it holds the ChirpStack application id today — and is learned from "
+            "the device's own uplinks when not set explicitly."
         ),
     )
     integration_id: Optional[UUID] = Field(
@@ -81,12 +81,12 @@ class DeviceUpdate(BaseModel):
     dev_eui: Optional[str] = Field(
         None, pattern="^[0-9A-Fa-f]{16}$", description="LoRaWAN Device EUI (16 hex chars)"
     )
-    ttn_app_id: Optional[str] = Field(
+    lorawan_app_id: Optional[str] = Field(
         None,
         description=(
-            "Network-server application this device belongs to. Named for TTN "
-            "historically; it holds the ChirpStack application id today and is "
-            "learned from the device's own uplinks when not set explicitly."
+            "Network-server application this device belongs to. Provider-agnostic "
+            "— it holds the ChirpStack application id today — and is learned from "
+            "the device's own uplinks when not set explicitly."
         ),
     )
     integration_id: Optional[UUID] = Field(
@@ -123,7 +123,7 @@ class DeviceResponse(BaseModel):
     asset_id: Optional[UUID] = None
     # LoRaWAN fields (use actual DB column names)
     dev_eui: Optional[str] = None
-    ttn_app_id: Optional[str] = None
+    lorawan_app_id: Optional[str] = None
     integration_id: Optional[UUID] = None
     device_profile_id: Optional[str] = None
     ttn_synced: bool = False
