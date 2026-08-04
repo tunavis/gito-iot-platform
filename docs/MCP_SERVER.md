@@ -121,7 +121,7 @@ Requests lapse after 24 hours. Rejected and expired requests leave the queue;
 what was decided is read back from the audit log.
 
 **Not yet:** a pending request is only visible to someone already signed in.
-Notifying someone who is not is `openspec/changes/add-approval-notifications` —
+Notifying someone who is not is `openspec/changes/add-notification-sources` —
 the platform's notification pipeline is keyed on alarms by a NOT NULL foreign key
 and has no generic path to reuse.
 
