@@ -108,26 +108,64 @@ async def get_hierarchy(
     site_alm = defaultdict(int)
     grp_alm = defaultdict(int)
 
+    # ── Ancestry, so the counts actually roll up ────────────────────────────
+    # A device attached to a nested site belongs to that site, to every site
+    # above it, and to the org owning the chain. Attributing each row to only
+    # the FKs on the row itself made a parent report fewer devices than its own
+    # child — and the frontend summary bar, which sums the org counts, read 0
+    # for a 68-device fleet because no device carries organization_id.
+    site_parent = {s.id: s.parent_site_id for s in sites}
+    site_org = {s.id: s.organization_id for s in sites}
+    group_site = {g.id: g.site_id for g in groups}
+
+    def site_chain(site_id):
+        """`site_id` and every ancestor, nearest first. Cycle-safe and deduped,
+        so a malformed parent loop can't double-count or hang."""
+        chain, seen = [], set()
+        cur = site_id
+        while cur and cur not in seen:
+            seen.add(cur)
+            chain.append(cur)
+            cur = site_parent.get(cur)
+        return chain
+
+    def places(r):
+        """Where one grouped row counts: (org_id, [site + ancestors], group_id).
+
+        Shared by the device and alarm passes so the two can never disagree
+        about where a device lives. Each level is credited exactly once — the
+        org comes from the device's own FK *or* is derived from its site, never
+        both, so a device attached to both cannot count twice.
+        """
+        site_id = r.site_id or group_site.get(r.device_group_id)
+        chain = site_chain(site_id) if site_id else []
+        org_id = r.organization_id or next(
+            (site_org[s] for s in chain if site_org.get(s)), None
+        )
+        return org_id, chain, r.device_group_id
+
     for r in dev_rows:
         t, o = int(r.total or 0), int(r.online or 0)
-        if r.organization_id:
-            org_dev[r.organization_id]["total"] += t
-            org_dev[r.organization_id]["online"] += o
-        if r.site_id:
-            site_dev[r.site_id]["total"] += t
-            site_dev[r.site_id]["online"] += o
-        if r.device_group_id:
-            grp_dev[r.device_group_id]["total"] += t
-            grp_dev[r.device_group_id]["online"] += o
+        org_id, chain, grp_id = places(r)
+        if org_id:
+            org_dev[org_id]["total"] += t
+            org_dev[org_id]["online"] += o
+        for sid in chain:
+            site_dev[sid]["total"] += t
+            site_dev[sid]["online"] += o
+        if grp_id:
+            grp_dev[grp_id]["total"] += t
+            grp_dev[grp_id]["online"] += o
 
     for r in alarm_rows:
         a = int(r.alarms or 0)
-        if r.organization_id:
-            org_alm[r.organization_id] += a
-        if r.site_id:
-            site_alm[r.site_id] += a
-        if r.device_group_id:
-            grp_alm[r.device_group_id] += a
+        org_id, chain, grp_id = places(r)
+        if org_id:
+            org_alm[org_id] += a
+        for sid in chain:
+            site_alm[sid] += a
+        if grp_id:
+            grp_alm[grp_id] += a
 
     # ── Assembly helpers ────────────────────────────────────────────────────
     def build_groups(site_id):
