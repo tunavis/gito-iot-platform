@@ -143,6 +143,12 @@ services:
         condition: service_started
     volumes:  # Hot reload - live code sync
       - ./api:/app
+      # test_device_driver.py reads the shipped drivers off disk at
+      # `parents[2]/drivers` — the repo root on a host checkout, but `/` inside
+      # this container, since only ./api is mounted. Without this the file fails
+      # collection and takes the whole suite down with it, which matters because
+      # `docker exec gito-api pytest` is how the API tests are run.
+      - ./drivers:/drivers:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # Auto-reload on code changes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
