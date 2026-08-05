@@ -4,7 +4,7 @@ import logging
 from typing import List, Dict, Optional, Any
 from uuid import UUID
 from datetime import datetime, timedelta
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 
 from app.database import RLSSession
 from app.models import (
@@ -21,6 +21,49 @@ from app.services.channels import ChannelFactory
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+async def resolve_platform_notification_tenant(session: RLSSession) -> Optional[UUID]:
+    """Which tenant hears about a platform-wide fault, or None if that is unanswerable.
+
+    Not `dependencies.get_management_tenant` — that is a FastAPI dependency which
+    reads a JWT and asserts the *caller's* tenant_type. It performs no lookup and
+    returns the caller's own tenant, so it is unusable from a background task,
+    which is exactly where platform faults are detected.
+
+    A stall crosses tenants by construction (`check_ingestion_stall` reads
+    max(devices.last_seen) fleet-wide), but a queued notification needs a tenant
+    and channels are per-user-per-tenant. Fanning a platform fault out to every
+    tenant's admins tells many people something none of them can act on, and the
+    one who can is told repeatedly.
+
+    Both failure modes return None and log rather than guessing, because nothing
+    in the schema constrains how many management tenants exist:
+      - none: there is nobody to tell. Inventing a recipient means notifying an
+        arbitrary customer about our infrastructure.
+      - several: an arbitrary pick delivers to a tenant whose identity can change
+        between deploys, so the same fault reaches different people each time.
+    """
+    rows = (
+        await session.execute(text("SELECT id FROM tenants WHERE tenant_type = 'management'"))
+    ).all()
+
+    if not rows:
+        logger.error(
+            "Platform notification has no recipient: no tenant has tenant_type='management'. "
+            "Nothing queued."
+        )
+        return None
+    if len(rows) > 1:
+        logger.error(
+            "Platform notification has an ambiguous recipient: %d tenants have "
+            "tenant_type='management' (%s). Nothing queued — pick one deliberately "
+            "rather than letting this choose.",
+            len(rows),
+            ", ".join(str(r[0]) for r in rows),
+        )
+        return None
+    return rows[0][0]
 
 
 class NotificationDispatcher:
