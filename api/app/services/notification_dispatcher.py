@@ -1,10 +1,11 @@
 """Notification dispatcher - orchestrates alert notifications across channels."""
 
 import logging
+from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 from uuid import UUID
 from datetime import datetime, timedelta
-from sqlalchemy import and_, select, text
+from sqlalchemy import and_, case, select, text
 
 from app.database import RLSSession
 from app.models import (
@@ -21,6 +22,33 @@ from app.services.channels import ChannelFactory
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# The pre-existing and default kind. Every row that existed before migration 033
+# is one of these, which is what that migration's column default says.
+SOURCE_ALERT_EVENT = "alert_event"
+SOURCE_INGESTION_STALL = "ingestion_stall"
+SOURCE_COMMAND_APPROVAL = "command_approval"
+
+
+@dataclass(frozen=True)
+class NotificationSource:
+    """What a notification is about, in the shape the send path needs.
+
+    This exists so alarms and platform sources share one send path instead of
+    two. `_send` reads only this, so adding a third source is a builder, not
+    another copy of channel resolution, template lookup, retry and bookkeeping.
+
+    `default_subject`/`default_message` are what renders when no template
+    matches — which, with no templates authored, is always.
+    """
+
+    source_kind: str
+    alert_event_id: Optional[UUID]
+    variables: Dict[str, Any]
+    default_message: str
+    default_subject: Optional[str] = None
+    # Selects a template. None means "no preference" and takes the untyped one.
+    alert_type: Optional[str] = None
 
 
 async def resolve_platform_notification_tenant(session: RLSSession) -> Optional[UUID]:
@@ -122,6 +150,24 @@ class NotificationDispatcher:
             .all()
         )
 
+        source = NotificationSource(
+            source_kind=SOURCE_ALERT_EVENT,
+            alert_event_id=alert_event.id,
+            variables={
+                "device_name": device.name,
+                "rule_name": alert_rule.metric,
+                "metric_value": alert_event.metric_value,
+                "threshold": alert_rule.threshold,
+                "fired_at": alert_event.fired_at.isoformat() if alert_event.fired_at else "",
+                "alert_message": alert_event.message or "Alert triggered",
+            },
+            # Unchanged from before this seam existed — an alarm with no template
+            # must render exactly as it always has.
+            default_message=f"{device.name}: Alert triggered",
+            default_subject=None,
+            alert_type=getattr(alert_rule, "severity", None),
+        )
+
         notification_ids = []
         for notif_rule in notification_rules:
             channel = (
@@ -145,10 +191,10 @@ class NotificationDispatcher:
                 .first()
             )
 
-            if await self._is_throttled(channel, alert_rule):
+            if await self._is_throttled(channel, SOURCE_ALERT_EVENT):
                 continue
 
-            notif_id = await self._send(alert_event, channel, alert_rule, device, user)
+            notif_id = await self._send(source, channel, user)
             if notif_id:
                 notification_ids.append(notif_id)
 
@@ -158,10 +204,83 @@ class NotificationDispatcher:
 
         return notification_ids
 
+    async def process_platform_event(
+        self,
+        source_kind: str,
+        variables: Dict[str, Any],
+        default_message: str,
+        default_subject: Optional[str] = None,
+    ) -> List[UUID]:
+        """Send a notification that is not about an alert event.
+
+        Shares channel resolution, template selection, throttling and the send
+        bookkeeping with `process_alert_event` — only what the notification is
+        *about* differs.
+
+        Channel selection differs in one way and it is deliberate: an alarm
+        reaches the channels wired to its rule via `notification_rules`, and a
+        platform source has no rule, so it reaches every enabled channel in the
+        tenant. That tenant is the management tenant, so "every enabled channel"
+        is the operators' channels, not a customer's.
+        """
+        channels = (
+            (
+                await self.session.execute(
+                    select(NotificationChannel).where(
+                        and_(
+                            NotificationChannel.tenant_id == self.tenant_id,
+                            NotificationChannel.enabled == True,  # noqa: E712
+                        )
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        if not channels:
+            logger.warning(
+                "Platform notification %s has no enabled channel on tenant %s — nothing sent",
+                source_kind,
+                self.tenant_id,
+            )
+            return []
+
+        source = NotificationSource(
+            source_kind=source_kind,
+            alert_event_id=None,
+            variables=variables,
+            default_message=default_message,
+            default_subject=default_subject,
+            alert_type=source_kind,
+        )
+
+        notification_ids = []
+        for channel in channels:
+            if await self._is_throttled(channel, source_kind):
+                continue
+            user = (
+                (await self.session.execute(select(User).where(User.id == channel.user_id)))
+                .scalars()
+                .first()
+            )
+            notif_id = await self._send(source, channel, user)
+            if notif_id:
+                notification_ids.append(notif_id)
+
+        await self.session.commit()
+        return notification_ids
+
     async def _is_throttled(
-        self, channel: NotificationChannel, alert_rule: UnifiedAlertRule
+        self, channel: NotificationChannel, source_kind: str = SOURCE_ALERT_EVENT
     ) -> bool:
-        """Check if channel is throttled."""
+        """Whether this channel has sent anything too recently.
+
+        Keyed on the channel and the source kind rather than on an alert rule: a
+        platform source has no rule, and throttling a stall behind an alarm (or
+        the reverse) would drop the one that matters. This is only a rate
+        ceiling — duplicate suppression is the dedupe index, not this.
+        """
         cutoff = datetime.utcnow() - timedelta(minutes=self.throttle_minutes)
         recent = (
             (
@@ -169,6 +288,7 @@ class NotificationDispatcher:
                     select(Notification).where(
                         and_(
                             Notification.channel_id == channel.id,
+                            Notification.source_kind == source_kind,
                             Notification.created_at > cutoff,
                             Notification.status != "skipped",
                         )
@@ -180,43 +300,61 @@ class NotificationDispatcher:
         )
         return recent is not None
 
-    async def _send(
-        self,
-        alert_event: AlertEvent,
-        channel: NotificationChannel,
-        alert_rule: UnifiedAlertRule,
-        device: Device,
-        user: Optional[User],
-    ) -> Optional[UUID]:
-        """Send notification."""
-        service = ChannelFactory.create_service(channel.channel_type)
-        if not service:
-            return None
+    async def _resolve_template(
+        self, channel: NotificationChannel, alert_type: Optional[str]
+    ) -> Optional[NotificationTemplate]:
+        """Prefer a template declaring this alert_type, then an untyped one, then any.
 
-        template = (
+        `alert_type` has been stored on templates and never read — selection took
+        the first enabled template for the channel, so exactly one template per
+        channel could ever be used and a platform fault would borrow an alarm's
+        wording.
+
+        Preference lives in ORDER BY rather than in a sequence of queries, for
+        two reasons. It is one round trip instead of up to three. And the WHERE
+        clause is left exactly as it was, so this can never match *fewer*
+        templates than the previous code did — it only reorders them. A tenant
+        whose single enabled template carries some unrelated alert_type keeps
+        getting that template rather than silently dropping to the hardcoded
+        fallback.
+        """
+        preference = case(
+            (NotificationTemplate.alert_type == alert_type, 0),  # asked for
+            (NotificationTemplate.alert_type.is_(None), 1),  # applies to anything
+            else_=2,  # some other type — last resort, i.e. the old behaviour
+        )
+
+        return (
             (
                 await self.session.execute(
-                    select(NotificationTemplate).where(
+                    select(NotificationTemplate)
+                    .where(
                         and_(
                             NotificationTemplate.tenant_id == self.tenant_id,
                             NotificationTemplate.channel_type == channel.channel_type,
-                            NotificationTemplate.enabled == True,
+                            NotificationTemplate.enabled == True,  # noqa: E712
                         )
                     )
+                    .order_by(preference)
                 )
             )
             .scalars()
             .first()
         )
 
-        variables = {
-            "device_name": device.name,
-            "rule_name": alert_rule.metric,
-            "metric_value": alert_event.metric_value,
-            "threshold": alert_rule.threshold,
-            "fired_at": alert_event.fired_at.isoformat() if alert_event.fired_at else "",
-            "alert_message": alert_event.message or "Alert triggered",
-        }
+    async def _send(
+        self,
+        source: "NotificationSource",
+        channel: NotificationChannel,
+        user: Optional[User],
+    ) -> Optional[UUID]:
+        """Send one notification through one channel."""
+        service = ChannelFactory.create_service(channel.channel_type)
+        if not service:
+            return None
+
+        template = await self._resolve_template(channel, source.alert_type)
+        variables = source.variables
 
         if template:
             message = service.render_template(template.body, variables)
@@ -224,8 +362,12 @@ class NotificationDispatcher:
                 service.render_template(template.subject, variables) if template.subject else None
             )
         else:
-            message = f"{device.name}: Alert triggered"
-            subject = None
+            # Not an edge case — with no templates authored this IS the live
+            # path, so the default has to come from the source. The previous
+            # hardcoded alarm sentence named a device, which a platform fault
+            # does not have: a stall would have rendered "None: Alert triggered".
+            message = source.default_message
+            subject = source.default_subject
 
         recipient = (
             channel.config.get("email")
@@ -236,7 +378,8 @@ class NotificationDispatcher:
 
         notification = Notification(
             tenant_id=self.tenant_id,
-            alert_event_id=alert_event.id,
+            source_kind=source.source_kind,
+            alert_event_id=source.alert_event_id,
             channel_id=channel.id,
             channel_type=channel.channel_type,
             recipient=recipient,

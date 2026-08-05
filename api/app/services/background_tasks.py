@@ -19,7 +19,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.models import Notification, NotificationQueue, AlertEvent
-from app.services.notification_dispatcher import NotificationDispatcher
+from app.services.notification_dispatcher import NotificationDispatcher, SOURCE_ALERT_EVENT
 from app.services.device_status import (
     INGESTION_STALL_THRESHOLD_SECONDS,
     check_ingestion_stall,
@@ -203,9 +203,21 @@ class NotificationBackgroundTasks:
                         # Dispatch the notification
                         dispatcher = NotificationDispatcher(session, queue_item.tenant_id)
 
-                        notification_ids = await dispatcher.process_alert_event(
-                            queue_item.alert_event_id
-                        )
+                        # Branch on the recorded source kind, never on whether
+                        # alert_event_id happens to be NULL (migration 033): the
+                        # third source would be indistinguishable from the second.
+                        if queue_item.source_kind == SOURCE_ALERT_EVENT:
+                            notification_ids = await dispatcher.process_alert_event(
+                                queue_item.alert_event_id
+                            )
+                        else:
+                            payload = queue_item.payload or {}
+                            notification_ids = await dispatcher.process_platform_event(
+                                source_kind=queue_item.source_kind,
+                                variables=payload.get("variables", {}),
+                                default_message=payload.get("message", queue_item.source_kind),
+                                default_subject=payload.get("subject"),
+                            )
 
                         # Mark queue item as completed
                         queue_item.status = "completed"
@@ -214,7 +226,12 @@ class NotificationBackgroundTasks:
                         logger.info(
                             f"Notification dispatched",
                             extra={
-                                "alert_event_id": str(queue_item.alert_event_id),
+                                "source_kind": queue_item.source_kind,
+                                "alert_event_id": (
+                                    str(queue_item.alert_event_id)
+                                    if queue_item.alert_event_id
+                                    else None
+                                ),
                                 "notification_count": len(notification_ids),
                             },
                         )
