@@ -113,8 +113,21 @@
       and correlation by opcode in one act.
       **Never against a global setting** — proving it that way would make the
       shortcut permanent.
-- [ ] 8.2 Record what arrived: the published frame, the device's answer, and the
-      command's final status. `device_commands` has never held a row.
+- [x] 8.2 Record what arrived: the published frame, the device's answer, and the
+      command's final status. Done 2026-08-05, and the honest answer is
+      **nothing arrived**. `device_commands` holds exactly one row ever —
+      opcode 7 to `e41e0a9000009390`, created 2026-08-03 12:28+00, final status
+      `timed_out` against that type's 43200s (12h) response window.
+
+      So 8.1 proved the **outbound** half: encode, resolve the binding, publish
+      on the right topic at fPort 1, and expire on the per-driver window rather
+      than the old 60s default. It did **not** prove correlation —
+      `_correlate_driver_ack` has still never matched a real device answer on
+      `(device, opcode)`, because no answer came. An IWM is NFC-settable-only
+      and reports every 12 hours, so it may never acknowledge a downlink at
+      all; an RFM, which echoes the whole frame, is the class that can prove
+      this. Carried forward as its own change rather than left as a tick inside
+      an archive — see `prove-downlink-ack-correlation`.
 
 ## 9. Documentation
 

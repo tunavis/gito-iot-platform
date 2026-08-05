@@ -95,6 +95,9 @@ export default function DevicesPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [tenantId, setTenantId] = useState<string>('');
+  // Fleet size as the API reports it, not how many rows have arrived — the two
+  // differ while pages are still streaming in.
+  const [fleetTotal, setFleetTotal] = useState(0);
   const loadDevices = useCallback(async () => {
       try {
         const token = localStorage.getItem('auth_token');
@@ -107,16 +110,34 @@ export default function DevicesPage() {
         const tenant = payload.tenant_id;
         setTenantId(tenant);
 
-        const response = await fetch(`/api/v1/tenants/${tenant}/devices`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // This list shows the whole fleet, so drain every page. One unpaged
+        // request silently took the API's per_page default and then reported
+        // that page as the fleet — "Showing 50 of 50" for 68 devices, with the
+        // online percentage computed over the same partial set. Each page is
+        // appended as it lands so rows stream in instead of the view blocking
+        // on the last one.
+        let all: Device[] = [];
+        let page = 1;
+        for (;;) {
+          const response = await fetch(
+            `/api/v1/tenants/${tenant}/devices?page=${page}&per_page=100`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          );
 
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error?.message || 'Failed to load devices');
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error?.message || 'Failed to load devices');
+          }
+
+          const batch: Device[] = data.data || [];
+          all = [...all, ...batch];
+          setDevices(all);
+          setFleetTotal(data.meta?.total ?? all.length);
+          setLoading(false); // first page is enough to render; the rest fills in
+
+          if (batch.length === 0 || all.length >= (data.meta?.total ?? all.length)) break;
+          page++;
         }
-
-        setDevices(data.data || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load devices');
       } finally {
@@ -258,11 +279,16 @@ export default function DevicesPage() {
   };
 
   const stats = useMemo(() => ({
-    total: devices.length,
+    // `total` is the fleet, `loaded` is what has arrived. Percentages divide by
+    // `loaded` so they stay internally consistent mid-stream instead of dipping.
+    total: fleetTotal || devices.length,
+    loaded: devices.length,
     online: devices.filter(d => d.status === 'online').length,
     offline: devices.filter(d => d.status === 'offline').length,
     idle: devices.filter(d => d.status === 'idle').length,
-  }), [devices]);
+  }), [devices, fleetTotal]);
+
+  const streaming = stats.loaded < stats.total;
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
@@ -293,6 +319,12 @@ export default function DevicesPage() {
               <Cpu className="w-4 h-4 text-th-muted" />
               <span className="text-sm font-semibold text-th-primary">{stats.total}</span>
               <span className="text-sm text-th-muted">devices</span>
+              {streaming && (
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse"
+                  title={`Loaded ${stats.loaded} of ${stats.total}…`}
+                />
+              )}
             </div>
             <div className="flex items-center gap-2 bg-surface border border-green-200 rounded-lg px-4 py-2.5 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -313,9 +345,9 @@ export default function DevicesPage() {
                 <span className="text-sm text-th-muted">idle</span>
               </div>
             )}
-            {stats.total > 0 && (
+            {stats.loaded > 0 && (
               <div className="ml-auto text-xs text-th-muted">
-                {Math.round((stats.online / stats.total) * 100)}% fleet online
+                {Math.round((stats.online / stats.loaded) * 100)}% fleet online
               </div>
             )}
           </div>
