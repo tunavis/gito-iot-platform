@@ -94,12 +94,16 @@ class Notification(BaseModel):
     tenant_id = Column(
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Nullable since migration 033: a notification may be about a platform
+    # source (an ingestion stall, a pending approval) rather than an alarm.
+    # Read `source_kind` to tell them apart — never `alert_event_id IS NULL`.
     alert_event_id = Column(
         UUID(as_uuid=True),
         ForeignKey("alert_events.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    source_kind = Column(String(50), nullable=False, server_default="alert_event")
     channel_id = Column(
         UUID(as_uuid=True),
         ForeignKey("notification_channels.id", ondelete="CASCADE"),
@@ -155,12 +159,22 @@ class NotificationQueue(BaseModel):
     tenant_id = Column(
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Nullable since migration 033 — see Notification.alert_event_id above.
     alert_event_id = Column(
         UUID(as_uuid=True),
         ForeignKey("alert_events.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    source_kind = Column(String(50), nullable=False, server_default="alert_event")
+    # What a non-alert source needs to render itself. NULL for alert rows, which
+    # carry everything they need behind alert_event_id.
+    payload = Column(JSONB)
+    # Identifies the event a non-alert source is reporting. The partial unique
+    # index uq_notification_queue_source_dedupe (migration 033) is what makes
+    # queuing exactly-once for those rows — alert rows get that from
+    # uq_notification_queue_alert_event instead.
+    dedupe_key = Column(Text)
     status = Column(
         String(50), default="pending", nullable=False
     )  # pending, processing, completed, failed
