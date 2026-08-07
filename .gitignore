@@ -16,6 +16,11 @@
 !.env.production.example
 
 # SSH deploy keys and stray secret/token files (NEVER commit)
+# `.env.token` was tracked from 604d5fb until 2026-08-06 — a real TENANT_ADMIN
+# JWT, expired 2026-02-07 and therefore dead, but signed with the dev
+# JWT_SECRET_KEY that is still live. Nothing stopped it being regenerated and
+# re-committed, which is how it survived adca382's sweep for exactly this.
+.env.token
 gito_staging_deploy_new
 gito_staging_deploy_new.pub
 token.txt
@@ -112,13 +117,23 @@ processor/__pycache__/
 processor/.pytest_cache/
 processor/.mypy_cache/
 
+# Mobile app (Expo / React Native). `mobile/` itself is deliberately TRACKED —
+# the previous app vanished because it never was. These are its build artifacts,
+# listed before the app lands rather than after the first accidental commit of
+# a node_modules tree. Not Flutter paths: `.dart_tool/` and `mobile/build/` would
+# be the old stack, and `build/` above already covers the latter anyway.
+mobile/node_modules/
+mobile/.expo/
+mobile/.expo-shared/
+mobile/dist/
+mobile/web-build/
+mobile/*.tsbuildinfo
+
 # Keep example files
 !.env.example
 !.github/
 nul
 
-# Flutter mobile app (separate repo)
-mobile/
 
 # Claude AI local config (but project skills are shared, versioned team assets)
 .claude/*

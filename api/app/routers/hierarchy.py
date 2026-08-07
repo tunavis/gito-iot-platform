@@ -139,9 +139,7 @@ async def get_hierarchy(
         """
         site_id = r.site_id or group_site.get(r.device_group_id)
         chain = site_chain(site_id) if site_id else []
-        org_id = r.organization_id or next(
-            (site_org[s] for s in chain if site_org.get(s)), None
-        )
+        org_id = r.organization_id or next((site_org[s] for s in chain if site_org.get(s)), None)
         return org_id, chain, r.device_group_id
 
     for r in dev_rows:

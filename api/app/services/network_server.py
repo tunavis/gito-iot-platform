@@ -60,9 +60,9 @@ class NetworkServerUnresolved(RuntimeError):
 # inferred from how that server's uplinks arrive — the two directions are
 # independent, and guessing is right for the client in front of us and wrong for
 # the next one.
-MODE_MQTT = "mqtt"    # publish to the broker in config, .../command/down
-MODE_REST = "rest"    # POST to downlink_api_url
-MODE_NONE = "none"    # this server accepts no downlinks at all
+MODE_MQTT = "mqtt"  # publish to the broker in config, .../command/down
+MODE_REST = "rest"  # POST to downlink_api_url
+MODE_NONE = "none"  # this server accepts no downlinks at all
 DOWNLINK_MODES = frozenset({MODE_MQTT, MODE_REST, MODE_NONE})
 
 
@@ -77,8 +77,8 @@ class NetworkServer:
     # permanent.
     source: str
     integration_id: Optional[UUID] = None
-    api_url: Optional[str] = None   # rest only
-    api_key: Optional[str] = None   # rest token, or an mqtt password
+    api_url: Optional[str] = None  # rest only
+    api_key: Optional[str] = None  # rest token, or an mqtt password
 
 
 async def resolve(session, device: Device) -> NetworkServer:

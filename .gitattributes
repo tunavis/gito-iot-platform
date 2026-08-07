@@ -1,0 +1,23 @@
+# Line endings.
+#
+# Shell scripts MUST check out as LF, even on Windows. `api/entrypoint.sh` runs
+# as a container CMD, and the api service bind-mounts `./api:/app` — so the file
+# the container executes is the one in the Windows working tree, not the one
+# baked into the image. With CRLF the shebang becomes `/bin/bash\r`, the kernel
+# looks for a binary of that name, and the container dies with the memorably
+# unhelpful `exec ./entrypoint.sh: no such file or directory`.
+#
+# Git already stores these as LF; it was `core.autocrlf` converting them on
+# checkout. Without this file every Windows clone reintroduces the bug, so a
+# second developer hits it on his first `docker compose up -d`.
+*.sh            text eol=lf
+*.bash          text eol=lf
+
+# Same reasoning for anything else a container executes or parses as a script.
+Dockerfile*     text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# Windows-only helpers are the exception — cmd.exe wants CRLF.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf

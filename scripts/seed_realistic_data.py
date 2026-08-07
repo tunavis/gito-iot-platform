@@ -5,13 +5,21 @@ Based on Cumulocity, AWS IoT Core, and ThingsBoard patterns.
 
 import asyncio
 import asyncpg
+import os
 import random
 from datetime import datetime, timedelta
 from uuid import uuid4, UUID
 import json
 
-# Database connection
-DATABASE_URL = "postgresql://gito:dev-password@localhost:5432/gito"
+# Database connection. Host port is 5433, not 5432 — docker-compose maps
+# postgres to 5433 so 5432 stays free for WSL and other stacks. This file said
+# 5432, so running it from the host hit a port with nothing behind it and the
+# seed failed on a clean machine (same defect as the simulator's, fixed in
+# 72033a6 but not swept across scripts/). Env override so it also works from
+# inside a container, where 5432 is correct.
+DATABASE_URL = os.environ.get(
+    "SEED_DATABASE_URL", "postgresql://gito:dev-password@localhost:5433/gito"
+)
 
 # Tenant ID (default tenant)
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")

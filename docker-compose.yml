@@ -112,6 +112,10 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-min-32-chars-xxxxx}
       SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY}
       JWT_ALGORITHM: HS256
+      # Dev: hot reload instead of the 4 workers entrypoint.sh defaults to.
+      # Passing it here rather than as a `command:` keeps the migration step —
+      # see the note where `command:` used to be.
+      UVICORN_ARGS: "--reload"
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: 1883
       MQTT_USERNAME: ${MQTT_USERNAME:-admin}
@@ -149,7 +153,16 @@ services:
       # collection and takes the whole suite down with it, which matters because
       # `docker exec gito-api pytest` is how the API tests are run.
       - ./drivers:/drivers:ro
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # Auto-reload on code changes
+    # NO `command:` here, deliberately. A compose `command:` REPLACES the image
+    # CMD — which is `entrypoint.sh`, the script that runs `alembic upgrade head`
+    # before starting uvicorn. This service used to override it with a bare
+    # uvicorn line to get `--reload`, and so the dev stack never migrated: it
+    # came up against whatever schema the volume already had. Pull a branch with
+    # a new migration, restart, and the API silently serves the old schema —
+    # which reads as an application bug for as long as it takes to suspect the
+    # database, and is the first thing a second developer pulling `main` hits.
+    # `--reload` now comes from UVICORN_ARGS above, so the retry-on-first-boot
+    # migration logic has exactly one home.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 10s
