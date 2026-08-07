@@ -122,9 +122,7 @@ def _validate_downlink(mode, api_url, config):
     if mode is None:
         return
     if mode not in DOWNLINK_MODES:
-        raise ValueError(
-            f"downlink_mode must be one of {list(DOWNLINK_MODES)}, got {mode!r}"
-        )
+        raise ValueError(f"downlink_mode must be one of {list(DOWNLINK_MODES)}, got {mode!r}")
     if mode == "rest" and not api_url:
         raise ValueError("downlink_mode 'rest' requires downlink_api_url")
     if mode == "mqtt" and not (config or {}).get("broker_url"):

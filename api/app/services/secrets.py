@@ -57,8 +57,8 @@ def _fernet() -> Fernet:
     if not key:
         raise SecretKeyMissing(
             f"{ENV_VAR} is not set. Generate one with:\n"
-            f"  python -c \"from cryptography.fernet import Fernet; "
-            f"print(Fernet.generate_key().decode())\"\n"
+            f'  python -c "from cryptography.fernet import Fernet; '
+            f'print(Fernet.generate_key().decode())"\n'
             f"and set it in the environment. It must be the same value everywhere "
             f"the API runs, and it must not live in the database."
         )
@@ -87,7 +87,7 @@ def decrypt(stored: str) -> str:
             "by hand. Refusing to use it."
         )
     try:
-        return _fernet().decrypt(stored[len(PREFIX):].encode()).decode()
+        return _fernet().decrypt(stored[len(PREFIX) :].encode()).decode()
     except InvalidToken as e:
         raise SecretCorrupt(
             f"stored secret could not be decrypted — {ENV_VAR} has changed, or the "

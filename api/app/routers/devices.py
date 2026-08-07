@@ -180,7 +180,6 @@ async def _validate_device_fks(
             )
 
 
-
 async def _validate_integration(session, tenant_id, integration_id):
     """Refuse a network server belonging to someone else.
 

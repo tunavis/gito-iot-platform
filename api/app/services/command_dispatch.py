@@ -124,7 +124,11 @@ class CommandDispatchService:
             # something an operator can infer from a timeout.
             logger.warning(
                 "network_server_unresolved",
-                extra={"device_id": str(device.id), "command_id": str(command.id), "reason": str(e)},
+                extra={
+                    "device_id": str(device.id),
+                    "command_id": str(command.id),
+                    "reason": str(e),
+                },
             )
             return False, str(e)
         except Exception as e:
@@ -279,14 +283,16 @@ class CommandDispatchService:
                 "uplinks — wait for one, or set it explicitly."
             )
 
-        message = json.dumps({
-            "integration_id": str(server.integration_id),
-            "application_id": application_id,
-            "dev_eui": device.dev_eui,
-            "f_port": f_port,
-            "confirmed": confirmed,
-            "data": b64_payload,
-        })
+        message = json.dumps(
+            {
+                "integration_id": str(server.integration_id),
+                "application_id": application_id,
+                "dev_eui": device.dev_eui,
+                "f_port": f_port,
+                "confirmed": confirmed,
+                "data": b64_payload,
+            }
+        )
 
         redis = await aioredis.from_url(self._redis_url, decode_responses=True)
         try:
