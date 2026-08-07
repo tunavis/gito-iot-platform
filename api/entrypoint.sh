@@ -18,6 +18,12 @@ until alembic upgrade head; do
 done
 echo "✅ Migrations complete"
 
-# Start API
+# Start API.
+#
+# UVICORN_ARGS lets the dev stack ask for `--reload` WITHOUT overriding this
+# script. A compose `command:` replaces the image CMD, which is what silently
+# skipped the migrations above for the whole life of the dev stack — so the
+# server flags are a variable and the migration logic has one home.
+# Unquoted on purpose: it must word-split into separate arguments.
 echo "🌐 Starting API server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --log-level info
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 ${UVICORN_ARGS:---workers 4 --log-level info}
