@@ -1,0 +1,57 @@
+# Code owners — who must approve a pull request touching a given path.
+#
+# Purpose: the mobile app is developed by a contributor whose work is scoped to
+# `mobile/`. An AI-assisted session on a mobile branch can still wander outside
+# that directory, and `tasks.md` cannot prevent it — only review can. Every path
+# below therefore requires the maintainer's explicit approval, so a stray edit to
+# the platform cannot merge unnoticed.
+#
+# Requires "Require review from Code Owners" to be enabled in the branch
+# protection rules for `main`. Without that setting this file is advisory only.
+#
+# NOTE: verify @tunavis is the correct GitHub username for the maintainer — a
+# username that does not exist silently matches nobody, which fails open.
+
+# Default: the maintainer owns everything not matched more specifically below.
+*                       @tunavis
+
+# The platform. Nothing in mobile work has any reason to touch these.
+/api/                   @tunavis
+/web/                   @tunavis
+/processor/             @tunavis
+/shared/                @tunavis
+/db/                    @tunavis
+/drivers/               @tunavis
+/scripts/               @tunavis
+
+# Main specs are the shared source of truth and are only ever written by
+# archiving a change. A change proposes deltas inside its own
+# `openspec/changes/` directory; it never edits these directly.
+/openspec/specs/        @tunavis
+
+# Infrastructure, CI, and the repo-wide guardrails.
+/.github/               @tunavis
+/docker-compose.yml     @tunavis
+/docker-compose.*.yml   @tunavis
+/nginx/                 @tunavis
+/mosquitto/             @tunavis
+/.gitignore             @tunavis
+/CLAUDE.md              @tunavis
+/openapi.json           @tunavis
+
+# ---------------------------------------------------------------------------
+# The contributor's own territory. Deliberately UNOWNED — a pattern with no
+# owner after it removes ownership for that path, and GitHub takes the LAST
+# matching pattern, so these must stay at the bottom of the file.
+#
+# Without these two lines the `*` default above swallows them, and the mobile
+# app the contributor was hired to build would need the maintainer named as a
+# code owner on every file in it. `tasks.md` tells him to tick a checkbox and
+# open a PR after each task, so `rebuild-mobile-app/` is part of the work, not
+# a spec he is reaching into: locking it makes his own progress log
+# unwritable. Branch protection still requires one approving review on every
+# PR — and nobody can approve their own — so the maintainer reads all of this
+# regardless. What these lines remove is the second, redundant gate, not the
+# review.
+/mobile/
+/openspec/changes/rebuild-mobile-app/
